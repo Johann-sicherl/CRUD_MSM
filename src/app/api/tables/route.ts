@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { pool } from '@/lib/db'
+import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
 
 export async function GET() {
@@ -8,8 +8,10 @@ export async function GET() {
   await Promise.all(
     Object.keys(tables).map(async (t) => {
       try {
-        const res = await pool.query(`SELECT COUNT(*) FROM "${t}"`)
-        counts[t] = parseInt(res.rows[0].count)
+        const { count } = await supabaseAdmin
+          .from(t)
+          .select('*', { count: 'exact', head: true })
+        counts[t] = count ?? 0
       } catch {
         counts[t] = -1
       }
