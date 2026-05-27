@@ -47,33 +47,29 @@ export const DOMAIN_COLORS: Record<string, string> = {
 }
 
 export const tables: Record<string, TableSchema> = {
+
+  // ── CATÁLOGO ──────────────────────────────────────────────────────────────
+
   equipments: {
     label: 'Equipamentos',
     description: 'Máquinas configuráveis — entidade central do catálogo',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'name',
+    orderBy: 'commercial_name',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
-      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
+      { name: 'name', label: 'Nome / Modelo', type: 'text', nullable: false, showInList: true },
       { name: 'commercial_name', label: 'Nome Comercial', type: 'text', nullable: false, showInList: true },
-      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'image_url', label: 'URL da Imagem', type: 'text', nullable: true, placeholder: 'https://...' },
-      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
-      { name: 'production_cost', label: 'Custo de Produção (R$)', type: 'decimal', nullable: false, defaultValue: 0 },
-      { name: 'ipi_tax_rate', label: 'Taxa IPI', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'pis_tax_rate', label: 'Taxa PIS', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'cofins_tax_rate', label: 'Taxa COFINS', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'icms_tax_rate', label: 'Taxa ICMS', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'difal_tax_rate', label: 'Taxa DIFAL', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'seller_commission', label: 'Comissão Vendedor', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'manager_commission', label: 'Comissão Gerente', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'director_commission', label: 'Comissão Diretoria', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'contribution_margin_ratio', label: 'Margem de Contribuição', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'labor_cost_rate', label: 'Taxa Mão de Obra', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'warranty_rate', label: 'Taxa Garantia', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
-      { name: 'parts_provision_rate', label: 'Taxa Provisão de Peças', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.0000' },
+      { name: 'ipi_tax_rate', label: 'Taxa IPI (%)', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.00' },
+      { name: 'contribution_margin_ratio', label: 'Margem Contribuição (%)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'seller_commission', label: 'Comissão Vendedor (%)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'manager_commission', label: 'Comissão Gerente (%)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'director_commission', label: 'Comissão Diretoria (%)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'certification_cost', label: 'Custo Certificação (R$)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'labor_cost_rate', label: 'Taxa Mão de Obra (%)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'warranty_rate', label: 'Taxa Garantia (%)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'parts_provision_rate', label: 'Taxa Provisão Peças (%)', type: 'decimal', nullable: false, defaultValue: 0 },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -81,17 +77,28 @@ export const tables: Record<string, TableSchema> = {
 
   standard_equipment_items: {
     label: 'Itens Padrão (BOM)',
-    description: 'Itens que compõem um equipamento — Bill of Materials',
+    description: 'Itens que compõem cada equipamento — Bill of Materials',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'name',
+    orderBy: 'protheus_code',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
-      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'processor', label: 'Processador', type: 'text', nullable: true },
+      { name: 'memory', label: 'Memória RAM', type: 'text', nullable: true },
+      { name: 'storage', label: 'Armazenamento', type: 'text', nullable: true },
+      { name: 'graphics_card', label: 'Placa de Vídeo', type: 'text', nullable: true },
+      { name: 'conveyor_belt_load_capacity_kg', label: 'Cap. Carga Esteira (kg)', type: 'text', nullable: true },
+      { name: 'tube_power_kv', label: 'Potência Tubo (kV)', type: 'text', nullable: true },
+      { name: 'certificate', label: 'Certificado', type: 'text', nullable: true },
+      { name: 'conveyor_belt_type', label: 'Tipo Esteira', type: 'text', nullable: true },
+      { name: 'motopolia_type', label: 'Tipo Motopolia', type: 'text', nullable: true },
+      { name: 'language', label: 'Idioma', type: 'text', nullable: true },
+      { name: 'color', label: 'Cor', type: 'text', nullable: true, showInList: true },
+      { name: 'legacy_general_alert_id', label: 'ID Alerta Legado', type: 'number', nullable: true, defaultValue: 0 },
+      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive', 'deactive'], showInList: true },
+      { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -107,12 +114,16 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'image_url', label: 'URL da Imagem', type: 'text', nullable: true, placeholder: 'https://...' },
       { name: 'legacy_group_id', label: 'ID Grupo Legado', type: 'number', nullable: true },
-      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
-      { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0 },
+      { name: 'color', label: 'Cor', type: 'text', nullable: true },
+      { name: 'predominant_material', label: 'Material Predominante', type: 'text', nullable: true },
       { name: 'dimensional_mm', label: 'Dimensão (mm)', type: 'number', nullable: true },
+      { name: 'monitor_size', label: 'Tamanho Monitor (pol)', type: 'decimal', nullable: true },
+      { name: 'quantity_monitor_totem', label: 'Qtd. Monitor Totem', type: 'number', nullable: true },
+      { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
+      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
+      { name: 'legacy_general_alert_id', label: 'ID Alerta Legado', type: 'number', nullable: true, defaultValue: 0 },
+      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -150,21 +161,6 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
-  commercial_names: {
-    label: 'Nomes Comerciais',
-    description: 'Nomes comerciais alternativos para equipamentos',
-    domain: 'catalogo',
-    hasTimestamps: true,
-    orderBy: 'name',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'code', label: 'Código', type: 'text', nullable: false, showInList: true },
-      { name: 'name', label: 'Nome Comercial', type: 'text', nullable: false, showInList: true },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
-      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
-    ],
-  },
-
   general_alerts: {
     label: 'Alertas Gerais',
     description: 'Alertas associados a equipamentos ou acessórios',
@@ -180,6 +176,8 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
+  // ── REGRAS ────────────────────────────────────────────────────────────────
+
   relationship_equip_accessory: {
     label: 'Equip. × Acessório',
     description: 'Relacionamentos e compatibilidades entre equipamentos e acessórios',
@@ -190,7 +188,9 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
       { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true },
-      { name: 'operation_time', label: 'Tempo de Operação', type: 'number', nullable: true },
+      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
+      { name: 'legacy_general_alert_id', label: 'ID Alerta Legado', type: 'number', nullable: true, defaultValue: 0 },
+      { name: 'operation_time', label: 'Tempo de Operação (min)', type: 'number', nullable: true },
       { name: 'maximum_quantity', label: 'Qtd. Máxima', type: 'number', nullable: true },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -222,21 +222,21 @@ export const tables: Record<string, TableSchema> = {
     description: 'Itens adicionados automaticamente com base em outros acessórios',
     domain: 'regras',
     hasTimestamps: true,
-    orderBy: 'name',
+    orderBy: 'protheus_code',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
       { name: 'protheus_code', label: 'Código Protheus Item', type: 'text', nullable: false, showInList: true },
       { name: 'protheus_item_code', label: 'Código Protheus Gatilho', type: 'text', nullable: false, showInList: true },
-      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'quantity', label: 'Quantidade', type: 'number', nullable: false, defaultValue: 1 },
+      { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
       { name: 'proportional_factor', label: 'Fator Proporcional', type: 'decimal', nullable: true },
-      { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0 },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
   },
+
+  // ── TRANSACIONAL ──────────────────────────────────────────────────────────
 
   quotes: {
     label: 'Propostas',
@@ -247,7 +247,7 @@ export const tables: Record<string, TableSchema> = {
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true, showInList: true },
       { name: 'external_id', label: 'ID Externo (Zoho CRM)', type: 'text', nullable: true, showInList: true },
-      { name: 'deal_external_id', label: 'ID Deal (Zoho)', type: 'text', nullable: true, showInList: true },
+      { name: 'deal_external_id', label: 'ID Deal (Zoho)', type: 'text', nullable: true },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'draft', options: ['draft', 'sent', 'approved', 'rejected'], showInList: true },
       { name: 'raw_quote', label: 'Snapshot da Proposta (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true, showInList: true },
@@ -317,6 +317,8 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
+  // ── PLATAFORMA ────────────────────────────────────────────────────────────
+
   users: {
     label: 'Usuários',
     description: 'Usuários do sistema com controle de acesso JWT',
@@ -345,7 +347,7 @@ export function getSearchableFields(tableName: string): string[] {
   const schema = tables[tableName]
   if (!schema) return []
   return schema.fields
-    .filter(f => ['text', 'textarea', 'select', 'password'].includes(f.type) && !f.isPk && !f.isReadonly)
+    .filter(f => ['text', 'textarea', 'select'].includes(f.type) && !f.isPk && !f.isReadonly)
     .map(f => f.name)
 }
 
