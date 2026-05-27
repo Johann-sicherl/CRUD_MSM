@@ -68,7 +68,6 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
       } else if (f.type === 'decimal') {
         body[f.name] = val === '' ? null : parseFloat(val)
       } else if (f.type === 'password' && val === '') {
-        // skip empty password on edit
         continue
       } else {
         body[f.name] = val === '' ? null : val
@@ -96,20 +95,31 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-8">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold text-slate-800">
-            {isEdit ? 'Editar' : 'Novo'} — {schema.label}
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl my-8 animate-fade-in">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary text-[20px]">
+              {isEdit ? 'edit' : 'add_circle'}
+            </span>
+            <h2 className="text-base font-semibold text-on-surface">
+              {isEdit ? 'Editar' : 'Novo'} — <span className="text-primary">{schema.label}</span>
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-outline hover:text-on-surface transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           {isEdit && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded px-3 py-2">
-              <span className="font-medium">ID:</span>
-              <span className="font-mono">{String(record!.id)}</span>
+            <div className="flex items-center gap-2 text-xs text-outline bg-surface-container-low rounded px-3 py-2 border border-outline-variant font-mono">
+              <span className="text-outline">ID:</span>
+              <span className="text-on-surface-variant">{String(record!.id)}</span>
             </div>
           )}
 
@@ -125,21 +135,29 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg border border-red-200">
+            <div className="flex items-center gap-2 bg-error-container/30 text-error text-sm px-4 py-3 rounded border border-error/20">
+              <span className="material-symbols-outlined text-[16px]">error</span>
               {error}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-600 border rounded-lg hover:bg-slate-50">
+          <div className="flex justify-end gap-3 pt-2 border-t border-outline-variant">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+            >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 font-medium"
+              className="flex items-center gap-2 px-5 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
             >
-              {loading ? 'Salvando...' : isEdit ? 'Salvar Alterações' : 'Criar Registro'}
+              {loading
+                ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
+                : <><span className="material-symbols-outlined text-[16px]">save</span> {isEdit ? 'Salvar Alterações' : 'Criar Registro'}</>
+              }
             </button>
           </div>
         </form>
@@ -150,12 +168,13 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
 
 function FieldInput({ field, value, onChange }: { field: Field; value: string; onChange: (v: string) => void }) {
   const isWide = ['textarea', 'jsonb'].includes(field.type)
+  const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   return (
     <div className={isWide ? 'sm:col-span-2' : ''}>
-      <label className="block text-xs font-medium text-slate-600 mb-1">
+      <label className="block text-xs font-medium text-on-surface-variant mb-1">
         {field.label}
-        {!field.nullable && <span className="text-red-500 ml-1">*</span>}
+        {!field.nullable && <span className="text-primary ml-1">*</span>}
       </label>
 
       {field.type === 'select' && field.options ? (
@@ -163,7 +182,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           value={value}
           onChange={e => onChange(e.target.value)}
           required={!field.nullable}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={inputClass}
         >
           {field.nullable && <option value="">— Selecione —</option>}
           {field.options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -173,7 +192,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={inputClass}
         >
           <option value="true">Sim</option>
           <option value="false">Não</option>
@@ -186,7 +205,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           required={!field.nullable}
           placeholder={field.placeholder}
           rows={3}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+          className={`${inputClass} resize-y`}
         />
 
       ) : field.type === 'jsonb' ? (
@@ -195,7 +214,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           onChange={e => onChange(e.target.value)}
           placeholder='{"chave": "valor"}'
           rows={4}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+          className={`${inputClass} font-mono resize-y`}
         />
 
       ) : field.type === 'password' ? (
@@ -204,7 +223,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={field.placeholder || 'Senha'}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={inputClass}
         />
 
       ) : field.type === 'number' ? (
@@ -214,7 +233,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           onChange={e => onChange(e.target.value)}
           required={!field.nullable}
           placeholder={field.placeholder}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={inputClass}
         />
 
       ) : field.type === 'decimal' ? (
@@ -225,7 +244,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           onChange={e => onChange(e.target.value)}
           required={!field.nullable}
           placeholder={field.placeholder || '0.0000'}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={inputClass}
         />
 
       ) : field.type === 'uuid' ? (
@@ -235,7 +254,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           onChange={e => onChange(e.target.value)}
           required={!field.nullable}
           placeholder="UUID do registro relacionado"
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={`${inputClass} font-mono`}
         />
 
       ) : (
@@ -245,7 +264,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           onChange={e => onChange(e.target.value)}
           required={!field.nullable}
           placeholder={field.placeholder}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={inputClass}
         />
       )}
     </div>

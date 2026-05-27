@@ -27,7 +27,7 @@ export default function DataTable({ tableName, schema }: Props) {
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editRecord, setEditRecord] = useState<Record<string, unknown> | null>(null)
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const listFields = getListFields(tableName)
@@ -68,18 +68,8 @@ export default function DataTable({ tableName, schema }: Props) {
   }
 
   const showToast = (msg: string, isError = false) => {
-    setToast((isError ? '❌ ' : '✅ ') + msg)
-    setTimeout(() => setToast(''), 3500)
-  }
-
-  const formatCell = (value: unknown, type: string): string => {
-    if (value === null || value === undefined) return '—'
-    if (type === 'boolean') return value ? 'Sim' : 'Não'
-    if (type === 'jsonb') return '[JSON]'
-    if (type === 'timestamp') return new Date(String(value)).toLocaleString('pt-BR')
-    if (type === 'uuid') return String(value).slice(0, 8) + '…'
-    const str = String(value)
-    return str.length > 40 ? str.slice(0, 40) + '…' : str
+    setToast({ msg, isError })
+    setTimeout(() => setToast(null), 3500)
   }
 
   return (
@@ -87,49 +77,57 @@ export default function DataTable({ tableName, schema }: Props) {
       {/* Header actions */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex gap-2 w-full sm:w-auto">
-          <input
-            type="text"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Buscar..."
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
-          />
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">
+              search
+            </span>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="Buscar registros..."
+              className="bg-surface-container border border-outline-variant rounded pl-9 pr-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
+            />
+          </div>
           <button
             onClick={handleSearch}
-            className="px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg text-sm hover:bg-slate-200 text-slate-700"
+            className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
           >
             Buscar
           </button>
           {search && (
             <button
               onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }}
-              className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700"
+              className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors flex items-center gap-1"
             >
-              ✕ Limpar
+              <span className="material-symbols-outlined text-[16px]">close</span>
+              Limpar
             </button>
           )}
         </div>
         <button
           onClick={() => { setEditRecord(null); setModalOpen(true) }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
         >
-          + Novo Registro
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          Novo Registro
         </button>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="bg-surface-container rounded border border-outline-variant overflow-hidden">
         {loading && (
-          <div className="flex items-center justify-center py-16 text-slate-500">
-            <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mr-3" />
-            Carregando...
+          <div className="flex items-center justify-center py-16 text-outline gap-3">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-mono">Carregando...</span>
           </div>
         )}
 
         {error && !loading && (
-          <div className="flex items-center justify-center py-16 text-red-500 gap-2">
-            <span>⚠️</span> {error}
+          <div className="flex items-center justify-center py-16 text-error gap-2 text-sm">
+            <span className="material-symbols-outlined">error</span>
+            {error}
           </div>
         )}
 
@@ -137,44 +135,49 @@ export default function DataTable({ tableName, schema }: Props) {
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-surface-container-highest border-b border-outline-variant">
                   <tr>
                     {listFields.map(f => (
-                      <th key={f.name} className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">
+                      <th key={f.name} className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono">
                         {f.label}
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono">
                       Ações
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-outline-variant/30">
                   {pageData.data.length === 0 ? (
                     <tr>
-                      <td colSpan={listFields.length + 1} className="px-4 py-12 text-center text-slate-400">
+                      <td colSpan={listFields.length + 1} className="px-4 py-12 text-center text-outline text-sm">
                         Nenhum registro encontrado
                       </td>
                     </tr>
                   ) : (
                     pageData.data.map((row, i) => (
-                      <tr key={String(row.id) || i} className="hover:bg-slate-50 transition-colors">
+                      <tr
+                        key={String(row.id) || i}
+                        className="hover:bg-surface-container-high transition-colors group"
+                      >
                         {listFields.map(f => (
-                          <td key={f.name} className="px-4 py-3 text-slate-700 max-w-xs">
+                          <td key={f.name} className="px-4 py-3 text-on-surface-variant max-w-xs">
                             <CellValue value={row[f.name]} type={f.type} />
                           </td>
                         ))}
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
-                            className="text-blue-600 hover:text-blue-800 text-xs font-medium mr-3"
+                            className="inline-flex items-center gap-1 text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
                           >
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
                             Editar
                           </button>
                           <button
                             onClick={() => setDeleteId(String(row.id))}
-                            className="text-red-500 hover:text-red-700 text-xs font-medium"
+                            className="inline-flex items-center gap-1 text-outline hover:text-error text-xs font-medium transition-colors"
                           >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
                             Excluir
                           </button>
                         </td>
@@ -186,28 +189,30 @@ export default function DataTable({ tableName, schema }: Props) {
             </div>
 
             {/* Pagination */}
-            <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between text-sm text-slate-600">
-              <div>
+            <div className="px-4 py-3 border-t border-outline-variant/30 flex items-center justify-between text-sm text-outline font-mono">
+              <div className="text-xs">
                 {pageData.total} registro{pageData.total !== 1 ? 's' : ''}
-                {search && <span className="ml-1 text-blue-600">· filtrado</span>}
+                {search && <span className="ml-1 text-primary">· filtrado</span>}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="px-3 py-1 border rounded-md disabled:opacity-40 hover:bg-slate-50"
+                  className="flex items-center gap-1 px-3 py-1 border border-outline-variant rounded text-xs disabled:opacity-30 hover:border-primary hover:text-primary transition-colors"
                 >
-                  ‹ Anterior
+                  <span className="material-symbols-outlined text-[14px]">chevron_left</span>
+                  Anterior
                 </button>
-                <span className="px-2">
+                <span className="px-2 text-xs">
                   {page} / {pageData.pages || 1}
                 </span>
                 <button
                   onClick={() => setPage(p => Math.min(pageData.pages, p + 1))}
                   disabled={page >= pageData.pages}
-                  className="px-3 py-1 border rounded-md disabled:opacity-40 hover:bg-slate-50"
+                  className="flex items-center gap-1 px-3 py-1 border border-outline-variant rounded text-xs disabled:opacity-30 hover:border-primary hover:text-primary transition-colors"
                 >
-                  Próxima ›
+                  Próxima
+                  <span className="material-symbols-outlined text-[14px]">chevron_right</span>
                 </button>
               </div>
             </div>
@@ -217,19 +222,25 @@ export default function DataTable({ tableName, schema }: Props) {
 
       {/* Delete confirmation */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Confirmar exclusão</h3>
-            <p className="text-slate-600 text-sm mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl p-6 w-full max-w-sm animate-fade-in">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="material-symbols-outlined text-error text-[24px]">warning</span>
+              <h3 className="text-base font-semibold text-on-surface">Confirmar exclusão</h3>
+            </div>
+            <p className="text-on-surface-variant text-sm mb-6">
               Esta ação não pode ser desfeita. Deseja excluir o registro?
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">
+              <button
+                onClick={() => setDeleteId(null)}
+                className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+              >
                 Cancelar
               </button>
               <button
                 onClick={() => handleDelete(deleteId)}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                className="px-4 py-2 text-sm bg-error-container text-on-error-container rounded hover:brightness-110 font-medium transition-all"
               >
                 Excluir
               </button>
@@ -256,8 +267,15 @@ export default function DataTable({ tableName, schema }: Props) {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-800 text-white px-5 py-3 rounded-xl shadow-lg text-sm animate-fade-in">
-          {toast}
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg text-sm animate-fade-in border ${
+          toast.isError
+            ? 'bg-error-container border-error/30 text-on-error-container'
+            : 'bg-surface-container-highest border-outline-variant text-on-surface'
+        }`}>
+          <span className="material-symbols-outlined text-[18px]">
+            {toast.isError ? 'error' : 'check_circle'}
+          </span>
+          {toast.msg}
         </div>
       )}
     </div>
@@ -266,41 +284,57 @@ export default function DataTable({ tableName, schema }: Props) {
 
 function CellValue({ value, type }: { value: unknown; type: string }) {
   if (value === null || value === undefined) {
-    return <span className="text-slate-300 text-xs">null</span>
+    return <span className="text-outline text-xs font-mono">null</span>
   }
   if (type === 'boolean') {
     return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${value ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-mono ${
+        value
+          ? 'bg-green-900/40 text-green-400 border border-green-800/40'
+          : 'bg-surface-container-highest text-outline border border-outline-variant'
+      }`}>
         {value ? 'Sim' : 'Não'}
       </span>
     )
   }
   if (type === 'jsonb') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs font-mono">[JSON]</span>
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded bg-surface-container-highest text-outline text-xs font-mono border border-outline-variant">
+        JSON
+      </span>
+    )
   }
   if (type === 'select') {
     const colors: Record<string, string> = {
-      active: 'bg-green-100 text-green-700',
-      inactive: 'bg-slate-100 text-slate-600',
-      draft: 'bg-yellow-100 text-yellow-700',
-      sent: 'bg-blue-100 text-blue-700',
-      approved: 'bg-green-100 text-green-700',
-      rejected: 'bg-red-100 text-red-700',
-      admin: 'bg-purple-100 text-purple-700',
-      user: 'bg-slate-100 text-slate-600',
+      active:   'bg-green-900/40 text-green-400 border-green-800/40',
+      inactive: 'bg-surface-container-highest text-outline border-outline-variant',
+      draft:    'bg-primary/10 text-primary border-primary/20',
+      sent:     'bg-blue-900/40 text-blue-400 border-blue-800/40',
+      approved: 'bg-green-900/40 text-green-400 border-green-800/40',
+      rejected: 'bg-error-container/40 text-error border-error/20',
+      admin:    'bg-purple-900/40 text-purple-400 border-purple-800/40',
+      user:     'bg-surface-container-highest text-outline border-outline-variant',
     }
-    const cls = colors[String(value)] || 'bg-slate-100 text-slate-600'
+    const cls = colors[String(value)] || 'bg-surface-container-highest text-outline border-outline-variant'
     return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-mono border ${cls}`}>
         {String(value)}
       </span>
     )
   }
   if (type === 'timestamp') {
-    return <span className="text-slate-500 text-xs">{new Date(String(value)).toLocaleString('pt-BR')}</span>
+    return (
+      <span className="text-outline text-xs font-mono">
+        {new Date(String(value)).toLocaleString('pt-BR')}
+      </span>
+    )
   }
   if (type === 'uuid') {
-    return <span className="font-mono text-xs text-slate-500">{String(value).slice(0, 8)}…</span>
+    return (
+      <span className="font-mono text-xs text-outline">
+        {String(value).slice(0, 8)}…
+      </span>
+    )
   }
   const str = String(value)
   return <span title={str.length > 40 ? str : undefined}>{str.length > 40 ? str.slice(0, 40) + '…' : str}</span>

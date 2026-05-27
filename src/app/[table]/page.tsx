@@ -16,13 +16,13 @@ export default function TablePage({ params }: Props) {
   if (!schema) notFound()
 
   return (
-    <div className="p-6">
+    <div className="p-8">
       <div className="mb-6">
-        <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">
+        <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
           {DOMAIN_LABELS[schema.domain]} · {table}
         </div>
-        <h1 className="text-2xl font-bold text-slate-800">{schema.label}</h1>
-        <p className="text-slate-500 text-sm mt-1">{schema.description}</p>
+        <h1 className="text-2xl font-bold text-on-surface">{schema.label}</h1>
+        <p className="text-on-surface-variant text-sm mt-1">{schema.description}</p>
       </div>
 
       <DataTable tableName={table} schema={schema} />

@@ -5,10 +5,10 @@ import { usePathname } from 'next/navigation'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
 
 const DOMAIN_ICONS: Record<string, string> = {
-  catalogo: '📦',
-  regras: '⚙️',
-  transacional: '📋',
-  plataforma: '👥',
+  catalogo:    'inventory_2',
+  regras:      'rule',
+  transacional:'receipt_long',
+  plataforma:  'group',
 }
 
 const DOMAIN_ORDER = ['catalogo', 'regras', 'transacional', 'plataforma']
@@ -22,28 +22,38 @@ export default function Sidebar() {
   }))
 
   return (
-    <aside className="w-64 min-h-screen bg-slate-900 text-slate-100 flex flex-col shrink-0">
-      <div className="px-4 py-5 border-b border-slate-700">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">VMI Security</div>
-        <div className="text-lg font-bold text-white">MSM Admin</div>
-        <div className="text-xs text-slate-400 mt-1">PostgreSQL 14 · CRUD</div>
+    <aside className="w-64 min-h-screen bg-surface-container-low border-r border-outline-variant flex flex-col shrink-0 relative z-20">
+      {/* Header */}
+      <div className="px-5 py-5 border-b border-outline-variant">
+        <div className="text-[10px] font-semibold text-outline uppercase tracking-[0.2em] mb-1 font-mono">
+          VMI Security
+        </div>
+        <div className="text-base font-bold text-primary neon-text tracking-wider font-mono">
+          COMMAND CENTER
+        </div>
+        <div className="text-[10px] text-outline mt-1 font-mono">
+          PostgreSQL 14 · CRUD · MSM
+        </div>
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3">
         <Link
           href="/"
-          className={`flex items-center gap-2 px-4 py-2 text-sm mx-2 rounded-md transition-colors ${
-            pathname === '/' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+          className={`flex items-center gap-3 px-4 py-2 mx-2 rounded text-sm transition-all ${
+            pathname === '/'
+              ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+              : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
           }`}
         >
-          <span>🏠</span>
-          <span>Dashboard</span>
+          <span className="material-symbols-outlined text-[18px]">dashboard</span>
+          <span className="font-medium">Dashboard</span>
         </Link>
 
         {byDomain.map(({ domain, items }) => (
-          <div key={domain} className="mt-4">
-            <div className="px-4 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-              <span>{DOMAIN_ICONS[domain]}</span>
+          <div key={domain} className="mt-5">
+            <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] flex items-center gap-2 font-mono">
+              <span className="material-symbols-outlined text-[14px]">{DOMAIN_ICONS[domain]}</span>
               <span>{DOMAIN_LABELS[domain]}</span>
             </div>
             {items.map(([tableName, schema]) => {
@@ -52,10 +62,13 @@ export default function Sidebar() {
                 <Link
                   key={tableName}
                   href={`/${tableName}`}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm mx-2 rounded-md transition-colors ${
-                    isActive ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                  className={`flex items-center gap-3 px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    isActive
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                   }`}
                 >
+                  <span className="material-symbols-outlined text-[16px]">table_rows</span>
                   <span className="truncate">{schema.label}</span>
                 </Link>
               )
@@ -64,7 +77,8 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-slate-700 text-xs text-slate-500">
+      {/* Footer */}
+      <div className="px-5 py-3 border-t border-outline-variant text-[10px] text-outline font-mono">
         15 tabelas · v3.0
       </div>
     </aside>

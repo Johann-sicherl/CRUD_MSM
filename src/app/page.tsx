@@ -2,9 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { tables, DOMAIN_LABELS, DOMAIN_COLORS } from '@/lib/schema'
+import { tables, DOMAIN_LABELS } from '@/lib/schema'
 
 const DOMAIN_ORDER = ['catalogo', 'regras', 'transacional', 'plataforma']
+
+const DOMAIN_ICONS: Record<string, string> = {
+  catalogo:    'inventory_2',
+  regras:      'rule',
+  transacional:'receipt_long',
+  plataforma:  'group',
+}
 
 export default function Dashboard() {
   const [counts, setCounts] = useState<Record<string, number>>({})
@@ -17,8 +24,7 @@ export default function Dashboard() {
       .then(data => {
         setCounts(data)
         setLoading(false)
-        const hasError = Object.values(data).some((v) => v === -1)
-        if (hasError) setDbError(true)
+        if (Object.values(data).some((v) => v === -1)) setDbError(true)
       })
       .catch(() => { setLoading(false); setDbError(true) })
   }, [])
@@ -28,84 +34,103 @@ export default function Dashboard() {
     items: Object.entries(tables).filter(([, s]) => s.domain === domain),
   }))
 
-  const colorMap: Record<string, string> = {
-    blue: 'border-blue-200 bg-blue-50',
-    amber: 'border-amber-200 bg-amber-50',
-    green: 'border-green-200 bg-green-50',
-    purple: 'border-purple-200 bg-purple-50',
-  }
-  const badgeMap: Record<string, string> = {
-    blue: 'bg-blue-100 text-blue-700',
-    amber: 'bg-amber-100 text-amber-700',
-    green: 'bg-green-100 text-green-700',
-    purple: 'bg-purple-100 text-purple-700',
-  }
+  const totalRecords = Object.values(counts).filter(v => v > 0).reduce((a, b) => a + b, 0)
 
   return (
-    <div className="p-6 max-w-6xl">
+    <div className="p-8 max-w-7xl">
+      {/* Page header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Monte Sua Máquina · VMI Security · PostgreSQL 14.2</p>
+        <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
+          VMI Security · Monte Sua Máquina
+        </div>
+        <h1 className="text-2xl font-bold text-on-surface tracking-tight">Dashboard</h1>
+        <p className="text-on-surface-variant text-sm mt-1">
+          PostgreSQL 14.2 · 15 tabelas · painel administrativo
+        </p>
       </div>
 
       {dbError && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-700 text-sm">
-          <strong>⚠️ Erro de conexão:</strong> Verifique as credenciais em <code className="bg-red-100 px-1 rounded">.env.local</code> e que o banco está acessível.
+        <div className="mb-6 flex items-center gap-3 bg-error-container/20 border border-error/20 rounded-lg px-5 py-4 text-error text-sm">
+          <span className="material-symbols-outlined text-[20px]">warning</span>
+          <div>
+            <strong>Erro de conexão:</strong> Verifique as credenciais em{' '}
+            <code className="bg-error-container/40 px-1 rounded font-mono text-xs">.env.local</code>{' '}
+            e confirme que o banco está acessível.
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="bg-surface-container border border-outline-variant rounded-lg p-5 col-span-2 lg:col-span-1 lg:row-span-1">
+          <div className="text-[10px] font-mono text-outline uppercase tracking-[0.12em] mb-2">Total de Registros</div>
+          <div className="text-4xl font-bold text-primary neon-text font-mono">
+            {loading ? <span className="animate-pulse">…</span> : totalRecords.toLocaleString('pt-BR')}
+          </div>
+          <div className="text-xs text-outline mt-1">15 tabelas ativas</div>
+        </div>
+
         {DOMAIN_ORDER.map(domain => {
-          const total = Object.entries(tables)
-            .filter(([, s]) => s.domain === domain)
-            .reduce((acc, [t]) => acc + (counts[t] || 0), 0)
-          const color = DOMAIN_COLORS[domain]
+          const domainItems = Object.entries(tables).filter(([, s]) => s.domain === domain)
+          const total = domainItems.reduce((acc, [t]) => acc + (counts[t] || 0), 0)
           return (
-            <div key={domain} className={`rounded-xl border p-4 ${colorMap[color]}`}>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{DOMAIN_LABELS[domain]}</div>
-              <div className="text-3xl font-bold text-slate-800">
+            <div key={domain} className="bg-surface-container border border-outline-variant rounded-lg p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-[18px] text-outline">{DOMAIN_ICONS[domain]}</span>
+                <div className="text-[10px] font-mono text-outline uppercase tracking-[0.1em]">{DOMAIN_LABELS[domain]}</div>
+              </div>
+              <div className="text-2xl font-bold text-on-surface font-mono">
                 {loading ? <span className="animate-pulse">…</span> : total.toLocaleString('pt-BR')}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                {Object.entries(tables).filter(([, s]) => s.domain === domain).length} tabelas
-              </div>
+              <div className="text-xs text-outline mt-1">{domainItems.length} tabelas</div>
             </div>
           )
         })}
       </div>
 
-      {byDomain.map(({ domain, items }) => {
-        const color = DOMAIN_COLORS[domain]
-        return (
-          <div key={domain} className="mb-8">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
+      {/* Table groups */}
+      {byDomain.map(({ domain, items }) => (
+        <div key={domain} className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-[16px] text-outline">{DOMAIN_ICONS[domain]}</span>
+            <h2 className="text-xs font-semibold text-outline uppercase tracking-[0.15em] font-mono">
               {DOMAIN_LABELS[domain]}
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {items.map(([tableName, schema]) => (
+            <div className="flex-1 h-px bg-outline-variant ml-2" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {items.map(([tableName, schema]) => {
+              const count = counts[tableName]
+              const hasError = count === -1
+              return (
                 <Link
                   key={tableName}
                   href={`/${tableName}`}
-                  className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all group"
+                  className="bg-surface-container border border-outline-variant rounded-lg p-4 hover:border-primary hover:shadow-neon transition-all group relative overflow-hidden"
                 >
                   <div className="flex items-start justify-between mb-2">
-                    <div className="text-sm font-semibold text-slate-800 group-hover:text-blue-700">
+                    <div className="text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">
                       {schema.label}
                     </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badgeMap[color]}`}>
-                      {loading ? '…' : counts[tableName] === -1 ? '!' : (counts[tableName] || 0).toLocaleString('pt-BR')}
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded font-mono ${
+                      hasError
+                        ? 'bg-error-container/30 text-error'
+                        : 'bg-primary/10 text-primary'
+                    }`}>
+                      {loading ? '…' : hasError ? '!' : (count || 0).toLocaleString('pt-BR')}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">{schema.description}</p>
-                  <div className="mt-3 text-xs text-blue-500 group-hover:text-blue-700 font-medium">
-                    Abrir →
+                  <p className="text-xs text-outline leading-relaxed">{schema.description}</p>
+                  <div className="mt-3 flex items-center gap-1 text-xs text-outline group-hover:text-primary transition-colors font-mono">
+                    <span>Abrir</span>
+                    <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                   </div>
                 </Link>
-              ))}
-            </div>
+              )
+            })}
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }

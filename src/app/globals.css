@@ -1,14 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html { color-scheme: dark; }
+  body { @apply bg-background text-on-surface font-sans; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-surface; }
+  ::-webkit-scrollbar-thumb { @apply bg-outline-variant rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-outline; }
+}
+
 @layer utilities {
   .animate-fade-in {
     animation: fadeIn 0.2s ease-in-out;
+  }
+
+  .scanning-grid {
+    background-image:
+      linear-gradient(rgba(250,189,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(250,189,0,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .neon-border {
+    border-color: rgba(250,189,0,0.4);
+    box-shadow: 0 0 8px rgba(250,189,0,0.15), inset 0 0 8px rgba(250,189,0,0.03);
+  }
+
+  .neon-text {
+    text-shadow: 0 0 10px rgba(250,189,0,0.5);
+  }
+
+  .technical-accent::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, #fabd00, transparent);
   }
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scanline {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.scanning-line {
+  position: fixed;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(250,189,0,0.4), transparent);
+  animation: scanline 8s linear infinite;
+  pointer-events: none;
+  z-index: 0;
 }
