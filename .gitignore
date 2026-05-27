@@ -1,1 +1,6 @@
-.next/\nnode_modules/\npackage-lock.json\ntsconfig.tsbuildinfo\n.env.local
+.next/
+node_modules/
+package-lock.json
+tsconfig.tsbuildinfo
+next-env.d.ts
+.env.local
