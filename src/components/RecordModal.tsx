@@ -99,26 +99,18 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
       <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl my-8 animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-primary text-[20px]">
-              {isEdit ? 'edit' : 'add_circle'}
-            </span>
-            <h2 className="text-base font-semibold text-on-surface">
-              {isEdit ? 'Editar' : 'Novo'} — <span className="text-primary">{schema.label}</span>
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-outline hover:text-on-surface transition-colors"
-          >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+          <h2 className="text-base font-semibold text-on-surface">
+            {isEdit ? 'Editar' : 'Novo'} — <span className="text-primary">{schema.label}</span>
+          </h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none transition-colors">
+            ✕
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           {isEdit && (
             <div className="flex items-center gap-2 text-xs text-outline bg-surface-container-low rounded px-3 py-2 border border-outline-variant font-mono">
-              <span className="text-outline">ID:</span>
+              <span>ID:</span>
               <span className="text-on-surface-variant">{String(record!.id)}</span>
             </div>
           )}
@@ -136,8 +128,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
 
           {error && (
             <div className="flex items-center gap-2 bg-error-container/30 text-error text-sm px-4 py-3 rounded border border-error/20">
-              <span className="material-symbols-outlined text-[16px]">error</span>
-              {error}
+              ⚠ {error}
             </div>
           )}
 
@@ -156,7 +147,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
             >
               {loading
                 ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
-                : <><span className="material-symbols-outlined text-[16px]">save</span> {isEdit ? 'Salvar Alterações' : 'Criar Registro'}</>
+                : isEdit ? 'Salvar Alterações' : 'Criar Registro'
               }
             </button>
           </div>
@@ -178,94 +169,29 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
       </label>
 
       {field.type === 'select' && field.options ? (
-        <select
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
-          className={inputClass}
-        >
+        <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
           {field.nullable && <option value="">— Selecione —</option>}
           {field.options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
-
       ) : field.type === 'boolean' ? (
-        <select
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className={inputClass}
-        >
+        <select value={value} onChange={e => onChange(e.target.value)} className={inputClass}>
           <option value="true">Sim</option>
           <option value="false">Não</option>
         </select>
-
       ) : field.type === 'textarea' ? (
-        <textarea
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
-          placeholder={field.placeholder}
-          rows={3}
-          className={`${inputClass} resize-y`}
-        />
-
+        <textarea value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} rows={3} className={`${inputClass} resize-y`} />
       ) : field.type === 'jsonb' ? (
-        <textarea
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder='{"chave": "valor"}'
-          rows={4}
-          className={`${inputClass} font-mono resize-y`}
-        />
-
+        <textarea value={value} onChange={e => onChange(e.target.value)} placeholder='{"chave": "valor"}' rows={4} className={`${inputClass} font-mono resize-y`} />
       ) : field.type === 'password' ? (
-        <input
-          type="password"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={field.placeholder || 'Senha'}
-          className={inputClass}
-        />
-
+        <input type="password" value={value} onChange={e => onChange(e.target.value)} placeholder={field.placeholder || 'Senha'} className={inputClass} />
       ) : field.type === 'number' ? (
-        <input
-          type="number"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
-          placeholder={field.placeholder}
-          className={inputClass}
-        />
-
+        <input type="number" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
       ) : field.type === 'decimal' ? (
-        <input
-          type="number"
-          step="0.0001"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
-          placeholder={field.placeholder || '0.0000'}
-          className={inputClass}
-        />
-
+        <input type="number" step="0.0001" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder || '0.0000'} className={inputClass} />
       ) : field.type === 'uuid' ? (
-        <input
-          type="text"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
-          placeholder="UUID do registro relacionado"
-          className={`${inputClass} font-mono`}
-        />
-
+        <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder="UUID do registro relacionado" className={`${inputClass} font-mono`} />
       ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
-          placeholder={field.placeholder}
-          className={inputClass}
-        />
+        <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
       )}
     </div>
   )

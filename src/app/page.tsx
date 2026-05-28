@@ -6,13 +6,6 @@ import { tables, DOMAIN_LABELS } from '@/lib/schema'
 
 const DOMAIN_ORDER = ['catalogo', 'regras', 'transacional', 'plataforma']
 
-const DOMAIN_ICONS: Record<string, string> = {
-  catalogo:    'inventory_2',
-  regras:      'rule',
-  transacional:'receipt_long',
-  plataforma:  'group',
-}
-
 export default function Dashboard() {
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -51,18 +44,14 @@ export default function Dashboard() {
 
       {dbError && (
         <div className="mb-6 flex items-center gap-3 bg-error-container/20 border border-error/20 rounded-lg px-5 py-4 text-error text-sm">
-          <span className="material-symbols-outlined text-[20px]">warning</span>
-          <div>
-            <strong>Erro de conexão:</strong> Verifique as credenciais em{' '}
-            <code className="bg-error-container/40 px-1 rounded font-mono text-xs">.env.local</code>{' '}
-            e confirme que o banco está acessível.
-          </div>
+          ⚠ <strong>Erro de conexão:</strong> Verifique as credenciais em{' '}
+          <code className="bg-error-container/40 px-1 rounded font-mono text-xs">.env.local</code>
         </div>
       )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        <div className="bg-surface-container border border-outline-variant rounded-lg p-5 col-span-2 lg:col-span-1 lg:row-span-1">
+        <div className="bg-surface-container border border-outline-variant rounded-lg p-5 col-span-2 lg:col-span-1">
           <div className="text-[10px] font-mono text-outline uppercase tracking-[0.12em] mb-2">Total de Registros</div>
           <div className="text-4xl font-bold text-primary neon-text font-mono">
             {loading ? <span className="animate-pulse">…</span> : totalRecords.toLocaleString('pt-BR')}
@@ -75,10 +64,7 @@ export default function Dashboard() {
           const total = domainItems.reduce((acc, [t]) => acc + (counts[t] || 0), 0)
           return (
             <div key={domain} className="bg-surface-container border border-outline-variant rounded-lg p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-[18px] text-outline">{DOMAIN_ICONS[domain]}</span>
-                <div className="text-[10px] font-mono text-outline uppercase tracking-[0.1em]">{DOMAIN_LABELS[domain]}</div>
-              </div>
+              <div className="text-[10px] font-mono text-outline uppercase tracking-[0.1em] mb-2">{DOMAIN_LABELS[domain]}</div>
               <div className="text-2xl font-bold text-on-surface font-mono">
                 {loading ? <span className="animate-pulse">…</span> : total.toLocaleString('pt-BR')}
               </div>
@@ -92,7 +78,6 @@ export default function Dashboard() {
       {byDomain.map(({ domain, items }) => (
         <div key={domain} className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-[16px] text-outline">{DOMAIN_ICONS[domain]}</span>
             <h2 className="text-xs font-semibold text-outline uppercase tracking-[0.15em] font-mono">
               {DOMAIN_LABELS[domain]}
             </h2>
@@ -106,24 +91,21 @@ export default function Dashboard() {
                 <Link
                   key={tableName}
                   href={`/${tableName}`}
-                  className="bg-surface-container border border-outline-variant rounded-lg p-4 hover:border-primary hover:shadow-neon transition-all group relative overflow-hidden"
+                  className="bg-surface-container border border-outline-variant rounded-lg p-4 hover:border-primary hover:shadow-neon transition-all group"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">
                       {schema.label}
                     </div>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded font-mono ${
-                      hasError
-                        ? 'bg-error-container/30 text-error'
-                        : 'bg-primary/10 text-primary'
+                      hasError ? 'bg-error-container/30 text-error' : 'bg-primary/10 text-primary'
                     }`}>
                       {loading ? '…' : hasError ? '!' : (count || 0).toLocaleString('pt-BR')}
                     </span>
                   </div>
                   <p className="text-xs text-outline leading-relaxed">{schema.description}</p>
-                  <div className="mt-3 flex items-center gap-1 text-xs text-outline group-hover:text-primary transition-colors font-mono">
-                    <span>Abrir</span>
-                    <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  <div className="mt-3 text-xs text-outline group-hover:text-primary transition-colors font-mono">
+                    Abrir →
                   </div>
                 </Link>
               )

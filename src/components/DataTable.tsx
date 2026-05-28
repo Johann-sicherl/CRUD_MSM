@@ -50,9 +50,7 @@ export default function DataTable({ tableName, schema }: Props) {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const handleSearch = () => {
-    setSearch(searchInput)
-  }
+  const handleSearch = () => setSearch(searchInput)
 
   const handleDelete = async (id: string) => {
     setDeleteId(null)
@@ -76,19 +74,14 @@ export default function DataTable({ tableName, schema }: Props) {
       {/* Header actions */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex gap-2 w-full sm:w-auto">
-          <div className="relative">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">
-              search
-            </span>
-            <input
-              type="text"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="Buscar registros..."
-              className="bg-surface-container border border-outline-variant rounded pl-9 pr-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
-            />
-          </div>
+          <input
+            type="text"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            placeholder="Buscar registros..."
+            className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
+          />
           <button
             onClick={handleSearch}
             className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
@@ -98,19 +91,17 @@ export default function DataTable({ tableName, schema }: Props) {
           {search && (
             <button
               onClick={() => { setSearch(''); setSearchInput('') }}
-              className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors flex items-center gap-1"
+              className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
             >
-              <span className="material-symbols-outlined text-[16px]">close</span>
-              Limpar
+              ✕ Limpar
             </button>
           )}
         </div>
         <button
           onClick={() => { setEditRecord(null); setModalOpen(true) }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
+          className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
         >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Novo Registro
+          + Novo Registro
         </button>
       </div>
 
@@ -125,8 +116,7 @@ export default function DataTable({ tableName, schema }: Props) {
 
         {error && !loading && (
           <div className="flex items-center justify-center py-16 text-error gap-2 text-sm">
-            <span className="material-symbols-outlined">error</span>
-            {error}
+            ⚠ {error}
           </div>
         )}
 
@@ -155,10 +145,7 @@ export default function DataTable({ tableName, schema }: Props) {
                     </tr>
                   ) : (
                     pageData.data.map((row, i) => (
-                      <tr
-                        key={String(row.id) || i}
-                        className="hover:bg-surface-container-high transition-colors group"
-                      >
+                      <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
                         {listFields.map(f => (
                           <td key={f.name} className="px-4 py-3 text-on-surface-variant max-w-xs">
                             <CellValue value={row[f.name]} type={f.type} />
@@ -167,16 +154,14 @@ export default function DataTable({ tableName, schema }: Props) {
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
-                            className="inline-flex items-center gap-1 text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
+                            className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
                           >
-                            <span className="material-symbols-outlined text-[16px]">edit</span>
                             Editar
                           </button>
                           <button
                             onClick={() => setDeleteId(String(row.id))}
-                            className="inline-flex items-center gap-1 text-outline hover:text-error text-xs font-medium transition-colors"
+                            className="text-outline hover:text-error text-xs font-medium transition-colors"
                           >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
                             Excluir
                           </button>
                         </td>
@@ -200,10 +185,7 @@ export default function DataTable({ tableName, schema }: Props) {
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl p-6 w-full max-w-sm animate-fade-in">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="material-symbols-outlined text-error text-[24px]">warning</span>
-              <h3 className="text-base font-semibold text-on-surface">Confirmar exclusão</h3>
-            </div>
+            <h3 className="text-base font-semibold text-on-surface mb-2">⚠ Confirmar exclusão</h3>
             <p className="text-on-surface-variant text-sm mb-6">
               Esta ação não pode ser desfeita. Deseja excluir o registro?
             </p>
@@ -248,10 +230,7 @@ export default function DataTable({ tableName, schema }: Props) {
             ? 'bg-error-container border-error/30 text-on-error-container'
             : 'bg-surface-container-highest border-outline-variant text-on-surface'
         }`}>
-          <span className="material-symbols-outlined text-[18px]">
-            {toast.isError ? 'error' : 'check_circle'}
-          </span>
-          {toast.msg}
+          {toast.isError ? '✕' : '✓'} {toast.msg}
         </div>
       )}
     </div>
@@ -299,18 +278,10 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
     )
   }
   if (type === 'timestamp') {
-    return (
-      <span className="text-outline text-xs font-mono">
-        {new Date(String(value)).toLocaleString('pt-BR')}
-      </span>
-    )
+    return <span className="text-outline text-xs font-mono">{new Date(String(value)).toLocaleString('pt-BR')}</span>
   }
   if (type === 'uuid') {
-    return (
-      <span className="font-mono text-xs text-outline">
-        {String(value).slice(0, 8)}…
-      </span>
-    )
+    return <span className="font-mono text-xs text-outline">{String(value).slice(0, 8)}…</span>
   }
   const str = String(value)
   return <span title={str.length > 40 ? str : undefined}>{str.length > 40 ? str.slice(0, 40) + '…' : str}</span>
