@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { TableSchema, getListFields } from '@/lib/schema'
+import { TableSchema, Field, getListFields } from '@/lib/schema'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -19,6 +19,36 @@ interface PageData {
 }
 
 const PAGE_SIZE = 25000
+
+function getDisplayValue(
+  row: Record<string, unknown>,
+  fieldName: string,
+  field: Field | undefined,
+  lookups: LookupMap,
+): string {
+  const raw = row[fieldName]
+  if (field?.lookupFrom && lookups[fieldName]) {
+    return lookups[fieldName][String(raw)] ?? String(raw ?? '')
+  }
+  if (field?.type === 'boolean') return raw ? 'Sim' : 'Não'
+  return String(raw ?? '')
+}
+
+function applyFilters(
+  rows: Record<string, unknown>[],
+  filters: Record<string, string>,
+  fields: Field[],
+  lookups: LookupMap,
+): Record<string, unknown>[] {
+  const active = Object.entries(filters).filter(([, v]) => v !== '')
+  if (!active.length) return rows
+  return rows.filter(row =>
+    active.every(([name, fv]) => {
+      const field = fields.find(f => f.name === name)
+      return getDisplayValue(row, name, field, lookups) === fv
+    })
+  )
+}
 
 export default function DataTable({ tableName, schema }: Props) {
   const [pageData, setPageData] = useState<PageData | null>(null)
@@ -73,26 +103,33 @@ export default function DataTable({ tableName, schema }: Props) {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
     if (!pageData) return []
-    const active = Object.entries(colFilters).filter(([, v]) => v.trim())
-    if (!active.length) return pageData.data
-    return pageData.data.filter(row =>
-      active.every(([name, fv]) => {
-        const field = listFields.find(f => f.name === name)
-        const raw = row[name]
-        let display: string
-        if (field?.lookupFrom && lookups[name]) {
-          display = lookups[name][String(raw)] ?? String(raw ?? '')
-        } else if (field?.type === 'boolean') {
-          display = raw ? 'Sim' : 'Não'
-        } else {
-          display = String(raw ?? '')
-        }
-        return display.toLowerCase().includes(fv.toLowerCase())
-      })
-    )
+    return applyFilters(pageData.data, colFilters, listFields, lookups)
   }, [pageData, colFilters, lookups, listFields])
+
+  // For each column: distinct display values from rows that pass ALL OTHER column filters
+  // This gives cascading behavior — each dropdown shows only what's still possible
+  const columnOptions = useMemo(() => {
+    if (!pageData || !schema.columnFilters) return {} as Record<string, string[]>
+    const result: Record<string, string[]> = {}
+    for (const field of listFields) {
+      const otherFilters = Object.fromEntries(
+        Object.entries(colFilters).filter(([name]) => name !== field.name)
+      )
+      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups)
+      const seen = new Set<string>()
+      for (const row of candidateRows) {
+        const val = getDisplayValue(row, field.name, field, lookups)
+        if (val !== '' && val !== 'null' && val !== 'undefined') seen.add(val)
+      }
+      result[field.name] = Array.from(seen).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    }
+    return result
+  }, [pageData, colFilters, lookups, listFields, schema.columnFilters])
+
+  const hasActiveColFilters = Object.values(colFilters).some(v => v !== '')
 
   const handleSearch = () => setSearch(searchInput)
 
@@ -117,7 +154,7 @@ export default function DataTable({ tableName, schema }: Props) {
     <div className="flex flex-col gap-4">
       {/* Header actions */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
           <input
             type="text"
             value={searchInput}
@@ -138,6 +175,14 @@ export default function DataTable({ tableName, schema }: Props) {
               className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
             >
               ✕ Limpar
+            </button>
+          )}
+          {hasActiveColFilters && (
+            <button
+              onClick={() => setColFilters({})}
+              className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
+            >
+              ✕ Limpar filtros
             </button>
           )}
         </div>
@@ -174,18 +219,25 @@ export default function DataTable({ tableName, schema }: Props) {
                       <th key={f.name} className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono">
                         <div>{f.label}</div>
                         {schema.columnFilters && (
-                          <input
-                            type="text"
-                            value={colFilters[f.name] || ''}
+                          <select
+                            value={colFilters[f.name] ?? ''}
                             onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
-                            placeholder="filtrar..."
-                            className="mt-1.5 w-full min-w-[80px] bg-surface-container border border-outline-variant rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal text-on-surface placeholder:text-outline/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                          />
+                            className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer ${
+                              colFilters[f.name]
+                                ? 'border-primary text-primary'
+                                : 'border-outline-variant text-outline hover:border-outline'
+                            }`}
+                          >
+                            <option value="">Todos</option>
+                            {(columnOptions[f.name] ?? []).map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
                         )}
                       </th>
                     ))}
                     <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap">
-                      Ações
+                      {schema.columnFilters ? <div>Ações</div> : 'Ações'}
                     </th>
                   </tr>
                 </thead>
