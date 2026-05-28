@@ -21,13 +21,14 @@ interface CascadeState {
   open: boolean
   fieldName: string
   groupId: string
+  search: string
   groups: Array<{ value: string; label: string }>
   items: CascadeItem[]
   loading: boolean
 }
 
 const EMPTY_CASCADE: CascadeState = {
-  open: false, fieldName: '', groupId: '', groups: [], items: [], loading: false,
+  open: false, fieldName: '', groupId: '', search: '', groups: [], items: [], loading: false,
 }
 
 export default function RecordModal({ schema, tableName, record, onClose, onSaved }: Props) {
@@ -114,7 +115,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
 
   const openCascade = async (field: Field) => {
     const cfg = field.cascadeLookup!
-    setCascade({ open: true, fieldName: field.name, groupId: '', groups: [], items: [], loading: true })
+    setCascade({ open: true, fieldName: field.name, groupId: '', search: '', groups: [], items: [], loading: true })
     const [groupRes, itemRes] = await Promise.all([
       fetch(`/api/${cfg.groupTable}?limit=25000`),
       fetch(`/api/${cfg.itemTable}?limit=25000`),
@@ -138,7 +139,14 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     setCascade(EMPTY_CASCADE)
   }
 
-  const filteredCascadeItems = cascade.items.filter(i => i.groupId === cascade.groupId)
+  const filteredCascadeItems = cascade.items.filter(i => {
+    if (cascade.groupId && i.groupId !== cascade.groupId) return false
+    if (cascade.search) {
+      const q = cascade.search.toLowerCase()
+      return i.value.toLowerCase().includes(q) || i.label.toLowerCase().includes(q)
+    }
+    return !!cascade.groupId
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -250,10 +258,11 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
           onClick={() => setCascade(EMPTY_CASCADE)}
         >
           <div
-            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in"
+            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl animate-fade-in flex flex-col"
+            style={{ maxHeight: '85vh' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant shrink-0">
               <span className="text-sm font-semibold text-on-surface">Buscar Acessório por Grupo</span>
               <button
                 type="button"
@@ -265,42 +274,56 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
             </div>
 
             {cascade.loading ? (
-              <div className="flex items-center justify-center gap-3 py-12 text-outline text-sm">
+              <div className="flex items-center justify-center gap-3 py-16 text-outline text-sm">
                 <span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 Carregando componentes...
               </div>
             ) : (
-              <div className="p-4 space-y-3">
-                <div>
-                  <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Grupo</label>
-                  <select
-                    value={cascade.groupId}
-                    onChange={e => setCascade(prev => ({ ...prev, groupId: e.target.value }))}
-                    className={overlayInputClass}
-                    autoFocus
-                  >
-                    <option value="">— Selecione um grupo —</option>
-                    {cascade.groups.map(g => (
-                      <option key={g.value} value={g.value}>{g.label}</option>
-                    ))}
-                  </select>
+              <div className="p-5 flex flex-col gap-4 overflow-hidden flex-1">
+                {/* Row 1: group filter + search side by side */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+                  <div>
+                    <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Grupo</label>
+                    <select
+                      value={cascade.groupId}
+                      onChange={e => setCascade(prev => ({ ...prev, groupId: e.target.value }))}
+                      className={overlayInputClass}
+                      autoFocus
+                    >
+                      <option value="">— Todos os grupos —</option>
+                      {cascade.groups.map(g => (
+                        <option key={g.value} value={g.value}>{g.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Buscar por código ou nome</label>
+                    <input
+                      type="text"
+                      value={cascade.search}
+                      onChange={e => setCascade(prev => ({ ...prev, search: e.target.value }))}
+                      placeholder="Digite para filtrar..."
+                      className={overlayInputClass}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">
-                    Acessório
-                    {cascade.groupId && (
-                      <span className="ml-1 text-primary">{filteredCascadeItems.length} item{filteredCascadeItems.length !== 1 ? 's' : ''}</span>
+                {/* Results list */}
+                <div className="flex flex-col min-h-0 flex-1">
+                  <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1 shrink-0">
+                    Acessórios
+                    {(cascade.groupId || cascade.search) && (
+                      <span className="ml-1 text-primary">{filteredCascadeItems.length} resultado{filteredCascadeItems.length !== 1 ? 's' : ''}</span>
                     )}
                   </label>
-                  <div className="border border-outline-variant rounded overflow-hidden max-h-72 overflow-y-auto">
-                    {!cascade.groupId ? (
-                      <div className="px-3 py-8 text-center text-outline text-xs font-mono">
-                        Selecione um grupo acima
+                  <div className="border border-outline-variant rounded overflow-y-auto flex-1">
+                    {!cascade.groupId && !cascade.search ? (
+                      <div className="px-3 py-10 text-center text-outline text-xs font-mono">
+                        Selecione um grupo ou busque pelo código / nome
                       </div>
                     ) : filteredCascadeItems.length === 0 ? (
-                      <div className="px-3 py-8 text-center text-outline text-xs font-mono">
-                        Nenhum acessório neste grupo
+                      <div className="px-3 py-10 text-center text-outline text-xs font-mono">
+                        Nenhum resultado encontrado
                       </div>
                     ) : (
                       filteredCascadeItems.map(item => (
@@ -308,7 +331,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                           key={item.value}
                           type="button"
                           onClick={() => selectCascadeItem(item.value)}
-                          className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
+                          className="w-full flex items-center justify-between gap-4 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
                         >
                           <span className="truncate text-left">{item.label}</span>
                           <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
