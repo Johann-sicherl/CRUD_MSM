@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { TableSchema, getListFields } from '@/lib/schema'
+
+type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
 
 interface Props {
@@ -29,8 +31,26 @@ export default function DataTable({ tableName, schema }: Props) {
   const [editRecord, setEditRecord] = useState<Record<string, unknown> | null>(null)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [lookups, setLookups] = useState<LookupMap>({})
 
   const listFields = getListFields(tableName)
+
+  useEffect(() => {
+    const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
+    if (fieldsWithLookup.length === 0) return
+    fieldsWithLookup.forEach(async (field) => {
+      const lc = field.lookupFrom!
+      const res = await fetch(`/api/${lc.table}?limit=25000`)
+      if (!res.ok) return
+      const json = await res.json()
+      const map: Record<string, string> = {}
+      for (const row of (json.data || [])) {
+        map[String(row[lc.keyField])] = String(row[lc.displayField])
+      }
+      setLookups(prev => ({ ...prev, [field.name]: map }))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -148,7 +168,10 @@ export default function DataTable({ tableName, schema }: Props) {
                       <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
                         {listFields.map(f => (
                           <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
-                            <CellValue value={row[f.name]} type={f.type} />
+                            {f.lookupFrom && lookups[f.name]
+                              ? <span>{lookups[f.name][String(row[f.name])] ?? String(row[f.name] ?? '—')}</span>
+                              : <CellValue value={row[f.name]} type={f.type} />
+                            }
                           </td>
                         ))}
                         <td className="px-4 py-3 text-right whitespace-nowrap">

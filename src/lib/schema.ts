@@ -10,6 +10,12 @@ export type FieldType =
   | 'timestamp'
   | 'password'
 
+export interface LookupConfig {
+  table: string
+  keyField: string
+  displayField: string
+}
+
 export interface Field {
   name: string
   label: string
@@ -21,6 +27,7 @@ export interface Field {
   options?: string[]
   defaultValue?: string | number | boolean | null
   placeholder?: string
+  lookupFrom?: LookupConfig
 }
 
 export interface TableSchema {
@@ -130,7 +137,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'legacy_group_id', label: 'ID Grupo Legado', type: 'number', nullable: true },
+      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: true, lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'color', label: 'Cor', type: 'text', nullable: true },
       { name: 'predominant_material', label: 'Material Predominante', type: 'text', nullable: true },
       { name: 'dimensional_mm', label: 'Dimensão (mm)', type: 'number', nullable: true },
