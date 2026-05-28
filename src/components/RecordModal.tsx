@@ -77,6 +77,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   const [editingQid, setEditingQid] = useState<string | null>(null)
   const [batchLoading, setBatchLoading] = useState(false)
   const [batchError, setBatchError] = useState('')
+  const [queueSelected, setQueueSelected] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setForm(buildInitial())
@@ -289,6 +290,29 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     }
   }
 
+  const toggleQueueSelect = (qid: string) => {
+    setQueueSelected(prev => {
+      const s = new Set(prev)
+      s.has(qid) ? s.delete(qid) : s.add(qid)
+      return s
+    })
+  }
+
+  const allQueueSelected = queue.length > 0 && queue.every(i => queueSelected.has(i.qid))
+
+  const toggleAllQueueSelect = () => {
+    setQueueSelected(allQueueSelected ? new Set() : new Set(queue.map(i => i.qid)))
+  }
+
+  const deleteSelectedQueue = () => {
+    if (editingQid && queueSelected.has(editingQid)) {
+      setEditingQid(null)
+      setForm(buildInitial())
+    }
+    setQueue(prev => prev.filter(i => !queueSelected.has(i.qid)))
+    setQueueSelected(new Set())
+  }
+
   const overlayInputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   return (
@@ -373,21 +397,41 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
         {/* Batch queue */}
         {isBatch && queue.length > 0 && (
           <div className="border-t border-outline-variant px-6 py-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
-                Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
-              </span>
-              <button
-                type="button"
-                onClick={handleCreateAll}
-                disabled={batchLoading}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
-              >
-                {batchLoading
-                  ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
-                  : `Criar Todos (${queue.length})`
-                }
-              </button>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={allQueueSelected}
+                  onChange={toggleAllQueueSelect}
+                  className="accent-yellow-400 cursor-pointer"
+                  title="Selecionar todos"
+                />
+                <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
+                  Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {queueSelected.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={deleteSelectedQueue}
+                    className="px-3 py-1.5 text-xs border border-error/40 text-error hover:bg-error-container/20 rounded transition-colors"
+                  >
+                    Excluir {queueSelected.size} selecionado{queueSelected.size !== 1 ? 's' : ''}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCreateAll}
+                  disabled={batchLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
+                >
+                  {batchLoading
+                    ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
+                    : `Criar Todos (${queue.length})`
+                  }
+                </button>
+              </div>
             </div>
 
             {batchError && (
@@ -396,7 +440,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
               </div>
             )}
 
-            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
               {queue.map((item, idx) => (
                 <QueueRow
                   key={item.qid}
@@ -405,6 +449,8 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                   editableFields={editableFields}
                   fetchedOptions={fetchedOptions}
                   isEditing={editingQid === item.qid}
+                  isSelected={queueSelected.has(item.qid)}
+                  onToggleSelect={() => toggleQueueSelect(item.qid)}
                   onEdit={() => handleEditQueueItem(item.qid)}
                   onDelete={() => handleDeleteQueueItem(item.qid)}
                 />
@@ -569,6 +615,8 @@ function QueueRow({
   editableFields,
   fetchedOptions,
   isEditing,
+  isSelected,
+  onToggleSelect,
   onEdit,
   onDelete,
 }: {
@@ -577,49 +625,60 @@ function QueueRow({
   editableFields: Field[]
   fetchedOptions: Record<string, Array<{ value: string; label: string }>>
   isEditing: boolean
+  isSelected: boolean
+  onToggleSelect: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
-  const displayFields = editableFields.filter(f => f.showInList)
-
   return (
-    <div className={`flex items-center gap-0 rounded border text-sm transition-colors ${
+    <div className={`flex items-start gap-0 rounded border text-sm transition-colors ${
       isEditing
         ? 'bg-primary/10 border-primary/40'
-        : 'bg-surface-container-low border-outline-variant/40 hover:border-outline-variant'
+        : isSelected
+          ? 'bg-surface-container-highest border-outline-variant'
+          : 'bg-surface-container-low border-outline-variant/40 hover:border-outline-variant'
     }`}>
-      <span className="text-outline font-mono text-xs px-3 py-2.5 border-r border-outline-variant/40 shrink-0 w-9 text-center">
+      {/* Checkbox */}
+      <div className="flex items-center justify-center px-2.5 pt-2.5 border-r border-outline-variant/40 shrink-0 self-stretch">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggleSelect}
+          className="accent-yellow-400 cursor-pointer"
+        />
+      </div>
+      {/* Index */}
+      <span className="text-outline font-mono text-xs px-2.5 pt-2.5 border-r border-outline-variant/40 shrink-0 w-7 text-center">
         {idx + 1}
       </span>
-      <div className="flex-1 flex flex-wrap gap-x-4 gap-y-0 px-3 py-2 min-w-0">
-        {displayFields.map(f => {
+      {/* Fields */}
+      <div className="flex-1 flex flex-wrap gap-x-5 gap-y-0.5 px-3 py-2 min-w-0">
+        {editableFields.map(f => {
           const val = item.data[f.name]
           if (!val && val !== '0') return null
           let display: string = val
           const opts = fetchedOptions[f.name]
-          if (opts) {
-            display = opts.find(o => o.value === val)?.label ?? val
-          }
+          if (opts) display = opts.find(o => o.value === val)?.label ?? val
           return (
             <span key={f.name} className="text-xs text-on-surface-variant whitespace-nowrap">
               <span className="text-outline">{f.label}: </span>
-              {display.length > 35 ? display.slice(0, 35) + '…' : display}
+              {display.length > 40 ? display.slice(0, 40) + '…' : display}
             </span>
           )
         })}
       </div>
-      <div className="flex items-center border-l border-outline-variant/40 shrink-0">
+      <div className="flex items-center border-l border-outline-variant/40 shrink-0 self-stretch">
         <button
           type="button"
           onClick={onEdit}
-          className="px-3 py-2.5 text-xs text-outline hover:text-primary transition-colors border-r border-outline-variant/40"
+          className="px-3 py-2.5 text-xs text-outline hover:text-primary transition-colors border-r border-outline-variant/40 h-full"
         >
           Editar
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="px-3 py-2.5 text-xs text-outline hover:text-error transition-colors"
+          className="px-3 py-2.5 text-xs text-outline hover:text-error transition-colors h-full"
         >
           ✕
         </button>
