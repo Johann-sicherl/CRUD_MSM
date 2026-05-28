@@ -253,14 +253,22 @@ export default function DataTable({ tableName, schema }: Props) {
                   ) : (
                     filteredRows.map((row, i) => (
                       <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
-                        {listFields.map(f => (
-                          <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap max-w-[220px]">
-                            {f.lookupFrom && lookups[f.name]
-                              ? <TruncatedCell text={getDisplayValue(row, f.name, f, lookups) || '—'} />
-                              : <CellValue value={row[f.name]} type={f.type} />
-                            }
-                          </td>
-                        ))}
+                        {listFields.map(f => {
+                          let cell: React.ReactNode
+                          if (f.lookupFrom && lookups[f.name]) {
+                            const text = getDisplayValue(row, f.name, f, lookups) || '—'
+                            cell = f.listExpand
+                              ? <TruncatedCell text={text} maxLen={14} />
+                              : <span title={text.length > 50 ? text : undefined}>{text}</span>
+                          } else {
+                            cell = <CellValue value={row[f.name]} type={f.type} />
+                          }
+                          return (
+                            <td key={f.name} className={`px-4 py-3 text-on-surface-variant whitespace-nowrap${f.listExpand ? ' max-w-[100px]' : ''}`}>
+                              {cell}
+                            </td>
+                          )
+                        })}
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
@@ -413,5 +421,5 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
     return <span className="font-mono text-xs text-outline">{String(value).slice(0, 8)}…</span>
   }
   const str = String(value)
-  return <TruncatedCell text={str} />
+  return <span title={str.length > 50 ? str : undefined}>{str.length > 50 ? str.slice(0, 50) + '…' : str}</span>
 }

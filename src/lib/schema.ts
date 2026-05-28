@@ -51,6 +51,7 @@ export interface Field {
   autoIncrement?: boolean
   hideInForm?: boolean
   formFullWidth?: boolean
+  listExpand?: boolean  // truncate cell in list view and show expand/collapse button
 }
 
 export interface TableSchema {
@@ -225,7 +226,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'accessory_name', label: 'Nome Acessório', type: 'text', nullable: true, showInList: true, hideInForm: true,
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
+      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0, listExpand: true,
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },
         fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'operation_time', label: 'Tempo de Operação (min)', type: 'number', nullable: true },
