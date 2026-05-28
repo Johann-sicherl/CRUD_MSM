@@ -22,6 +22,16 @@ export interface LookupConfig {
   }
 }
 
+export interface CascadeLookupConfig {
+  groupTable: string         // e.g. 'accessory_groups'
+  groupKeyField: string      // e.g. 'legacy_id'
+  groupDisplayField: string  // e.g. 'name'
+  itemTable: string          // e.g. 'accessories'
+  itemGroupField: string     // field in itemTable that references group key
+  itemKeyField: string       // field whose value fills the form field
+  itemDisplayField: string   // display label in picker list
+}
+
 export interface Field {
   name: string
   label: string
@@ -33,11 +43,13 @@ export interface Field {
   options?: string[]
   defaultValue?: string | number | boolean | null
   placeholder?: string
-  lookupFrom?: LookupConfig   // list view: show name instead of id
-  fetchOptions?: LookupConfig // form view: render dynamic dropdown
-  autoIncrement?: boolean     // server auto-computes max+1 on INSERT
-  hideInForm?: boolean        // hide from form (resolved server-side)
-  formFullWidth?: boolean     // span full width in form grid
+  lookupFrom?: LookupConfig
+  fetchOptions?: LookupConfig
+  cascadeLookup?: CascadeLookupConfig
+  validateExistsIn?: { table: string; field: string; errorMessage?: string }
+  autoIncrement?: boolean
+  hideInForm?: boolean
+  formFullWidth?: boolean
 }
 
 export interface TableSchema {
@@ -198,7 +210,13 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name',
           filterVia: { table: 'standard_equipment_items', joinField: 'legacy_equipment_id', filterField: 'status', filterValue: 'active' } } },
-      { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true },
+      { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true,
+        validateExistsIn: { table: 'accessories', field: 'protheus_code',
+          errorMessage: 'Código Protheus não encontrado em Cadastro de Componentes. Cadastre o componente antes de criar a regra.' },
+        cascadeLookup: {
+          groupTable: 'accessory_groups', groupKeyField: 'legacy_id', groupDisplayField: 'name',
+          itemTable: 'accessories', itemGroupField: 'legacy_group_id', itemKeyField: 'protheus_code', itemDisplayField: 'name',
+        } },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },

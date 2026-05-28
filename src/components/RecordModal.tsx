@@ -11,6 +11,25 @@ interface Props {
   onSaved: () => void
 }
 
+interface CascadeItem {
+  value: string
+  label: string
+  groupId: string
+}
+
+interface CascadeState {
+  open: boolean
+  fieldName: string
+  groupId: string
+  groups: Array<{ value: string; label: string }>
+  items: CascadeItem[]
+  loading: boolean
+}
+
+const EMPTY_CASCADE: CascadeState = {
+  open: false, fieldName: '', groupId: '', groups: [], items: [], loading: false,
+}
+
 export default function RecordModal({ schema, tableName, record, onClose, onSaved }: Props) {
   const isEdit = !!record
   const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
@@ -42,6 +61,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
+  const [cascade, setCascade] = useState<CascadeState>(EMPTY_CASCADE)
 
   useEffect(() => {
     setForm(buildInitial())
@@ -92,6 +112,34 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
+  const openCascade = async (field: Field) => {
+    const cfg = field.cascadeLookup!
+    setCascade({ open: true, fieldName: field.name, groupId: '', groups: [], items: [], loading: true })
+    const [groupRes, itemRes] = await Promise.all([
+      fetch(`/api/${cfg.groupTable}?limit=25000`),
+      fetch(`/api/${cfg.itemTable}?limit=25000`),
+    ])
+    if (!groupRes.ok || !itemRes.ok) { setCascade(EMPTY_CASCADE); return }
+    const [groupJson, itemJson] = await Promise.all([groupRes.json(), itemRes.json()])
+    const groups = (groupJson.data || []).map((r: Record<string, unknown>) => ({
+      value: String(r[cfg.groupKeyField]),
+      label: String(r[cfg.groupDisplayField]),
+    }))
+    const items: CascadeItem[] = (itemJson.data || []).map((r: Record<string, unknown>) => ({
+      value: String(r[cfg.itemKeyField]),
+      label: String(r[cfg.itemDisplayField]),
+      groupId: String(r[cfg.itemGroupField]),
+    }))
+    setCascade(prev => ({ ...prev, loading: false, groups, items }))
+  }
+
+  const selectCascadeItem = (value: string) => {
+    handleChange(cascade.fieldName, value)
+    setCascade(EMPTY_CASCADE)
+  }
+
+  const filteredCascadeItems = cascade.items.filter(i => i.groupId === cascade.groupId)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -117,23 +165,21 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
 
     const url = isEdit ? `/api/${tableName}/${record!.id}` : `/api/${tableName}`
     const method = isEdit ? 'PUT' : 'POST'
-
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-
     setLoading(false)
-
     if (!res.ok) {
       const err = await res.json()
       setError(err.error || 'Erro ao salvar')
       return
     }
-
     onSaved()
   }
+
+  const overlayInputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
@@ -164,6 +210,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                 value={form[field.name] ?? ''}
                 onChange={(v) => handleChange(field.name, v)}
                 fetchedOptions={fetchedOptions[field.name]}
+                onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
               />
             ))}
           </div>
@@ -195,6 +242,86 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
           </div>
         </form>
       </div>
+
+      {/* Cascade Lookup Overlay */}
+      {cascade.open && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setCascade(EMPTY_CASCADE)}
+        >
+          <div
+            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
+              <span className="text-sm font-semibold text-on-surface">Buscar Acessório por Grupo</span>
+              <button
+                type="button"
+                onClick={() => setCascade(EMPTY_CASCADE)}
+                className="text-outline hover:text-on-surface transition-colors text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {cascade.loading ? (
+              <div className="flex items-center justify-center gap-3 py-12 text-outline text-sm">
+                <span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                Carregando componentes...
+              </div>
+            ) : (
+              <div className="p-4 space-y-3">
+                <div>
+                  <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Grupo</label>
+                  <select
+                    value={cascade.groupId}
+                    onChange={e => setCascade(prev => ({ ...prev, groupId: e.target.value }))}
+                    className={overlayInputClass}
+                    autoFocus
+                  >
+                    <option value="">— Selecione um grupo —</option>
+                    {cascade.groups.map(g => (
+                      <option key={g.value} value={g.value}>{g.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">
+                    Acessório
+                    {cascade.groupId && (
+                      <span className="ml-1 text-primary">{filteredCascadeItems.length} item{filteredCascadeItems.length !== 1 ? 's' : ''}</span>
+                    )}
+                  </label>
+                  <div className="border border-outline-variant rounded overflow-hidden max-h-72 overflow-y-auto">
+                    {!cascade.groupId ? (
+                      <div className="px-3 py-8 text-center text-outline text-xs font-mono">
+                        Selecione um grupo acima
+                      </div>
+                    ) : filteredCascadeItems.length === 0 ? (
+                      <div className="px-3 py-8 text-center text-outline text-xs font-mono">
+                        Nenhum acessório neste grupo
+                      </div>
+                    ) : (
+                      filteredCascadeItems.map(item => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => selectCascadeItem(item.value)}
+                          className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
+                        >
+                          <span className="truncate text-left">{item.label}</span>
+                          <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -204,14 +331,92 @@ function FieldInput({
   value,
   onChange,
   fetchedOptions,
+  onCascadeOpen,
 }: {
   field: Field
   value: string
   onChange: (v: string) => void
   fetchedOptions?: Array<{ value: string; label: string }>
+  onCascadeOpen?: () => void
 }) {
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
   const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+
+  let input: React.ReactNode
+
+  if (fetchedOptions) {
+    input = (
+      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
+        <option value="">— Selecione —</option>
+        {fetchedOptions.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    )
+  } else if (field.type === 'select' && field.options) {
+    input = (
+      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
+        {field.nullable && <option value="">— Selecione —</option>}
+        {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    )
+  } else if (field.type === 'boolean') {
+    input = (
+      <select value={value} onChange={e => onChange(e.target.value)} className={inputClass}>
+        <option value="true">Sim</option>
+        <option value="false">Não</option>
+      </select>
+    )
+  } else if (field.type === 'textarea') {
+    input = (
+      <textarea value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} rows={3} className={`${inputClass} resize-y`} />
+    )
+  } else if (field.type === 'jsonb') {
+    input = (
+      <textarea value={value} onChange={e => onChange(e.target.value)} placeholder='{"chave": "valor"}' rows={4} className={`${inputClass} font-mono resize-y`} />
+    )
+  } else if (field.type === 'password') {
+    input = (
+      <input type="password" value={value} onChange={e => onChange(e.target.value)} placeholder={field.placeholder || 'Senha'} className={inputClass} />
+    )
+  } else if (field.type === 'number') {
+    input = (
+      <input type="number" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
+    )
+  } else if (field.type === 'decimal') {
+    input = (
+      <input type="number" step="0.0001" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder || '0.0000'} className={inputClass} />
+    )
+  } else if (field.type === 'uuid') {
+    input = (
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder="UUID do registro relacionado" className={`${inputClass} font-mono`} />
+    )
+  } else if (onCascadeOpen) {
+    input = (
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          required={!field.nullable}
+          placeholder={field.placeholder}
+          className={`${inputClass} pr-9`}
+        />
+        <button
+          type="button"
+          onClick={onCascadeOpen}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors leading-none"
+          title="Buscar por grupo e acessório"
+        >
+          🔍
+        </button>
+      </div>
+    )
+  } else {
+    input = (
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
+    )
+  }
 
   return (
     <div className={isWide ? 'sm:col-span-2' : ''}>
@@ -219,39 +424,7 @@ function FieldInput({
         {field.label}
         {!field.nullable && <span className="text-primary ml-1">*</span>}
       </label>
-
-      {fetchedOptions ? (
-        <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
-          <option value="">— Selecione —</option>
-          {fetchedOptions.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      ) : field.type === 'select' && field.options ? (
-        <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
-          {field.nullable && <option value="">— Selecione —</option>}
-          {field.options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : field.type === 'boolean' ? (
-        <select value={value} onChange={e => onChange(e.target.value)} className={inputClass}>
-          <option value="true">Sim</option>
-          <option value="false">Não</option>
-        </select>
-      ) : field.type === 'textarea' ? (
-        <textarea value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} rows={3} className={`${inputClass} resize-y`} />
-      ) : field.type === 'jsonb' ? (
-        <textarea value={value} onChange={e => onChange(e.target.value)} placeholder='{"chave": "valor"}' rows={4} className={`${inputClass} font-mono resize-y`} />
-      ) : field.type === 'password' ? (
-        <input type="password" value={value} onChange={e => onChange(e.target.value)} placeholder={field.placeholder || 'Senha'} className={inputClass} />
-      ) : field.type === 'number' ? (
-        <input type="number" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
-      ) : field.type === 'decimal' ? (
-        <input type="number" step="0.0001" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder || '0.0000'} className={inputClass} />
-      ) : field.type === 'uuid' ? (
-        <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder="UUID do registro relacionado" className={`${inputClass} font-mono`} />
-      ) : (
-        <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
-      )}
+      {input}
     </div>
   )
 }

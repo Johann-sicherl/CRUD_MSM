@@ -57,6 +57,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
+  // Validate fields that must exist in another table before inserting
+  for (const field of schema.fields.filter(f => f.validateExistsIn)) {
+    const val = insertBody[field.name]
+    if (val === null || val === undefined || val === '') continue
+    const vi = field.validateExistsIn!
+    const { data: found } = await supabaseAdmin
+      .from(vi.table)
+      .select(vi.field)
+      .eq(vi.field, String(val))
+      .maybeSingle()
+    if (!found) {
+      return NextResponse.json({
+        error: vi.errorMessage ?? `"${val}" não encontrado em ${vi.table}`,
+      }, { status: 400 })
+    }
+  }
+
   // Auto-increment: compute MAX(field)+1 for fields marked autoIncrement
   const autoIncrFields = schema.fields.filter(f => f.autoIncrement)
   for (const field of autoIncrFields) {
