@@ -16,11 +16,11 @@ interface PageData {
   pages: number
 }
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 5000
 
 export default function DataTable({ tableName, schema }: Props) {
   const [pageData, setPageData] = useState<PageData | null>(null)
-  const [page, setPage] = useState(1)
+  const [page] = useState(1)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -188,33 +188,10 @@ export default function DataTable({ tableName, schema }: Props) {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="px-4 py-3 border-t border-outline-variant/30 flex items-center justify-between text-sm text-outline font-mono">
-              <div className="text-xs">
-                {pageData.total} registro{pageData.total !== 1 ? 's' : ''}
-                {search && <span className="ml-1 text-primary">· filtrado</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="flex items-center gap-1 px-3 py-1 border border-outline-variant rounded text-xs disabled:opacity-30 hover:border-primary hover:text-primary transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[14px]">chevron_left</span>
-                  Anterior
-                </button>
-                <span className="px-2 text-xs">
-                  {page} / {pageData.pages || 1}
-                </span>
-                <button
-                  onClick={() => setPage(p => Math.min(pageData.pages, p + 1))}
-                  disabled={page >= pageData.pages}
-                  className="flex items-center gap-1 px-3 py-1 border border-outline-variant rounded text-xs disabled:opacity-30 hover:border-primary hover:text-primary transition-colors"
-                >
-                  Próxima
-                  <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                </button>
-              </div>
+            {/* Record count */}
+            <div className="px-4 py-3 border-t border-outline-variant/30 text-xs text-outline font-mono">
+              {pageData.total} registro{pageData.total !== 1 ? 's' : ''}
+              {search && <span className="ml-1 text-primary">· filtrado</span>}
             </div>
           </>
         )}

@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
         />
       </head>
-      <body className="bg-background text-on-surface flex min-h-screen overflow-hidden">
+      <body className="bg-background text-on-surface flex min-h-screen">
         <div className="scanning-grid fixed inset-0 pointer-events-none z-0" />
         <div className="scanning-line" />
         <Sidebar />
