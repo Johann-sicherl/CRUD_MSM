@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import Sidebar from '@/components/Sidebar'
+import ClientLayout from '@/components/ClientLayout'
 
 export const metadata: Metadata = {
   title: 'MSM Admin — VMI Security',
@@ -10,13 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className="dark">
-      <body className="bg-background text-on-surface flex min-h-screen">
+      <body className="bg-background text-on-surface min-h-screen">
         <div className="scanning-grid fixed inset-0 pointer-events-none z-0" />
         <div className="scanning-line" />
-        <Sidebar />
-        <main className="relative z-10 flex-1 overflow-auto">
-          {children}
-        </main>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   )
