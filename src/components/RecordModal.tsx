@@ -402,28 +402,15 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
               <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
                 Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
               </span>
-              <div className="flex items-center gap-2">
-                {queueSelected.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={deleteSelectedQueue}
-                    className="px-3 py-1.5 text-xs border border-error/40 text-error hover:bg-error-container/20 rounded transition-colors"
-                  >
-                    Excluir {queueSelected.size} selecionado{queueSelected.size !== 1 ? 's' : ''}
-                  </button>
-                )}
+              {queueSelected.size > 0 && (
                 <button
                   type="button"
-                  onClick={handleCreateAll}
-                  disabled={batchLoading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
+                  onClick={deleteSelectedQueue}
+                  className="px-3 py-1.5 text-xs border border-error/40 text-error hover:bg-error-container/20 rounded transition-colors"
                 >
-                  {batchLoading
-                    ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
-                    : `Criar Todos (${queue.length})`
-                  }
+                  Excluir {queueSelected.size} selecionado{queueSelected.size !== 1 ? 's' : ''}
                 </button>
-              </div>
+              )}
             </div>
 
             {batchError && (
@@ -481,6 +468,21 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Save button below the table */}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleCreateAll}
+                disabled={batchLoading}
+                className="flex items-center gap-2 px-6 py-2.5 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
+              >
+                {batchLoading
+                  ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
+                  : 'Salvar'
+                }
+              </button>
             </div>
           </div>
         )}
