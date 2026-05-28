@@ -60,7 +60,8 @@ export interface TableSchema {
   orderBy: string
   fields: Field[]
   doubleInsert?: boolean
-  batchInsert?: boolean      // form accumulates a queue; saves all at once
+  batchInsert?: boolean
+  columnFilters?: boolean   // show per-column filter inputs in the list header
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
@@ -206,6 +207,7 @@ export const tables: Record<string, TableSchema> = {
     hasTimestamps: true,
     orderBy: 'legacy_equipment_id',
     batchInsert: true,
+    columnFilters: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,

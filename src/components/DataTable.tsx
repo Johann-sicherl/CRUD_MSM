@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { TableSchema, getListFields } from '@/lib/schema'
 
 type LookupMap = Record<string, Record<string, string>>
@@ -32,8 +32,11 @@ export default function DataTable({ tableName, schema }: Props) {
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [lookups, setLookups] = useState<LookupMap>({})
+  const [colFilters, setColFilters] = useState<Record<string, string>>({})
 
-  const listFields = getListFields(tableName)
+  const listFields = useMemo(() => getListFields(tableName), [tableName])
+
+  useEffect(() => { setColFilters({}) }, [tableName])
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -69,6 +72,27 @@ export default function DataTable({ tableName, schema }: Props) {
   }, [tableName, page, search])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  const filteredRows = useMemo(() => {
+    if (!pageData) return []
+    const active = Object.entries(colFilters).filter(([, v]) => v.trim())
+    if (!active.length) return pageData.data
+    return pageData.data.filter(row =>
+      active.every(([name, fv]) => {
+        const field = listFields.find(f => f.name === name)
+        const raw = row[name]
+        let display: string
+        if (field?.lookupFrom && lookups[name]) {
+          display = lookups[name][String(raw)] ?? String(raw ?? '')
+        } else if (field?.type === 'boolean') {
+          display = raw ? 'Sim' : 'Não'
+        } else {
+          display = String(raw ?? '')
+        }
+        return display.toLowerCase().includes(fv.toLowerCase())
+      })
+    )
+  }, [pageData, colFilters, lookups, listFields])
 
   const handleSearch = () => setSearch(searchInput)
 
@@ -148,7 +172,16 @@ export default function DataTable({ tableName, schema }: Props) {
                   <tr>
                     {listFields.map(f => (
                       <th key={f.name} className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono">
-                        {f.label}
+                        <div>{f.label}</div>
+                        {schema.columnFilters && (
+                          <input
+                            type="text"
+                            value={colFilters[f.name] || ''}
+                            onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
+                            placeholder="filtrar..."
+                            className="mt-1.5 w-full min-w-[80px] bg-surface-container border border-outline-variant rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal text-on-surface placeholder:text-outline/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                          />
+                        )}
                       </th>
                     ))}
                     <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap">
@@ -157,14 +190,14 @@ export default function DataTable({ tableName, schema }: Props) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/30">
-                  {pageData.data.length === 0 ? (
+                  {filteredRows.length === 0 ? (
                     <tr>
                       <td colSpan={listFields.length + 1} className="px-4 py-12 text-center text-outline text-sm">
                         Nenhum registro encontrado
                       </td>
                     </tr>
                   ) : (
-                    pageData.data.map((row, i) => (
+                    filteredRows.map((row, i) => (
                       <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
                         {listFields.map(f => (
                           <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
@@ -197,8 +230,10 @@ export default function DataTable({ tableName, schema }: Props) {
 
             {/* Record count */}
             <div className="px-4 py-3 border-t border-outline-variant/30 text-xs text-outline font-mono">
-              {pageData.total} registro{pageData.total !== 1 ? 's' : ''}
-              {search && <span className="ml-1 text-primary">· filtrado</span>}
+              {filteredRows.length < pageData.data.length
+                ? <>{filteredRows.length} de {pageData.total} registro{pageData.total !== 1 ? 's' : ''} <span className="text-primary">· filtrado</span></>
+                : <>{pageData.total} registro{pageData.total !== 1 ? 's' : ''}{search && <span className="ml-1 text-primary">· busca ativa</span>}</>
+              }
             </div>
           </>
         )}
