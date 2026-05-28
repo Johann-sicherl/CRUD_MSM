@@ -51,7 +51,7 @@ export const tables: Record<string, TableSchema> = {
   // ── CATÁLOGO ──────────────────────────────────────────────────────────────
 
   equipments: {
-    label: 'Equipamentos',
+    label: 'Grupo de Equipamentos',
     description: 'Máquinas configuráveis — entidade central do catálogo',
     domain: 'catalogo',
     hasTimestamps: true,
@@ -105,7 +105,7 @@ export const tables: Record<string, TableSchema> = {
   },
 
   accessories: {
-    label: 'Acessórios',
+    label: 'Cadastro de Componentes',
     description: 'Acessórios que podem ser adicionados aos equipamentos',
     domain: 'catalogo',
     hasTimestamps: true,
