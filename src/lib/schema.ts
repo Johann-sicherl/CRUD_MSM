@@ -14,6 +14,7 @@ export interface LookupConfig {
   table: string
   keyField: string
   displayField: string
+  sourceField?: string  // use row[sourceField] as the lookup key instead of row[field.name]
   filterVia?: {
     table: string      // table whose rows determine the allowed set
     joinField: string  // field in that table referencing keyField
@@ -221,6 +222,8 @@ export const tables: Record<string, TableSchema> = {
           groupTable: 'accessory_groups', groupKeyField: 'legacy_id', groupDisplayField: 'name',
           itemTable: 'accessories', itemGroupField: 'legacy_group_id', itemKeyField: 'protheus_code', itemDisplayField: 'name',
         } },
+      { name: 'accessory_name', label: 'Nome Acessório', type: 'text', nullable: true, showInList: true, hideInForm: true,
+        lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },

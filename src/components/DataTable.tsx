@@ -26,10 +26,12 @@ function getDisplayValue(
   field: Field | undefined,
   lookups: LookupMap,
 ): string {
-  const raw = row[fieldName]
   if (field?.lookupFrom && lookups[fieldName]) {
-    return lookups[fieldName][String(raw)] ?? String(raw ?? '')
+    const keyField = field.lookupFrom.sourceField ?? fieldName
+    const key = String(row[keyField] ?? '')
+    return lookups[fieldName][key] ?? key
   }
+  const raw = row[fieldName]
   if (field?.type === 'boolean') return raw ? 'Sim' : 'Não'
   return String(raw ?? '')
 }
@@ -252,9 +254,9 @@ export default function DataTable({ tableName, schema }: Props) {
                     filteredRows.map((row, i) => (
                       <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
                         {listFields.map(f => (
-                          <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
+                          <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap max-w-[220px]">
                             {f.lookupFrom && lookups[f.name]
-                              ? <span>{lookups[f.name][String(row[f.name])] ?? String(row[f.name] ?? '—')}</span>
+                              ? <TruncatedCell text={getDisplayValue(row, f.name, f, lookups) || '—'} />
                               : <CellValue value={row[f.name]} type={f.type} />
                             }
                           </td>
@@ -347,6 +349,23 @@ export default function DataTable({ tableName, schema }: Props) {
   )
 }
 
+function TruncatedCell({ text, maxLen = 32 }: { text: string; maxLen?: number }) {
+  const [open, setOpen] = useState(false)
+  if (text.length <= maxLen) return <span>{text}</span>
+  return (
+    <span className="inline-flex items-start gap-1">
+      <span className="break-words whitespace-normal">{open ? text : text.slice(0, maxLen) + '…'}</span>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        title={open ? 'Recolher' : 'Ver completo'}
+        className="shrink-0 mt-0.5 text-[9px] text-outline hover:text-primary border border-outline-variant/50 hover:border-primary/40 rounded px-1 py-0.5 leading-none transition-colors"
+      >
+        {open ? '▲' : '▼'}
+      </button>
+    </span>
+  )
+}
+
 function CellValue({ value, type }: { value: unknown; type: string }) {
   if (value === null || value === undefined) {
     return <span className="text-outline text-xs font-mono">null</span>
@@ -394,5 +413,5 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
     return <span className="font-mono text-xs text-outline">{String(value).slice(0, 8)}…</span>
   }
   const str = String(value)
-  return <span title={str.length > 40 ? str : undefined}>{str.length > 40 ? str.slice(0, 40) + '…' : str}</span>
+  return <TruncatedCell text={str} />
 }
