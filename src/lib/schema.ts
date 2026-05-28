@@ -132,7 +132,7 @@ export const tables: Record<string, TableSchema> = {
     description: 'Acessórios que podem ser adicionados aos equipamentos',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'name',
+    orderBy: 'legacy_group_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
