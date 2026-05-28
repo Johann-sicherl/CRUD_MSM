@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 @layer base {
-  html { color-scheme: dark; }
+  html { color-scheme: dark; font-size: 13px; }
   body { @apply bg-background text-on-surface font-sans; }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
