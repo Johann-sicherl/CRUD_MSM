@@ -47,7 +47,10 @@ function applyFilters(
   return rows.filter(row =>
     active.every(([name, fv]) => {
       const field = fields.find(f => f.name === name)
-      return getDisplayValue(row, name, field, lookups) === fv
+      const display = getDisplayValue(row, name, field, lookups)
+      return field?.listFilterType === 'text'
+        ? display.toLowerCase().includes(fv.toLowerCase())
+        : display === fv
     })
   )
 }
@@ -117,6 +120,7 @@ export default function DataTable({ tableName, schema }: Props) {
     if (!pageData || !schema.columnFilters) return {} as Record<string, string[]>
     const result: Record<string, string[]> = {}
     for (const field of listFields) {
+      if (field.listFilterType === 'text') continue  // text inputs don't need distinct-value lists
       const otherFilters = Object.fromEntries(
         Object.entries(colFilters).filter(([name]) => name !== field.name)
       )
@@ -221,20 +225,34 @@ export default function DataTable({ tableName, schema }: Props) {
                       <th key={f.name} className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono">
                         <div>{f.label}</div>
                         {schema.columnFilters && (
-                          <select
-                            value={colFilters[f.name] ?? ''}
-                            onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
-                            className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer ${
-                              colFilters[f.name]
-                                ? 'border-primary text-primary'
-                                : 'border-outline-variant text-outline hover:border-outline'
-                            }`}
-                          >
-                            <option value="">Todos</option>
-                            {(columnOptions[f.name] ?? []).map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
+                          f.listFilterType === 'text' ? (
+                            <input
+                              type="text"
+                              value={colFilters[f.name] ?? ''}
+                              onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
+                              placeholder="buscar..."
+                              className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal placeholder:text-outline/50 focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
+                                colFilters[f.name]
+                                  ? 'border-primary text-on-surface'
+                                  : 'border-outline-variant text-on-surface hover:border-outline'
+                              }`}
+                            />
+                          ) : (
+                            <select
+                              value={colFilters[f.name] ?? ''}
+                              onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
+                              className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer ${
+                                colFilters[f.name]
+                                  ? 'border-primary text-primary'
+                                  : 'border-outline-variant text-outline hover:border-outline'
+                              }`}
+                            >
+                              <option value="">Todos</option>
+                              {(columnOptions[f.name] ?? []).map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          )
                         )}
                       </th>
                     ))}

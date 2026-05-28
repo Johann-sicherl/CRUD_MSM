@@ -51,7 +51,8 @@ export interface Field {
   autoIncrement?: boolean
   hideInForm?: boolean
   formFullWidth?: boolean
-  listExpand?: boolean  // truncate cell in list view and show expand/collapse button
+  listExpand?: boolean       // truncate cell in list view and show expand/collapse button
+  listFilterType?: 'select' | 'text'  // override column filter style (default: select)
 }
 
 export interface TableSchema {
@@ -224,6 +225,7 @@ export const tables: Record<string, TableSchema> = {
           itemTable: 'accessories', itemGroupField: 'legacy_group_id', itemKeyField: 'protheus_code', itemDisplayField: 'name',
         } },
       { name: 'accessory_name', label: 'Nome Acessório', type: 'text', nullable: true, showInList: true, hideInForm: true,
+        listFilterType: 'text',
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0, listExpand: true,
