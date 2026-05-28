@@ -177,7 +177,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'commercial_name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0, lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
@@ -197,7 +197,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'commercial_name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'legacy_second_group_id', label: '2º Grupo', type: 'number', nullable: true, lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
@@ -216,7 +216,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'commercial_name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus Item', type: 'text', nullable: false, showInList: true },
       { name: 'protheus_item_code', label: 'Código Protheus Gatilho', type: 'text', nullable: false, showInList: true },
       { name: 'quantity', label: 'Quantidade', type: 'number', nullable: false, defaultValue: 1 },
@@ -235,7 +235,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'commercial_name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'type', label: 'Tipo da Peça', type: 'select', nullable: false, options: ['start', 'middle', 'end', 'unique'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
