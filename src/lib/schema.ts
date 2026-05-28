@@ -33,7 +33,7 @@ export interface TableSchema {
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
-  catalogo: 'Catálogo',
+  catalogo: 'Portifólio',
   regras: 'Regras',
   transacional: 'Transacional',
   plataforma: 'Plataforma',
@@ -48,7 +48,7 @@ export const DOMAIN_COLORS: Record<string, string> = {
 
 export const tables: Record<string, TableSchema> = {
 
-  // ── CATÁLOGO ──────────────────────────────────────────────────────────────
+  // ── PORTIFÓLIO ────────────────────────────────────────────────────────────
 
   equipments: {
     label: 'Grupo de Equipamentos',
@@ -75,8 +75,24 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
+  accessory_groups: {
+    label: 'Grupo de Acessórios',
+    description: 'Grupos para organização e aplicação de regras de acessórios',
+    domain: 'catalogo',
+    hasTimestamps: true,
+    orderBy: 'legacy_id',
+    fields: [
+      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
+      { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
+      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
+      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
+      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
+      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
+    ],
+  },
+
   standard_equipment_items: {
-    label: 'Itens de Série',
+    label: 'Cadastro de Equipamentos',
     description: 'Itens que compõem cada equipamento — Bill of Materials',
     domain: 'catalogo',
     hasTimestamps: true,
@@ -129,40 +145,8 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
-  accessory_groups: {
-    label: 'Grupos de Acessórios',
-    description: 'Grupos para organização e aplicação de regras de acessórios',
-    domain: 'catalogo',
-    hasTimestamps: true,
-    orderBy: 'legacy_id',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
-      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
-      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
-    ],
-  },
-
-  roller_tables: {
-    label: 'Mesas de Roletes',
-    description: 'Peças para composição de mesas de roletes',
-    domain: 'catalogo',
-    hasTimestamps: true,
-    orderBy: 'legacy_equipment_id',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
-      { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
-      { name: 'type', label: 'Tipo da Peça', type: 'select', nullable: false, options: ['start', 'middle', 'end', 'unique'], showInList: true },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
-      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
-    ],
-  },
-
   general_alerts: {
-    label: 'Alertas Gerais',
+    label: 'Cadastro de Alertas',
     description: 'Alertas associados a equipamentos ou acessórios',
     domain: 'catalogo',
     hasTimestamps: true,
@@ -179,7 +163,7 @@ export const tables: Record<string, TableSchema> = {
   // ── REGRAS ────────────────────────────────────────────────────────────────
 
   relationship_equip_accessory: {
-    label: 'Equip. × Acessório',
+    label: 'Equipamento x Acessórios',
     description: 'Relacionamentos e compatibilidades entre equipamentos e acessórios',
     domain: 'regras',
     hasTimestamps: true,
@@ -236,7 +220,23 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
-  // ── TRANSACIONAL ──────────────────────────────────────────────────────────
+  roller_tables: {
+    label: 'Tipo Mesas de Roletes',
+    description: 'Peças para composição de mesas de roletes',
+    domain: 'regras',
+    hasTimestamps: true,
+    orderBy: 'legacy_equipment_id',
+    fields: [
+      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
+      { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
+      { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
+      { name: 'type', label: 'Tipo da Peça', type: 'select', nullable: false, options: ['start', 'middle', 'end', 'unique'], showInList: true },
+      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
+      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
+    ],
+  },
+
+  // ── TRANSACIONAL (oculto da UI) ───────────────────────────────────────────
 
   quotes: {
     label: 'Propostas',
