@@ -317,7 +317,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
-      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl my-8 animate-fade-in">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-6xl my-8 animate-fade-in">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
@@ -397,19 +397,11 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
         {/* Batch queue */}
         {isBatch && queue.length > 0 && (
           <div className="border-t border-outline-variant px-6 py-4 space-y-3">
+            {/* Queue header */}
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={allQueueSelected}
-                  onChange={toggleAllQueueSelect}
-                  className="accent-yellow-400 cursor-pointer"
-                  title="Selecionar todos"
-                />
-                <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
-                  Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
-                </span>
-              </div>
+              <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
+                Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
+              </span>
               <div className="flex items-center gap-2">
                 {queueSelected.size > 0 && (
                   <button
@@ -440,21 +432,55 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
               </div>
             )}
 
-            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
-              {queue.map((item, idx) => (
-                <QueueRow
-                  key={item.qid}
-                  idx={idx}
-                  item={item}
-                  editableFields={editableFields}
-                  fetchedOptions={fetchedOptions}
-                  isEditing={editingQid === item.qid}
-                  isSelected={queueSelected.has(item.qid)}
-                  onToggleSelect={() => toggleQueueSelect(item.qid)}
-                  onEdit={() => handleEditQueueItem(item.qid)}
-                  onDelete={() => handleDeleteQueueItem(item.qid)}
-                />
-              ))}
+            {/* Queue table */}
+            <div className="border border-outline-variant rounded overflow-hidden">
+              <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-surface-container-highest">
+                    <tr className="border-b border-outline-variant">
+                      <th className="px-3 py-2.5 w-8 sticky top-0 bg-surface-container-highest">
+                        <input
+                          type="checkbox"
+                          checked={allQueueSelected}
+                          onChange={toggleAllQueueSelect}
+                          className="accent-yellow-400 cursor-pointer"
+                          title="Selecionar todos"
+                        />
+                      </th>
+                      <th className="px-2 py-2.5 w-7 sticky top-0 bg-surface-container-highest text-[10px] font-mono text-outline uppercase tracking-[0.1em]">
+                        #
+                      </th>
+                      {editableFields.map(f => (
+                        <th
+                          key={f.name}
+                          className="px-3 py-2.5 text-left text-[10px] font-mono text-outline uppercase tracking-[0.1em] whitespace-nowrap sticky top-0 bg-surface-container-highest"
+                        >
+                          {f.label}
+                        </th>
+                      ))}
+                      <th className="px-3 py-2.5 text-right text-[10px] font-mono text-outline uppercase tracking-[0.1em] whitespace-nowrap sticky top-0 bg-surface-container-highest">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/30">
+                    {queue.map((item, idx) => (
+                      <QueueRow
+                        key={item.qid}
+                        idx={idx}
+                        item={item}
+                        editableFields={editableFields}
+                        fetchedOptions={fetchedOptions}
+                        isEditing={editingQid === item.qid}
+                        isSelected={queueSelected.has(item.qid)}
+                        onToggleSelect={() => toggleQueueSelect(item.qid)}
+                        onEdit={() => handleEditQueueItem(item.qid)}
+                        onDelete={() => handleDeleteQueueItem(item.qid)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -630,60 +656,57 @@ function QueueRow({
   onEdit: () => void
   onDelete: () => void
 }) {
+  const rowClass = isEditing
+    ? 'bg-primary/10'
+    : isSelected
+      ? 'bg-surface-container-highest'
+      : 'hover:bg-surface-container-high'
+
   return (
-    <div className={`flex items-start gap-0 rounded border text-sm transition-colors ${
-      isEditing
-        ? 'bg-primary/10 border-primary/40'
-        : isSelected
-          ? 'bg-surface-container-highest border-outline-variant'
-          : 'bg-surface-container-low border-outline-variant/40 hover:border-outline-variant'
-    }`}>
-      {/* Checkbox */}
-      <div className="flex items-center justify-center px-2.5 pt-2.5 border-r border-outline-variant/40 shrink-0 self-stretch">
+    <tr className={`transition-colors ${rowClass}`}>
+      <td className="px-3 py-2 text-center">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
           className="accent-yellow-400 cursor-pointer"
         />
-      </div>
-      {/* Index */}
-      <span className="text-outline font-mono text-xs px-2.5 pt-2.5 border-r border-outline-variant/40 shrink-0 w-7 text-center">
-        {idx + 1}
-      </span>
-      {/* Fields */}
-      <div className="flex-1 flex flex-wrap gap-x-5 gap-y-0.5 px-3 py-2 min-w-0">
-        {editableFields.map(f => {
-          const val = item.data[f.name]
-          if (!val && val !== '0') return null
-          let display: string = val
+      </td>
+      <td className="px-2 py-2 text-center text-outline font-mono">{idx + 1}</td>
+      {editableFields.map(f => {
+        const val = item.data[f.name]
+        let display = ''
+        if (val !== undefined && val !== '') {
+          display = val
           const opts = fetchedOptions[f.name]
           if (opts) display = opts.find(o => o.value === val)?.label ?? val
-          return (
-            <span key={f.name} className="text-xs text-on-surface-variant whitespace-nowrap">
-              <span className="text-outline">{f.label}: </span>
-              {display.length > 40 ? display.slice(0, 40) + '…' : display}
-            </span>
-          )
-        })}
-      </div>
-      <div className="flex items-center border-l border-outline-variant/40 shrink-0 self-stretch">
+        }
+        return (
+          <td key={f.name} className="px-3 py-2 text-on-surface-variant whitespace-nowrap">
+            {display
+              ? <span className="block max-w-[200px] truncate" title={display}>{display}</span>
+              : <span className="text-outline/40">—</span>
+            }
+          </td>
+        )
+      })}
+      <td className="px-3 py-2 text-right whitespace-nowrap">
         <button
           type="button"
           onClick={onEdit}
-          className="px-3 py-2.5 text-xs text-outline hover:text-primary transition-colors border-r border-outline-variant/40 h-full"
+          className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
         >
           Editar
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="px-3 py-2.5 text-xs text-outline hover:text-error transition-colors h-full"
+          className="text-outline hover:text-error text-xs font-medium transition-colors"
         >
           ✕
         </button>
-      </div>
-    </div>
+      </td>
+    </tr>
   )
 }
 
