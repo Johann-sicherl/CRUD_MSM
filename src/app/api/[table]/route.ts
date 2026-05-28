@@ -57,6 +57,54 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
+  // Auto-increment: compute MAX(field)+1 for fields marked autoIncrement
+  const autoIncrFields = schema.fields.filter(f => f.autoIncrement)
+  for (const field of autoIncrFields) {
+    const { data: maxRow } = await supabaseAdmin
+      .from(table)
+      .select(field.name)
+      .order(field.name, { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const maxVal = maxRow ? (((maxRow as any)[field.name] as number) ?? 0) : 0
+    insertBody[field.name] = maxVal + 1
+  }
+
+  // Double insert for non_combinable_comps: resolve groups from accessories, insert forward + reversed
+  if (schema.doubleInsert) {
+    const code1 = insertBody.protheus_code as string
+    const code2 = insertBody.remove_list_code as string
+
+    const [res1, res2] = await Promise.all([
+      supabaseAdmin.from('accessories').select('legacy_group_id').eq('protheus_code', code1).maybeSingle(),
+      supabaseAdmin.from('accessories').select('legacy_group_id').eq('protheus_code', code2).maybeSingle(),
+    ])
+
+    if (!res1.data) {
+      return NextResponse.json({ error: `Acessório com código "${code1}" não encontrado em Cadastro de Componentes` }, { status: 400 })
+    }
+    if (!res2.data) {
+      return NextResponse.json({ error: `Acessório com código "${code2}" não encontrado em Cadastro de Componentes` }, { status: 400 })
+    }
+
+    const group1 = res1.data.legacy_group_id
+    const group2 = res2.data.legacy_group_id
+
+    const row1 = { ...insertBody, legacy_group_id: group1, legacy_second_group_id: group2 }
+    const row2 = {
+      ...insertBody,
+      legacy_group_id: group2,
+      protheus_code: code2,
+      legacy_second_group_id: group1,
+      remove_list_code: code1,
+    }
+
+    const { data, error } = await supabaseAdmin.from(table).insert([row1, row2]).select()
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json((data as Record<string, unknown>[])[0], { status: 201 })
+  }
+
   const { data, error } = await supabaseAdmin.from(table).insert(insertBody).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json(data, { status: 201 })

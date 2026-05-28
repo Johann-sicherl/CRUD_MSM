@@ -13,7 +13,7 @@ interface Props {
 
 export default function RecordModal({ schema, tableName, record, onClose, onSaved }: Props) {
   const isEdit = !!record
-  const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly)
+  const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
 
   const buildInitial = () => {
     const init: Record<string, string> = {}
@@ -41,11 +41,28 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   const [form, setForm] = useState<Record<string, string>>(buildInitial)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
 
   useEffect(() => {
     setForm(buildInitial())
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record])
+
+  useEffect(() => {
+    const fieldsWithFetch = schema.fields.filter(f => f.fetchOptions)
+    fieldsWithFetch.forEach(async (field) => {
+      const fc = field.fetchOptions!
+      const res = await fetch(`/api/${fc.table}?limit=25000`)
+      if (!res.ok) return
+      const json = await res.json()
+      const opts = (json.data || []).map((row: Record<string, unknown>) => ({
+        value: String(row[fc.keyField]),
+        label: String(row[fc.displayField]),
+      }))
+      setFetchedOptions(prev => ({ ...prev, [field.name]: opts }))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName])
 
   const handleChange = (name: string, value: string) => {
     setForm(prev => ({ ...prev, [name]: value }))
@@ -122,6 +139,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                 field={field}
                 value={form[field.name] ?? ''}
                 onChange={(v) => handleChange(field.name, v)}
+                fetchedOptions={fetchedOptions[field.name]}
               />
             ))}
           </div>
@@ -157,8 +175,18 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   )
 }
 
-function FieldInput({ field, value, onChange }: { field: Field; value: string; onChange: (v: string) => void }) {
-  const isWide = ['textarea', 'jsonb'].includes(field.type)
+function FieldInput({
+  field,
+  value,
+  onChange,
+  fetchedOptions,
+}: {
+  field: Field
+  value: string
+  onChange: (v: string) => void
+  fetchedOptions?: Array<{ value: string; label: string }>
+}) {
+  const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
   const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   return (
@@ -168,7 +196,14 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
         {!field.nullable && <span className="text-primary ml-1">*</span>}
       </label>
 
-      {field.type === 'select' && field.options ? (
+      {fetchedOptions ? (
+        <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
+          <option value="">— Selecione —</option>
+          {fetchedOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      ) : field.type === 'select' && field.options ? (
         <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
           {field.nullable && <option value="">— Selecione —</option>}
           {field.options.map(o => <option key={o} value={o}>{o}</option>)}

@@ -27,7 +27,11 @@ export interface Field {
   options?: string[]
   defaultValue?: string | number | boolean | null
   placeholder?: string
-  lookupFrom?: LookupConfig
+  lookupFrom?: LookupConfig   // list view: show name instead of id
+  fetchOptions?: LookupConfig // form view: render dynamic dropdown
+  autoIncrement?: boolean     // server auto-computes max+1 on INSERT
+  hideInForm?: boolean        // hide from form (resolved server-side)
+  formFullWidth?: boolean     // span full width in form grid
 }
 
 export interface TableSchema {
@@ -37,6 +41,7 @@ export interface TableSchema {
   hasTimestamps: boolean
   orderBy: string
   fields: Field[]
+  doubleInsert?: boolean      // insert forward row + mirrored reverse row
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
@@ -65,7 +70,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
+      { name: 'legacy_id', label: 'ID Legado', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true },
       { name: 'name', label: 'Nome / Modelo', type: 'text', nullable: false, showInList: true },
       { name: 'commercial_name', label: 'Nome Comercial', type: 'text', nullable: false, showInList: true },
       { name: 'ipi_tax_rate', label: 'Taxa IPI (%)', type: 'decimal', nullable: false, defaultValue: 0, placeholder: '0.00' },
@@ -90,7 +95,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
+      { name: 'legacy_id', label: 'ID Legado', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -106,7 +111,9 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
+        lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
+        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'processor', label: 'Processador', type: 'text', nullable: true },
       { name: 'memory', label: 'Memória RAM', type: 'text', nullable: true },
@@ -119,7 +126,8 @@ export const tables: Record<string, TableSchema> = {
       { name: 'motopolia_type', label: 'Tipo Motopolia', type: 'text', nullable: true },
       { name: 'language', label: 'Idioma', type: 'text', nullable: true },
       { name: 'color', label: 'Cor', type: 'text', nullable: true, showInList: true },
-      { name: 'legacy_general_alert_id', label: 'ID Alerta Legado', type: 'number', nullable: true, defaultValue: 0 },
+      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
+        fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive', 'deactive'], showInList: true },
       { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -137,7 +145,9 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: true, lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: true,
+        lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
+        fetchOptions: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'color', label: 'Cor', type: 'text', nullable: true },
       { name: 'predominant_material', label: 'Material Predominante', type: 'text', nullable: true },
       { name: 'dimensional_mm', label: 'Dimensão (mm)', type: 'number', nullable: true },
@@ -145,7 +155,8 @@ export const tables: Record<string, TableSchema> = {
       { name: 'quantity_monitor_totem', label: 'Qtd. Monitor Totem', type: 'number', nullable: true },
       { name: 'cost_std', label: 'Custo Padrão (R$)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'legacy_general_alert_id', label: 'ID Alerta Legado', type: 'number', nullable: true, defaultValue: 0 },
+      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
+        fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -160,7 +171,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
+      { name: 'legacy_id', label: 'ID Legado', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true },
       { name: 'description', label: 'Descrição do Alerta', type: 'textarea', nullable: false, showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -177,10 +188,14 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
+        lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
+        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0, lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
+      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
+        lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },
+        fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'operation_time', label: 'Tempo de Operação (min)', type: 'number', nullable: true },
       { name: 'maximum_quantity', label: 'Qtd. Máxima', type: 'number', nullable: true },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
@@ -195,14 +210,19 @@ export const tables: Record<string, TableSchema> = {
     domain: 'regras',
     hasTimestamps: true,
     orderBy: 'legacy_equipment_id',
+    doubleInsert: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
-      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
-      { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
-      { name: 'legacy_second_group_id', label: '2º Grupo', type: 'number', nullable: true, lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
-      { name: 'remove_list_code', label: 'Código a Remover', type: 'text', nullable: false, showInList: true },
-      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'] },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, formFullWidth: true,
+        lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
+        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: false, showInList: true, hideInForm: true,
+        lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'protheus_code', label: '1° Código', type: 'text', nullable: false, showInList: true },
+      { name: 'legacy_second_group_id', label: '2° Grupo', type: 'number', nullable: true, showInList: true, hideInForm: true,
+        lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'remove_list_code', label: '2° Código', type: 'text', nullable: false, showInList: true },
+      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], formFullWidth: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -216,7 +236,9 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
+        lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
+        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus Item', type: 'text', nullable: false, showInList: true },
       { name: 'protheus_item_code', label: 'Código Protheus Gatilho', type: 'text', nullable: false, showInList: true },
       { name: 'quantity', label: 'Quantidade', type: 'number', nullable: false, defaultValue: 1 },
@@ -235,7 +257,9 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
+        lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
+        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
       { name: 'type', label: 'Tipo da Peça', type: 'select', nullable: false, options: ['start', 'middle', 'end', 'unique'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -252,12 +276,12 @@ export const tables: Record<string, TableSchema> = {
     hasTimestamps: true,
     orderBy: 'created_at DESC',
     fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true, showInList: true },
-      { name: 'external_id', label: 'ID Externo (Zoho CRM)', type: 'text', nullable: true, showInList: true },
+      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
+      { name: 'external_id', label: 'ID Externo (Zoho CRM)', type: 'text', nullable: true },
       { name: 'deal_external_id', label: 'ID Deal (Zoho)', type: 'text', nullable: true },
-      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'draft', options: ['draft', 'sent', 'approved', 'rejected'], showInList: true },
-      { name: 'raw_quote', label: 'Snapshot da Proposta (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true, showInList: true },
+      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'draft', options: ['draft', 'sent', 'approved', 'rejected'] },
+      { name: 'raw_quote', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
+      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
   },
@@ -270,13 +294,13 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'created_at DESC',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'quote_id', label: 'ID Proposta (FK)', type: 'uuid', nullable: false, showInList: true },
-      { name: 'equipment_id', label: 'ID Equipamento (FK)', type: 'uuid', nullable: false, showInList: true },
-      { name: 'raw_standard_equip_item', label: 'Snapshot Item Padrão (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'price', label: 'Preço Informado (R$)', type: 'decimal', nullable: true },
-      { name: 'suggested_price', label: 'Preço Sugerido (JSON)', type: 'jsonb', nullable: true },
-      { name: 'selling_price', label: 'Preço de Venda (JSON)', type: 'jsonb', nullable: true },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true, showInList: true },
+      { name: 'quote_id', label: 'ID Proposta', type: 'uuid', nullable: false },
+      { name: 'equipment_id', label: 'ID Equipamento', type: 'uuid', nullable: false },
+      { name: 'raw_standard_equip_item', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
+      { name: 'price', label: 'Preço (R$)', type: 'decimal', nullable: true },
+      { name: 'suggested_price', label: 'Preço Sugerido JSON', type: 'jsonb', nullable: true },
+      { name: 'selling_price', label: 'Preço de Venda JSON', type: 'jsonb', nullable: true },
+      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
   },
@@ -289,20 +313,16 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'machine_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'machine_id', label: 'ID Máquina (FK)', type: 'uuid', nullable: false, showInList: true },
-      { name: 'accessory_id', label: 'ID Acessório (FK)', type: 'uuid', nullable: false, showInList: true },
-      { name: 'raw_accessory', label: 'Snapshot Acessório (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
+      { name: 'machine_id', label: 'ID Máquina', type: 'uuid', nullable: false },
+      { name: 'accessory_id', label: 'ID Acessório', type: 'uuid', nullable: false },
+      { name: 'raw_accessory', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
       { name: 'quantity', label: 'Quantidade', type: 'decimal', nullable: false, defaultValue: 1 },
       { name: 'position', label: 'Posição', type: 'select', nullable: true, options: ['input', 'output', 'side', 'top'] },
-      { name: 'item_id', label: 'Item ID (config)', type: 'text', nullable: true },
-      { name: 'parent_item_id', label: 'ID Item Pai', type: 'text', nullable: true },
-      { name: 'customized', label: 'Customizado?', type: 'boolean', nullable: false, defaultValue: false, showInList: true },
-      { name: 'exported', label: 'Exportado?', type: 'boolean', nullable: false, defaultValue: false, showInList: true },
-      { name: 'origin', label: 'Origem', type: 'select', nullable: false, options: ['user', 'combination', 'rule'], showInList: true },
+      { name: 'customized', label: 'Customizado?', type: 'boolean', nullable: false, defaultValue: false },
+      { name: 'exported', label: 'Exportado?', type: 'boolean', nullable: false, defaultValue: false },
+      { name: 'origin', label: 'Origem', type: 'select', nullable: false, options: ['user', 'combination', 'rule'] },
       { name: 'observations', label: 'Observações', type: 'textarea', nullable: true },
-      { name: 'price', label: 'Preço Informado (R$)', type: 'decimal', nullable: true },
-      { name: 'suggested_price', label: 'Preço Sugerido (JSON)', type: 'jsonb', nullable: true },
-      { name: 'selling_price', label: 'Preço de Venda (JSON)', type: 'jsonb', nullable: true },
+      { name: 'price', label: 'Preço (R$)', type: 'decimal', nullable: true },
     ],
   },
 
@@ -314,13 +334,13 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'machine_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'machine_id', label: 'ID Máquina (FK)', type: 'uuid', nullable: false, showInList: true },
-      { name: 'dependant_item_id', label: 'ID Item Dep. (FK)', type: 'uuid', nullable: false, showInList: true },
-      { name: 'raw_dependant_item', label: 'Snapshot Item Dep. (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'quantity', label: 'Quantidade Calculada', type: 'number', nullable: false, defaultValue: 1, showInList: true },
-      { name: 'price', label: 'Preço Base (R$)', type: 'decimal', nullable: true },
-      { name: 'suggested_price', label: 'Preço Sugerido (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'selling_price', label: 'Preço de Venda (JSON)', type: 'jsonb', nullable: false, defaultValue: '{}' },
+      { name: 'machine_id', label: 'ID Máquina', type: 'uuid', nullable: false },
+      { name: 'dependant_item_id', label: 'ID Item Dep.', type: 'uuid', nullable: false },
+      { name: 'raw_dependant_item', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
+      { name: 'quantity', label: 'Quantidade', type: 'number', nullable: false, defaultValue: 1 },
+      { name: 'price', label: 'Preço (R$)', type: 'decimal', nullable: true },
+      { name: 'suggested_price', label: 'Preço Sugerido JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
+      { name: 'selling_price', label: 'Preço de Venda JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
     ],
   },
 
