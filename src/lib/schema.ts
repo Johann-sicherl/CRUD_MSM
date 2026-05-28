@@ -224,7 +224,7 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },
         fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'operation_time', label: 'Tempo de Operação (min)', type: 'number', nullable: true },
-      { name: 'maximum_quantity', label: 'Qtd. Máxima', type: 'number', nullable: true },
+      { name: 'maximum_quantity', label: 'Qtd. Máxima', type: 'number', nullable: false, defaultValue: 1 },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
