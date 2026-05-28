@@ -25,6 +25,7 @@ interface CascadeState {
   groups: Array<{ value: string; label: string }>
   items: CascadeItem[]
   loading: boolean
+  selected: Set<string>
 }
 
 interface QueueItem {
@@ -34,6 +35,7 @@ interface QueueItem {
 
 const EMPTY_CASCADE: CascadeState = {
   open: false, fieldName: '', groupId: '', search: '', groups: [], items: [], loading: false,
+  selected: new Set(),
 }
 
 export default function RecordModal({ schema, tableName, record, onClose, onSaved }: Props) {
@@ -127,7 +129,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
 
   const openCascade = async (field: Field) => {
     const cfg = field.cascadeLookup!
-    setCascade({ open: true, fieldName: field.name, groupId: '', search: '', groups: [], items: [], loading: true })
+    setCascade({ open: true, fieldName: field.name, groupId: '', search: '', groups: [], items: [], loading: true, selected: new Set() })
     const [groupRes, itemRes] = await Promise.all([
       fetch(`/api/${cfg.groupTable}?limit=25000`),
       fetch(`/api/${cfg.itemTable}?limit=25000`),
@@ -159,6 +161,39 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     }
     return !!cascade.groupId
   })
+
+  const allFilteredSelected =
+    filteredCascadeItems.length > 0 &&
+    filteredCascadeItems.every(i => cascade.selected.has(i.value))
+
+  const toggleCascadeItem = (value: string) => {
+    setCascade(prev => {
+      const s = new Set(prev.selected)
+      s.has(value) ? s.delete(value) : s.add(value)
+      return { ...prev, selected: s }
+    })
+  }
+
+  const toggleAllFilteredCascade = () => {
+    setCascade(prev => {
+      const s = new Set(prev.selected)
+      if (allFilteredSelected) {
+        filteredCascadeItems.forEach(i => s.delete(i.value))
+      } else {
+        filteredCascadeItems.forEach(i => s.add(i.value))
+      }
+      return { ...prev, selected: s }
+    })
+  }
+
+  const addCascadeSelectionsToQueue = () => {
+    const newItems: QueueItem[] = Array.from(cascade.selected).map(val => ({
+      qid: crypto.randomUUID(),
+      data: { ...form, [cascade.fieldName]: val },
+    }))
+    setQueue(prev => [...prev, ...newItems])
+    setCascade(EMPTY_CASCADE)
+  }
 
   const parseFormToBody = (formData: Record<string, string>): Record<string, unknown> => {
     const body: Record<string, unknown> = {}
@@ -436,12 +471,32 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                 </div>
 
                 <div className="flex flex-col min-h-0 flex-1">
-                  <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1 shrink-0">
-                    Acessórios
-                    {(cascade.groupId || cascade.search) && (
-                      <span className="ml-1 text-primary">{filteredCascadeItems.length} resultado{filteredCascadeItems.length !== 1 ? 's' : ''}</span>
+                  <div className="flex items-center justify-between mb-1 shrink-0">
+                    <label className="text-[10px] font-mono text-outline uppercase tracking-wider">
+                      Acessórios
+                      {(cascade.groupId || cascade.search) && (
+                        <span className="ml-1 text-primary">{filteredCascadeItems.length} resultado{filteredCascadeItems.length !== 1 ? 's' : ''}</span>
+                      )}
+                      {isBatch && cascade.selected.size > 0 && (
+                        <span className="ml-2 text-primary font-semibold">{cascade.selected.size} selecionado{cascade.selected.size !== 1 ? 's' : ''}</span>
+                      )}
+                    </label>
+                    {isBatch && filteredCascadeItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={toggleAllFilteredCascade}
+                        className="flex items-center gap-1.5 text-xs text-outline hover:text-on-surface transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          readOnly
+                          className="pointer-events-none accent-yellow-400"
+                        />
+                        Selecionar todos
+                      </button>
                     )}
-                  </label>
+                  </div>
                   <div className="border border-outline-variant rounded overflow-y-auto flex-1">
                     {!cascade.groupId && !cascade.search ? (
                       <div className="px-3 py-10 text-center text-outline text-xs font-mono">
@@ -453,19 +508,52 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                       </div>
                     ) : (
                       filteredCascadeItems.map(item => (
-                        <button
-                          key={item.value}
-                          type="button"
-                          onClick={() => selectCascadeItem(item.value)}
-                          className="w-full flex items-center justify-between gap-4 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
-                        >
-                          <span className="truncate text-left">{item.label}</span>
-                          <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
-                        </button>
+                        isBatch ? (
+                          <div
+                            key={item.value}
+                            onClick={() => toggleCascadeItem(item.value)}
+                            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors border-b border-outline-variant/20 last:border-0 ${
+                              cascade.selected.has(item.value)
+                                ? 'bg-primary/10 text-on-surface'
+                                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={cascade.selected.has(item.value)}
+                              readOnly
+                              className="pointer-events-none shrink-0 accent-yellow-400"
+                            />
+                            <span className="flex-1 truncate text-left">{item.label}</span>
+                            <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
+                          </div>
+                        ) : (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => selectCascadeItem(item.value)}
+                            className="w-full flex items-center justify-between gap-4 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
+                          >
+                            <span className="truncate text-left">{item.label}</span>
+                            <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
+                          </button>
+                        )
                       ))
                     )}
                   </div>
                 </div>
+
+                {isBatch && cascade.selected.size > 0 && (
+                  <div className="shrink-0 pt-2 border-t border-outline-variant">
+                    <button
+                      type="button"
+                      onClick={addCascadeSelectionsToQueue}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow"
+                    >
+                      + Adicionar {cascade.selected.size} item{cascade.selected.size !== 1 ? 's' : ''} à Lista
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
