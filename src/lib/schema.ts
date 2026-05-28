@@ -362,6 +362,7 @@ export function getListFields(tableName: string): Field[] {
   if (!schema) return []
   return schema.fields.filter(f =>
     f.type !== 'password' &&
+    f.type !== 'uuid' &&
     f.name !== 'created_at' &&
     f.name !== 'updated_at'
   )
