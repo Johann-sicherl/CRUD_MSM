@@ -16,7 +16,7 @@ interface PageData {
   pages: number
 }
 
-const PAGE_SIZE = 5000
+const PAGE_SIZE = 25000
 
 export default function DataTable({ tableName, schema }: Props) {
   const [pageData, setPageData] = useState<PageData | null>(null)
