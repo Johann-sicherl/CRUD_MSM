@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
 
@@ -24,10 +25,15 @@ export default function Sidebar() {
   return (
     <aside className="w-64 min-h-screen bg-surface-container-low border-r border-outline-variant flex flex-col shrink-0 relative z-20">
       {/* Header */}
-      <div className="px-5 py-5 border-b border-outline-variant">
-        <div className="text-[10px] font-semibold text-outline uppercase tracking-[0.2em] mb-1 font-mono">
-          VMI Security
-        </div>
+      <div className="px-5 py-4 border-b border-outline-variant">
+        <Image
+          src="/vmi-logo.png"
+          alt="VMI Security"
+          width={160}
+          height={60}
+          className="mb-3"
+          priority
+        />
         <div className="text-base font-bold text-primary neon-text tracking-wider font-mono">
           COMMAND CENTER
         </div>
