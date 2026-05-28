@@ -14,6 +14,12 @@ export interface LookupConfig {
   table: string
   keyField: string
   displayField: string
+  filterVia?: {
+    table: string      // table whose rows determine the allowed set
+    joinField: string  // field in that table referencing keyField
+    filterField: string
+    filterValue: string
+  }
 }
 
 export interface Field {
@@ -190,7 +196,8 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
-        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
+        fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name',
+          filterVia: { table: 'standard_equipment_items', joinField: 'legacy_equipment_id', filterField: 'status', filterValue: 'active' } } },
       { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,

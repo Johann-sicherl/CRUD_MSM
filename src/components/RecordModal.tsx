@@ -52,6 +52,30 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     const fieldsWithFetch = schema.fields.filter(f => f.fetchOptions)
     fieldsWithFetch.forEach(async (field) => {
       const fc = field.fetchOptions!
+
+      if (fc.filterVia) {
+        const fv = fc.filterVia
+        const [filterRes, mainRes] = await Promise.all([
+          fetch(`/api/${fv.table}?limit=25000`),
+          fetch(`/api/${fc.table}?limit=25000`),
+        ])
+        if (!filterRes.ok || !mainRes.ok) return
+        const [filterJson, mainJson] = await Promise.all([filterRes.json(), mainRes.json()])
+        const allowedIds = new Set(
+          (filterJson.data || [])
+            .filter((r: Record<string, unknown>) => String(r[fv.filterField]) === fv.filterValue)
+            .map((r: Record<string, unknown>) => String(r[fv.joinField]))
+        )
+        const opts = (mainJson.data || [])
+          .filter((r: Record<string, unknown>) => allowedIds.has(String(r[fc.keyField])))
+          .map((r: Record<string, unknown>) => ({
+            value: String(r[fc.keyField]),
+            label: String(r[fc.displayField]),
+          }))
+        setFetchedOptions(prev => ({ ...prev, [field.name]: opts }))
+        return
+      }
+
       const res = await fetch(`/api/${fc.table}?limit=25000`)
       if (!res.ok) return
       const json = await res.json()
