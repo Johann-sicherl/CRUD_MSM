@@ -27,12 +27,18 @@ interface CascadeState {
   loading: boolean
 }
 
+interface QueueItem {
+  qid: string
+  data: Record<string, string>
+}
+
 const EMPTY_CASCADE: CascadeState = {
   open: false, fieldName: '', groupId: '', search: '', groups: [], items: [], loading: false,
 }
 
 export default function RecordModal({ schema, tableName, record, onClose, onSaved }: Props) {
   const isEdit = !!record
+  const isBatch = !!schema.batchInsert && !isEdit
   const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
 
   const buildInitial = () => {
@@ -64,9 +70,15 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
   const [cascade, setCascade] = useState<CascadeState>(EMPTY_CASCADE)
 
+  // Batch queue state
+  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [editingQid, setEditingQid] = useState<string | null>(null)
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchError, setBatchError] = useState('')
+
   useEffect(() => {
     setForm(buildInitial())
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record])
 
   useEffect(() => {
@@ -106,7 +118,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
       }))
       setFetchedOptions(prev => ({ ...prev, [field.name]: opts }))
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableName])
 
   const handleChange = (name: string, value: string) => {
@@ -148,14 +160,11 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     return !!cascade.groupId
   })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
+  const parseFormToBody = (formData: Record<string, string>): Record<string, unknown> => {
     const body: Record<string, unknown> = {}
     for (const f of editableFields) {
-      const val = form[f.name]
+      const val = formData[f.name] ?? ''
+      if (f.type === 'password' && val === '') continue
       if (f.type === 'boolean') {
         body[f.name] = val === 'true'
       } else if (f.type === 'jsonb') {
@@ -164,13 +173,32 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
         body[f.name] = val === '' ? null : parseInt(val)
       } else if (f.type === 'decimal') {
         body[f.name] = val === '' ? null : parseFloat(val)
-      } else if (f.type === 'password' && val === '') {
-        continue
       } else {
         body[f.name] = val === '' ? null : val
       }
     }
+    return body
+  }
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (isBatch) {
+      if (editingQid) {
+        setQueue(prev => prev.map(item =>
+          item.qid === editingQid ? { ...item, data: { ...form } } : item
+        ))
+        setEditingQid(null)
+      } else {
+        setQueue(prev => [...prev, { qid: crypto.randomUUID(), data: { ...form } }])
+      }
+      setForm(buildInitial())
+      return
+    }
+
+    setLoading(true)
+    const body = parseFormToBody(form)
     const url = isEdit ? `/api/${tableName}/${record!.id}` : `/api/${tableName}`
     const method = isEdit ? 'PUT' : 'POST'
     const res = await fetch(url, {
@@ -187,26 +215,72 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     onSaved()
   }
 
+  const handleCreateAll = async () => {
+    setBatchLoading(true)
+    setBatchError('')
+    const items = [...queue]
+    for (let i = 0; i < items.length; i++) {
+      const body = parseFormToBody(items[i].data)
+      const res = await fetch(`/api/${tableName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        setQueue(items.slice(i))
+        setBatchError(`Erro no item ${i + 1}: ${err.error || 'Falha ao salvar'}`)
+        setBatchLoading(false)
+        return
+      }
+    }
+    setBatchLoading(false)
+    onSaved()
+  }
+
+  const handleEditQueueItem = (qid: string) => {
+    const item = queue.find(i => i.qid === qid)
+    if (!item) return
+    setForm({ ...item.data })
+    setEditingQid(qid)
+    setError('')
+  }
+
+  const handleDeleteQueueItem = (qid: string) => {
+    setQueue(prev => prev.filter(i => i.qid !== qid))
+    if (editingQid === qid) {
+      setEditingQid(null)
+      setForm(buildInitial())
+    }
+  }
+
   const overlayInputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
       <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl my-8 animate-fade-in">
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
           <h2 className="text-base font-semibold text-on-surface">
             {isEdit ? 'Editar' : 'Novo'} — <span className="text-primary">{schema.label}</span>
           </h2>
-          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none transition-colors">
-            ✕
-          </button>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none transition-colors">✕</button>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           {isEdit && (
             <div className="flex items-center gap-2 text-xs text-outline bg-surface-container-low rounded px-3 py-2 border border-outline-variant font-mono">
               <span>ID:</span>
               <span className="text-on-surface-variant">{String(record!.id)}</span>
+            </div>
+          )}
+
+          {/* Editing queue item banner */}
+          {isBatch && editingQid && (
+            <div className="flex items-center gap-2 text-xs bg-primary/10 border border-primary/30 rounded px-3 py-2 text-primary font-mono">
+              ✎ Editando item da lista — clique em &quot;Atualizar na Lista&quot; para salvar a alteração
             </div>
           )}
 
@@ -237,18 +311,72 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
             >
               Cancelar
             </button>
+            {isBatch && editingQid && (
+              <button
+                type="button"
+                onClick={() => { setEditingQid(null); setForm(buildInitial()) }}
+                className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+              >
+                Descartar Edição
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading}
               className="flex items-center gap-2 px-5 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
             >
-              {loading
+              {!isBatch && loading
                 ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
-                : isEdit ? 'Salvar Alterações' : 'Criar Registro'
+                : isBatch
+                  ? (editingQid ? '✓ Atualizar na Lista' : '+ Adicionar à Lista')
+                  : (isEdit ? 'Salvar Alterações' : 'Criar Registro')
               }
             </button>
           </div>
         </form>
+
+        {/* Batch queue */}
+        {isBatch && queue.length > 0 && (
+          <div className="border-t border-outline-variant px-6 py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
+                Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                type="button"
+                onClick={handleCreateAll}
+                disabled={batchLoading}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
+              >
+                {batchLoading
+                  ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
+                  : `Criar Todos (${queue.length})`
+                }
+              </button>
+            </div>
+
+            {batchError && (
+              <div className="flex items-center gap-2 bg-error-container/30 text-error text-sm px-4 py-3 rounded border border-error/20">
+                ⚠ {batchError}
+              </div>
+            )}
+
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+              {queue.map((item, idx) => (
+                <QueueRow
+                  key={item.qid}
+                  idx={idx}
+                  item={item}
+                  editableFields={editableFields}
+                  fetchedOptions={fetchedOptions}
+                  isEditing={editingQid === item.qid}
+                  onEdit={() => handleEditQueueItem(item.qid)}
+                  onDelete={() => handleDeleteQueueItem(item.qid)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Cascade Lookup Overlay */}
@@ -280,7 +408,6 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
               </div>
             ) : (
               <div className="p-5 flex flex-col gap-4 overflow-hidden flex-1">
-                {/* Row 1: group filter + search side by side */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
                   <div>
                     <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Grupo</label>
@@ -308,7 +435,6 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                   </div>
                 </div>
 
-                {/* Results list */}
                 <div className="flex flex-col min-h-0 flex-1">
                   <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1 shrink-0">
                     Acessórios
@@ -345,6 +471,71 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function QueueRow({
+  idx,
+  item,
+  editableFields,
+  fetchedOptions,
+  isEditing,
+  onEdit,
+  onDelete,
+}: {
+  idx: number
+  item: QueueItem
+  editableFields: Field[]
+  fetchedOptions: Record<string, Array<{ value: string; label: string }>>
+  isEditing: boolean
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const displayFields = editableFields.filter(f => f.showInList)
+
+  return (
+    <div className={`flex items-center gap-0 rounded border text-sm transition-colors ${
+      isEditing
+        ? 'bg-primary/10 border-primary/40'
+        : 'bg-surface-container-low border-outline-variant/40 hover:border-outline-variant'
+    }`}>
+      <span className="text-outline font-mono text-xs px-3 py-2.5 border-r border-outline-variant/40 shrink-0 w-9 text-center">
+        {idx + 1}
+      </span>
+      <div className="flex-1 flex flex-wrap gap-x-4 gap-y-0 px-3 py-2 min-w-0">
+        {displayFields.map(f => {
+          const val = item.data[f.name]
+          if (!val && val !== '0') return null
+          let display: string = val
+          const opts = fetchedOptions[f.name]
+          if (opts) {
+            display = opts.find(o => o.value === val)?.label ?? val
+          }
+          return (
+            <span key={f.name} className="text-xs text-on-surface-variant whitespace-nowrap">
+              <span className="text-outline">{f.label}: </span>
+              {display.length > 35 ? display.slice(0, 35) + '…' : display}
+            </span>
+          )
+        })}
+      </div>
+      <div className="flex items-center border-l border-outline-variant/40 shrink-0">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="px-3 py-2.5 text-xs text-outline hover:text-primary transition-colors border-r border-outline-variant/40"
+        >
+          Editar
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="px-3 py-2.5 text-xs text-outline hover:text-error transition-colors"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }

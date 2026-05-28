@@ -59,7 +59,8 @@ export interface TableSchema {
   hasTimestamps: boolean
   orderBy: string
   fields: Field[]
-  doubleInsert?: boolean      // insert forward row + mirrored reverse row
+  doubleInsert?: boolean
+  batchInsert?: boolean      // form accumulates a queue; saves all at once
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
@@ -204,6 +205,7 @@ export const tables: Record<string, TableSchema> = {
     domain: 'regras',
     hasTimestamps: true,
     orderBy: 'legacy_equipment_id',
+    batchInsert: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
