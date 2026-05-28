@@ -76,7 +76,7 @@ export const tables: Record<string, TableSchema> = {
   },
 
   standard_equipment_items: {
-    label: 'Itens Padrão (BOM)',
+    label: 'Itens de Série',
     description: 'Itens que compõem cada equipamento — Bill of Materials',
     domain: 'catalogo',
     hasTimestamps: true,
@@ -199,7 +199,7 @@ export const tables: Record<string, TableSchema> = {
   },
 
   non_combinable_comps: {
-    label: 'Incompatibilidades',
+    label: 'Produtos Não Combináveis',
     description: 'Acessórios que não podem ser combinados em certas condições',
     domain: 'regras',
     hasTimestamps: true,
@@ -218,7 +218,7 @@ export const tables: Record<string, TableSchema> = {
   },
 
   dependant_items: {
-    label: 'Itens Dependentes',
+    label: 'Produtos Dependentes',
     description: 'Itens adicionados automaticamente com base em outros acessórios',
     domain: 'regras',
     hasTimestamps: true,
@@ -360,5 +360,5 @@ export function getEditableFields(tableName: string): Field[] {
 export function getListFields(tableName: string): Field[] {
   const schema = tables[tableName]
   if (!schema) return []
-  return schema.fields.filter(f => f.showInList)
+  return schema.fields.filter(f => f.type !== 'password')
 }

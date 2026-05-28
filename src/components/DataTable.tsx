@@ -131,7 +131,7 @@ export default function DataTable({ tableName, schema }: Props) {
                         {f.label}
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono">
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap">
                       Ações
                     </th>
                   </tr>
@@ -147,7 +147,7 @@ export default function DataTable({ tableName, schema }: Props) {
                     pageData.data.map((row, i) => (
                       <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
                         {listFields.map(f => (
-                          <td key={f.name} className="px-4 py-3 text-on-surface-variant max-w-xs">
+                          <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
                             <CellValue value={row[f.name]} type={f.type} />
                           </td>
                         ))}

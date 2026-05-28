@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
 
-const DOMAIN_ORDER = ['catalogo', 'regras', 'transacional', 'plataforma']
+const DOMAIN_ORDER = ['catalogo', 'regras', 'plataforma']
 
 export default function Dashboard() {
   const [counts, setCounts] = useState<Record<string, number>>({})
