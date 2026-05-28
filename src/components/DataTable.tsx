@@ -52,7 +52,6 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const handleSearch = () => {
     setSearch(searchInput)
-    setPage(1)
   }
 
   const handleDelete = async (id: string) => {
@@ -98,7 +97,7 @@ export default function DataTable({ tableName, schema }: Props) {
           </button>
           {search && (
             <button
-              onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }}
+              onClick={() => { setSearch(''); setSearchInput('') }}
               className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors flex items-center gap-1"
             >
               <span className="material-symbols-outlined text-[16px]">close</span>
