@@ -55,7 +55,7 @@ export const tables: Record<string, TableSchema> = {
     description: 'Máquinas configuráveis — entidade central do catálogo',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'commercial_name',
+    orderBy: 'legacy_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
@@ -80,7 +80,7 @@ export const tables: Record<string, TableSchema> = {
     description: 'Itens que compõem cada equipamento — Bill of Materials',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'protheus_code',
+    orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
@@ -134,7 +134,7 @@ export const tables: Record<string, TableSchema> = {
     description: 'Grupos para organização e aplicação de regras de acessórios',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'name',
+    orderBy: 'legacy_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Legado (Protheus)', type: 'number', nullable: false, showInList: true },
@@ -150,7 +150,7 @@ export const tables: Record<string, TableSchema> = {
     description: 'Peças para composição de mesas de roletes',
     domain: 'catalogo',
     hasTimestamps: true,
-    orderBy: 'protheus_code',
+    orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
@@ -222,7 +222,7 @@ export const tables: Record<string, TableSchema> = {
     description: 'Itens adicionados automaticamente com base em outros acessórios',
     domain: 'regras',
     hasTimestamps: true,
-    orderBy: 'protheus_code',
+    orderBy: 'legacy_equipment_id',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'ID Equip. Legado', type: 'number', nullable: false, showInList: true },
