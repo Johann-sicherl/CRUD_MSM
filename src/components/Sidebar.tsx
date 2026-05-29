@@ -11,7 +11,7 @@ interface Props {
   onPinChange: (pinned: boolean) => void
 }
 
-const DOMAIN_ORDER = ['catalogo', 'regras', 'plataforma']
+const DOMAIN_ORDER = ['catalogo', 'regras']
 
 export default function Sidebar({ pinned, onPinChange }: Props) {
   const pathname = usePathname()
@@ -124,7 +124,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-outline-variant text-[10px] text-outline font-mono flex items-center justify-between">
-          <span>11 tabelas · v3.0</span>
+          <span>10 tabelas · v3.1</span>
           <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${
             pinned
               ? 'text-primary border-primary/30 bg-primary/10'
