@@ -105,6 +105,23 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           ))}
         </nav>
 
+        {/* Sistema */}
+        <div className="mt-5 mb-2">
+          <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
+            Sistema
+          </div>
+          <Link
+            href="/options"
+            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+              pathname === '/options'
+                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+            }`}
+          >
+            <span className="truncate">Listas de Opções</span>
+          </Link>
+        </div>
+
         {/* Footer */}
         <div className="px-5 py-3 border-t border-outline-variant text-[10px] text-outline font-mono flex items-center justify-between">
           <span>11 tabelas · v3.0</span>

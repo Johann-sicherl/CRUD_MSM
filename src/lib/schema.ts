@@ -53,6 +53,7 @@ export interface Field {
   formFullWidth?: boolean
   listExpand?: boolean       // truncate cell in list view and show expand/collapse button
   listFilterType?: 'select' | 'text'  // override column filter style (default: select)
+  dynamicOptions?: string    // key in /api/field-options; renders a managed select with + button
 }
 
 export interface TableSchema {
@@ -138,17 +139,17 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
-      { name: 'processor', label: 'Processador', type: 'text', nullable: true },
-      { name: 'memory', label: 'Memória RAM', type: 'text', nullable: true },
-      { name: 'storage', label: 'Armazenamento', type: 'text', nullable: true },
-      { name: 'graphics_card', label: 'Placa de Vídeo', type: 'text', nullable: true },
-      { name: 'conveyor_belt_load_capacity_kg', label: 'Cap. Carga Esteira (kg)', type: 'text', nullable: true },
-      { name: 'tube_power_kv', label: 'Potência Tubo (kV)', type: 'text', nullable: true },
-      { name: 'certificate', label: 'Certificado', type: 'text', nullable: true },
-      { name: 'conveyor_belt_type', label: 'Tipo Esteira', type: 'text', nullable: true },
-      { name: 'motopolia_type', label: 'Tipo Motopolia', type: 'text', nullable: true },
-      { name: 'language', label: 'Idioma', type: 'text', nullable: true },
-      { name: 'color', label: 'Cor', type: 'text', nullable: true, showInList: true },
+      { name: 'processor', label: 'Processador', type: 'text', nullable: true, dynamicOptions: 'processor' },
+      { name: 'memory', label: 'Memória RAM', type: 'text', nullable: true, dynamicOptions: 'memory' },
+      { name: 'storage', label: 'Armazenamento', type: 'text', nullable: true, dynamicOptions: 'storage' },
+      { name: 'graphics_card', label: 'Placa de Vídeo', type: 'text', nullable: true, dynamicOptions: 'graphics_card' },
+      { name: 'conveyor_belt_load_capacity_kg', label: 'Cap. Carga Esteira (kg)', type: 'text', nullable: true, dynamicOptions: 'belt_load_capacity' },
+      { name: 'tube_power_kv', label: 'Potência Tubo (kV)', type: 'text', nullable: true, dynamicOptions: 'tube_power' },
+      { name: 'certificate', label: 'Certificado', type: 'text', nullable: true, dynamicOptions: 'certificate' },
+      { name: 'conveyor_belt_type', label: 'Tipo Esteira', type: 'text', nullable: true, dynamicOptions: 'belt_type' },
+      { name: 'motopolia_type', label: 'Tipo Motopolia', type: 'text', nullable: true, dynamicOptions: 'motopolia_type' },
+      { name: 'language', label: 'Idioma', type: 'text', nullable: true, dynamicOptions: 'language' },
+      { name: 'color', label: 'Cor', type: 'text', nullable: true, showInList: true, dynamicOptions: 'equip_color' },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
         fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive', 'deactive'], showInList: true },
@@ -171,8 +172,8 @@ export const tables: Record<string, TableSchema> = {
       { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: true,
         lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
-      { name: 'color', label: 'Cor', type: 'text', nullable: true },
-      { name: 'predominant_material', label: 'Material Predominante', type: 'text', nullable: true },
+      { name: 'color', label: 'Cor', type: 'text', nullable: true, dynamicOptions: 'accessory_color' },
+      { name: 'predominant_material', label: 'Material Predominante', type: 'text', nullable: true, dynamicOptions: 'predominant_material' },
       { name: 'dimensional_mm', label: 'Dimensão (mm)', type: 'number', nullable: true },
       { name: 'monitor_size', label: 'Tamanho Monitor (pol)', type: 'decimal', nullable: true },
       { name: 'quantity_monitor_totem', label: 'Qtd. Monitor Totem', type: 'number', nullable: true },

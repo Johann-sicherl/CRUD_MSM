@@ -70,6 +70,7 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
+  const [fetchedDynamic, setFetchedDynamic] = useState<Record<string, string[]>>({})
   const [cascade, setCascade] = useState<CascadeState>(EMPTY_CASCADE)
 
   // Batch queue state
@@ -123,6 +124,32 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableName])
+
+  useEffect(() => {
+    const dynamicFields = editableFields.filter(f => f.dynamicOptions)
+    if (dynamicFields.length === 0) return
+    fetch('/api/field-options')
+      .then(r => r.ok ? r.json() : {})
+      .then((all: Record<string, string[]>) => {
+        setFetchedDynamic(Object.fromEntries(
+          dynamicFields.map(f => [f.name, all[f.dynamicOptions!] || []])
+        ))
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName])
+
+  const addDynamicOption = async (fieldName: string, key: string, value: string) => {
+    const res = await fetch('/api/field-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    })
+    if (!res.ok) return
+    const updated: string[] = await res.json()
+    setFetchedDynamic(prev => ({ ...prev, [fieldName]: updated }))
+    handleChange(fieldName, value)
+  }
 
   const handleChange = (name: string, value: string) => {
     setForm(prev => ({ ...prev, [name]: value }))
@@ -351,6 +378,8 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
                 value={form[field.name] ?? ''}
                 onChange={(v) => handleChange(field.name, v)}
                 fetchedOptions={fetchedOptions[field.name]}
+                dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
+                onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
                 onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
               />
             ))}
@@ -717,14 +746,32 @@ function FieldInput({
   value,
   onChange,
   fetchedOptions,
+  dynamicOptionValues,
+  onAddOption,
   onCascadeOpen,
 }: {
   field: Field
   value: string
   onChange: (v: string) => void
   fetchedOptions?: Array<{ value: string; label: string }>
+  dynamicOptionValues?: string[]
+  onAddOption?: (value: string) => Promise<void>
   onCascadeOpen?: () => void
 }) {
+  const [addingOpt, setAddingOpt] = useState(false)
+  const [newOptInput, setNewOptInput] = useState('')
+  const [addingLoading, setAddingLoading] = useState(false)
+
+  const commitNewOpt = async () => {
+    const v = newOptInput.trim().toUpperCase()
+    if (!v || !onAddOption) return
+    setAddingLoading(true)
+    await onAddOption(v)
+    setAddingLoading(false)
+    setAddingOpt(false)
+    setNewOptInput('')
+  }
+
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
   const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
@@ -738,6 +785,60 @@ function FieldInput({
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
+    )
+  } else if (dynamicOptionValues !== undefined) {
+    input = (
+      <div>
+        <div className="flex gap-1.5">
+          <select value={value} onChange={e => onChange(e.target.value)} className={`${inputClass} flex-1`} required={!field.nullable}>
+            {field.nullable && <option value="">— Selecione —</option>}
+            {dynamicOptionValues.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => { setAddingOpt(o => !o); setNewOptInput('') }}
+            title="Adicionar nova opção à lista"
+            className={`shrink-0 px-2.5 border rounded text-sm transition-colors ${
+              addingOpt
+                ? 'border-primary text-primary bg-primary/10'
+                : 'border-outline-variant text-outline hover:border-primary hover:text-primary bg-surface-container-low'
+            }`}
+          >
+            +
+          </button>
+        </div>
+        {addingOpt && (
+          <div className="flex gap-1.5 mt-1.5">
+            <input
+              type="text"
+              value={newOptInput}
+              onChange={e => setNewOptInput(e.target.value.toUpperCase())}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitNewOpt() }
+                if (e.key === 'Escape') { setAddingOpt(false); setNewOptInput('') }
+              }}
+              placeholder="NOVA OPÇÃO..."
+              autoFocus
+              className="flex-1 bg-surface-container-low border border-primary/50 rounded px-2 py-1.5 text-xs font-mono text-on-surface uppercase placeholder:text-outline/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+            />
+            <button
+              type="button"
+              disabled={addingLoading || !newOptInput.trim()}
+              onClick={commitNewOpt}
+              className="px-2.5 py-1.5 bg-primary text-on-primary rounded text-xs font-semibold disabled:opacity-40 hover:shadow-neon transition-all"
+            >
+              {addingLoading ? '…' : '✓'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAddingOpt(false); setNewOptInput('') }}
+              className="px-2.5 py-1.5 border border-outline-variant rounded text-xs text-outline hover:border-error hover:text-error transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
     )
   } else if (field.type === 'select' && field.options) {
     input = (
