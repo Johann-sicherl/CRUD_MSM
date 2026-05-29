@@ -68,10 +68,26 @@ export default function DataTable({ tableName, schema }: Props) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [lookups, setLookups] = useState<LookupMap>({})
   const [colFilters, setColFilters] = useState<Record<string, string>>({})
+  // Separate input state for text filters — debounced before applying to colFilters
+  const [textInputs, setTextInputs] = useState<Record<string, string>>({})
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
-  useEffect(() => { setColFilters({}) }, [tableName])
+  useEffect(() => { setColFilters({}); setTextInputs({}) }, [tableName])
+
+  // Debounce text filter inputs: wait 400ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setColFilters(prev => {
+        const next = { ...prev }
+        for (const [name, val] of Object.entries(textInputs)) {
+          next[name] = val
+        }
+        return next
+      })
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [textInputs])
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -209,7 +225,7 @@ export default function DataTable({ tableName, schema }: Props) {
           )}
           {hasActiveColFilters && (
             <button
-              onClick={() => setColFilters({})}
+              onClick={() => { setColFilters({}); setTextInputs({}) }}
               className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
             >
               ✕ Limpar filtros
@@ -252,11 +268,11 @@ export default function DataTable({ tableName, schema }: Props) {
                           f.listFilterType === 'text' ? (
                             <input
                               type="text"
-                              value={colFilters[f.name] ?? ''}
-                              onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
+                              value={textInputs[f.name] ?? ''}
+                              onChange={e => setTextInputs(prev => ({ ...prev, [f.name]: e.target.value }))}
                               placeholder="buscar..."
                               className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal placeholder:text-outline/50 focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
-                                colFilters[f.name]
+                                textInputs[f.name]
                                   ? 'border-primary text-on-surface'
                                   : 'border-outline-variant text-on-surface hover:border-outline'
                               }`}
