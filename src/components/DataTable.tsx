@@ -29,7 +29,7 @@ function getDisplayValue(
   if (field?.lookupFrom && lookups[fieldName]) {
     const keyField = field.lookupFrom.sourceField ?? fieldName
     const key = String(row[keyField] ?? '')
-    return lookups[fieldName][key] ?? key
+    return lookups[fieldName][key] ?? 'N/A'
   }
   const raw = row[fieldName]
   if (field?.type === 'boolean') return raw ? 'Sim' : 'Não'
