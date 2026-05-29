@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields } from '@/lib/schema'
 
 type LookupMap = Record<string, Record<string, string>>
@@ -48,9 +48,7 @@ function applyFilters(
     active.every(([name, fv]) => {
       const field = fields.find(f => f.name === name)
       const display = getDisplayValue(row, name, field, lookups)
-      return field?.listFilterType === 'text'
-        ? display.toLowerCase().includes(fv.toLowerCase())
-        : display === fv
+      return display.toLowerCase().includes(fv.toLowerCase())
     })
   )
 }
@@ -160,7 +158,6 @@ export default function DataTable({ tableName, schema }: Props) {
     if (!pageData || !schema.columnFilters) return {} as Record<string, string[]>
     const result: Record<string, string[]> = {}
     for (const field of listFields) {
-      if (field.listFilterType === 'text') continue  // text inputs don't need distinct-value lists
       const otherFilters = Object.fromEntries(
         Object.entries(colFilters).filter(([name]) => name !== field.name)
       )
@@ -175,7 +172,13 @@ export default function DataTable({ tableName, schema }: Props) {
     return result
   }, [pageData, colFilters, lookups, listFields, schema.columnFilters])
 
-  const hasActiveColFilters = Object.values(colFilters).some(v => v !== '')
+  const hasActiveColFilters = Object.values(textInputs).some(v => v !== '')
+
+  // Immediate update for dropdown selections (bypasses debounce)
+  const handleFilterSelect = useCallback((name: string, val: string) => {
+    setTextInputs(prev => ({ ...prev, [name]: val }))
+    setColFilters(prev => ({ ...prev, [name]: val }))
+  }, [])
 
   const handleSearch = () => setSearch(searchInput)
 
@@ -265,34 +268,12 @@ export default function DataTable({ tableName, schema }: Props) {
                       <th key={f.name} className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono">
                         <div>{f.label}</div>
                         {schema.columnFilters && (
-                          f.listFilterType === 'text' ? (
-                            <input
-                              type="text"
-                              value={textInputs[f.name] ?? ''}
-                              onChange={e => setTextInputs(prev => ({ ...prev, [f.name]: e.target.value }))}
-                              placeholder="buscar..."
-                              className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal placeholder:text-outline/50 focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
-                                textInputs[f.name]
-                                  ? 'border-primary text-on-surface'
-                                  : 'border-outline-variant text-on-surface hover:border-outline'
-                              }`}
-                            />
-                          ) : (
-                            <select
-                              value={colFilters[f.name] ?? ''}
-                              onChange={e => setColFilters(prev => ({ ...prev, [f.name]: e.target.value }))}
-                              className={`mt-1.5 w-full min-w-[90px] bg-surface-container border rounded px-2 py-1 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer ${
-                                colFilters[f.name]
-                                  ? 'border-primary text-primary'
-                                  : 'border-outline-variant text-outline hover:border-outline'
-                              }`}
-                            >
-                              <option value="">Todos</option>
-                              {(columnOptions[f.name] ?? []).map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          )
+                          <ColumnFilter
+                            value={textInputs[f.name] ?? ''}
+                            onChange={v => setTextInputs(prev => ({ ...prev, [f.name]: v }))}
+                            onSelect={v => handleFilterSelect(f.name, v)}
+                            options={columnOptions[f.name] ?? []}
+                          />
                         )}
                       </th>
                     ))}
@@ -409,6 +390,83 @@ export default function DataTable({ tableName, schema }: Props) {
             : 'bg-surface-container-highest border-outline-variant text-on-surface'
         }`}>
           {toast.isError ? '✕' : '✓'} {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ColumnFilter({
+  value,
+  onChange,
+  onSelect,
+  options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onSelect: (v: string) => void
+  options: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = options.filter(o => !value || o.toLowerCase().includes(value.toLowerCase()))
+
+  return (
+    <div ref={ref} className="relative mt-1.5">
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
+          placeholder="filtrar..."
+          className={`w-full min-w-[72px] bg-surface-container border rounded px-2 py-1 pr-5 text-[10px] font-normal normal-case tracking-normal placeholder:text-outline/40 focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
+            value ? 'border-primary text-on-surface' : 'border-outline-variant text-on-surface hover:border-outline'
+          }`}
+        />
+        <button
+          onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
+          tabIndex={-1}
+          className={`absolute right-1 top-1/2 -translate-y-1/2 text-[9px] leading-none transition-colors ${value ? 'text-primary' : 'text-outline hover:text-primary'}`}
+        >
+          ▾
+        </button>
+      </div>
+      {open && (
+        <div className="absolute z-50 top-full left-0 min-w-full mt-0.5 bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-48 overflow-y-auto">
+          <button
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => { onSelect(''); setOpen(false) }}
+            className="w-full text-left px-2 py-1.5 text-[10px] text-outline hover:bg-surface-container-high border-b border-outline-variant/30 font-mono"
+          >
+            — Todos —
+          </button>
+          {filtered.length === 0 ? (
+            <div className="px-2 py-1.5 text-[10px] text-outline italic">Sem resultados</div>
+          ) : (
+            filtered.map(opt => (
+              <button
+                key={opt}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { onSelect(opt); setOpen(false) }}
+                className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-surface-container-high font-mono truncate block ${
+                  opt === value ? 'text-primary bg-primary/5' : 'text-on-surface-variant'
+                }`}
+              >
+                {opt}
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
