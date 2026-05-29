@@ -13,8 +13,13 @@ export type FieldType =
 export interface LookupConfig {
   table: string
   keyField: string
-  displayField: string
+  displayField: string  // for through lookups this is the intermediate FK field
   sourceField?: string  // use row[sourceField] as the lookup key instead of row[field.name]
+  through?: {           // second-hop: displayField values become keys into this table
+    table: string
+    keyField: string
+    displayField: string
+  }
   filterVia?: {
     table: string      // table whose rows determine the allowed set
     joinField: string  // field in that table referencing keyField
@@ -218,7 +223,11 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name',
           filterVia: { table: 'standard_equipment_items', joinField: 'legacy_equipment_id', filterField: 'status', filterValue: 'active' } } },
+      { name: 'group_name', label: 'Grupo', type: 'text', nullable: true, showInList: true, hideInForm: true,
+        lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_code',
+          through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } } },
       { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true,
+        listFilterType: 'text',
         validateExistsIn: { table: 'accessories', field: 'protheus_code',
           errorMessage: 'Código Protheus não encontrado em Cadastro de Componentes. Cadastre o componente antes de criar a regra.' },
         cascadeLookup: {

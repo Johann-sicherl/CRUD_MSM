@@ -78,6 +78,30 @@ export default function DataTable({ tableName, schema }: Props) {
     if (fieldsWithLookup.length === 0) return
     fieldsWithLookup.forEach(async (field) => {
       const lc = field.lookupFrom!
+
+      if (lc.through) {
+        const [mainRes, throughRes] = await Promise.all([
+          fetch(`/api/${lc.table}?limit=25000`),
+          fetch(`/api/${lc.through.table}?limit=25000`),
+        ])
+        if (!mainRes.ok || !throughRes.ok) return
+        const [mainJson, throughJson] = await Promise.all([mainRes.json(), throughRes.json()])
+        const intermediateMap: Record<string, string> = {}
+        for (const row of (mainJson.data || [])) {
+          intermediateMap[String(row[lc.keyField])] = String(row[lc.displayField] ?? '')
+        }
+        const throughMap: Record<string, string> = {}
+        for (const row of (throughJson.data || [])) {
+          throughMap[String(row[lc.through.keyField])] = String(row[lc.through.displayField])
+        }
+        const map: Record<string, string> = {}
+        for (const [key, mid] of Object.entries(intermediateMap)) {
+          if (mid && throughMap[mid]) map[key] = throughMap[mid]
+        }
+        setLookups(prev => ({ ...prev, [field.name]: map }))
+        return
+      }
+
       const res = await fetch(`/api/${lc.table}?limit=25000`)
       if (!res.ok) return
       const json = await res.json()
