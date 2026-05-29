@@ -39,10 +39,21 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
   const acc1 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g1), [allAcc, g1])
   const acc2 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g2), [allAcc, g2])
 
-  const pairs = sel1.size * sel2.size
+  // When the same group is selected in both, items chosen in one box are blocked in the other
+  const sameGroup = g1 !== '' && g1 === g2
+  const blocked1 = sameGroup ? sel2 : new Set<string>()
+  const blocked2 = sameGroup ? sel1 : new Set<string>()
 
-  const toggle = (setSel: React.Dispatch<React.SetStateAction<Set<string>>>, code: string) =>
-    setSel(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
+  const toggle1 = (code: string) => {
+    if (blocked1.has(code)) return
+    setSel1(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
+  }
+  const toggle2 = (code: string) => {
+    if (blocked2.has(code)) return
+    setSel2(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
+  }
+
+  const pairs = sel1.size * sel2.size
 
   const handleSubmit = async () => {
     if (!equipId || !g1 || !g2 || !sel1.size || !sel2.size) return
@@ -134,8 +145,9 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
               title="1° Grupo — Acessórios"
               items={acc1}
               selected={sel1}
-              onToggle={c => toggle(setSel1, c)}
-              onAll={visible => setSel1(new Set(visible.map(a => a.protheus_code)))}
+              blockedCodes={blocked1}
+              onToggle={toggle1}
+              onAll={visible => setSel1(new Set(visible.filter(a => !blocked1.has(a.protheus_code)).map(a => a.protheus_code)))}
               onNone={() => setSel1(new Set())}
               empty={!g1}
             />
@@ -144,8 +156,9 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
               title="2° Grupo — Acessórios"
               items={acc2}
               selected={sel2}
-              onToggle={c => toggle(setSel2, c)}
-              onAll={visible => setSel2(new Set(visible.map(a => a.protheus_code)))}
+              blockedCodes={blocked2}
+              onToggle={toggle2}
+              onAll={visible => setSel2(new Set(visible.filter(a => !blocked2.has(a.protheus_code)).map(a => a.protheus_code)))}
               onNone={() => setSel2(new Set())}
               empty={!g2}
             />
@@ -200,11 +213,12 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
 // ── AccBox ────────────────────────────────────────────────────────────────────
 
 function AccBox({
-  title, items, selected, onToggle, onAll, onNone, empty,
+  title, items, selected, blockedCodes, onToggle, onAll, onNone, empty,
 }: {
   title: string
   items: Accessory[]
   selected: Set<string>
+  blockedCodes: Set<string>
   onToggle: (code: string) => void
   onAll: (visible: Accessory[]) => void
   onNone: () => void
@@ -229,7 +243,8 @@ function AccBox({
     (!filterName || a.name.toLowerCase().includes(filterName.toLowerCase()))
   ), [items, filterCode, filterName])
 
-  const allVisibleSelected = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
+  const selectableVisible = visible.filter(a => !blockedCodes.has(a.protheus_code))
+  const allVisibleSelected = selectableVisible.length > 0 && selectableVisible.every(a => selected.has(a.protheus_code))
 
   return (
     <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden">
@@ -289,29 +304,38 @@ function AccBox({
             {visible.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
             ) : (
-              visible.map(a => (
-                <label
-                  key={a.protheus_code}
-                  className={`flex items-center cursor-pointer hover:bg-surface-container transition-colors ${
-                    selected.has(a.protheus_code) ? 'bg-primary/5' : ''
-                  }`}
-                >
-                  <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/10 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(a.protheus_code)}
-                      onChange={() => onToggle(a.protheus_code)}
-                      className="accent-primary"
-                    />
-                  </div>
-                  <div className="w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono text-primary truncate">
-                    {a.protheus_code}
-                  </div>
-                  <div className="flex-1 px-2 py-2 text-xs text-on-surface-variant truncate">
-                    {a.name}
-                  </div>
-                </label>
-              ))
+              visible.map(a => {
+                const blocked = blockedCodes.has(a.protheus_code)
+                return (
+                  <label
+                    key={a.protheus_code}
+                    className={`flex items-center transition-colors ${
+                      blocked
+                        ? 'opacity-35 cursor-not-allowed bg-surface-container-highest'
+                        : selected.has(a.protheus_code)
+                          ? 'bg-primary/5 cursor-pointer hover:bg-primary/8'
+                          : 'cursor-pointer hover:bg-surface-container'
+                    }`}
+                  >
+                    <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/10 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(a.protheus_code)}
+                        disabled={blocked}
+                        onChange={() => onToggle(a.protheus_code)}
+                        className="accent-primary disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div className={`w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono truncate ${blocked ? 'text-outline line-through' : 'text-primary'}`}>
+                      {a.protheus_code}
+                    </div>
+                    <div className="flex-1 px-2 py-2 text-xs text-on-surface-variant truncate">
+                      {a.name}
+                      {blocked && <span className="ml-1.5 text-[10px] text-outline font-mono">(selecionado no outro lado)</span>}
+                    </div>
+                  </label>
+                )
+              })
             )}
           </div>
 
