@@ -258,7 +258,7 @@ export default function DataTable({ tableName, schema }: Props) {
         {!loading && !error && pageData && (
           <>
             <div className="overflow-x-auto">
-              <table className="text-sm">
+              <table className="w-full text-sm">
                 <thead className="bg-surface-container-highest border-b border-outline-variant">
                   <tr>
                     {listFields.map(f => (

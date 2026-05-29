@@ -324,6 +324,8 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
+      { name: 'nome_componente', label: 'Nome', type: 'text', nullable: true, showInList: true, hideInForm: true,
+        lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'type', label: 'Tipo da Peça', type: 'select', nullable: false, options: ['start', 'middle', 'end', 'unique'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
