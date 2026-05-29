@@ -5,6 +5,7 @@ import { TableSchema, Field, getListFields } from '@/lib/schema'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
+import NonCombinableModal from './NonCombinableModal'
 
 interface Props {
   tableName: string
@@ -65,6 +66,7 @@ export default function DataTable({ tableName, schema }: Props) {
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [lookups, setLookups] = useState<LookupMap>({})
+  const [nonCombModal, setNonCombModal] = useState(false)
   const [colFilters, setColFilters] = useState<Record<string, string>>({})
   // Separate input state for text filters — debounced before applying to colFilters
   const [textInputs, setTextInputs] = useState<Record<string, string>>({})
@@ -236,7 +238,10 @@ export default function DataTable({ tableName, schema }: Props) {
           )}
         </div>
         <button
-          onClick={() => { setEditRecord(null); setModalOpen(true) }}
+          onClick={() => {
+            if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
+            else { setEditRecord(null); setModalOpen(true) }
+          }}
           className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
         >
           + Novo Registro
@@ -364,6 +369,18 @@ export default function DataTable({ tableName, schema }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Non-combinable custom modal */}
+      {nonCombModal && (
+        <NonCombinableModal
+          onClose={() => setNonCombModal(false)}
+          onSaved={count => {
+            setNonCombModal(false)
+            fetchData()
+            showToast(`${count} registros inseridos!`)
+          }}
+        />
       )}
 
       {/* Create/Edit Modal */}
