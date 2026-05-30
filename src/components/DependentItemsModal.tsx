@@ -42,10 +42,15 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const acc1 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g1), [allAcc, g1])
   const acc2 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g2), [allAcc, g2])
 
+  // When the same group is selected: items chosen as trigger cannot be picked as dependent
+  const sameGroup = g1 !== '' && g1 === g2
+  const blocked2  = sameGroup ? sel1 : new Set<string>()
+
   const toggle1 = (code: string) =>
     setSel1(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
 
   const toggle2 = (code: string) => {
+    if (blocked2.has(code)) return
     setSel2(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
     setCfg2(prev => prev[code] ? prev : { ...prev, [code]: { quantity: 1, factor: '1' } })
   }
@@ -157,13 +162,15 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               title="Cód. Dependente"
               items={acc2}
               selected={sel2}
+              blockedCodes={blocked2}
               cfg={cfg2}
               onToggle={toggle2}
               onAll={visible => {
-                setSel2(new Set(visible.map(a => a.protheus_code)))
+                const allowed = visible.filter(a => !blocked2.has(a.protheus_code))
+                setSel2(new Set(allowed.map(a => a.protheus_code)))
                 setCfg2(prev => {
                   const n = { ...prev }
-                  for (const a of visible) if (!n[a.protheus_code]) n[a.protheus_code] = { quantity: 1, factor: '1' }
+                  for (const a of allowed) if (!n[a.protheus_code]) n[a.protheus_code] = { quantity: 1, factor: '1' }
                   return n
                 })
               }}
@@ -297,9 +304,9 @@ function TriggerBox({
 // ── DependentBox (Cód. Dependente — with QTD + Fator Prop per item) ──────────
 
 function DependentBox({
-  title, items, selected, cfg, onToggle, onAll, onNone, onCfgChange, empty,
+  title, items, selected, blockedCodes, cfg, onToggle, onAll, onNone, onCfgChange, empty,
 }: {
-  title: string; items: Accessory[]; selected: Set<string>; cfg: Record<string, ItemCfg>
+  title: string; items: Accessory[]; selected: Set<string>; blockedCodes: Set<string>; cfg: Record<string, ItemCfg>
   onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void
   onCfgChange: (code: string, field: 'quantity' | 'factor', val: string) => void; empty: boolean
 }) {
@@ -321,7 +328,8 @@ function DependentBox({
     (!filterName || a.name.toLowerCase().includes(filterName.toLowerCase()))
   ), [items, filterCode, filterName])
 
-  const allSel = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
+  const selectableVisible = visible.filter(a => !blockedCodes.has(a.protheus_code))
+  const allSel = selectableVisible.length > 0 && selectableVisible.every(a => selected.has(a.protheus_code))
 
   return (
     <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden">
@@ -365,44 +373,44 @@ function DependentBox({
             {visible.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
             ) : visible.map(a => {
+              const isBlocked  = blockedCodes.has(a.protheus_code)
               const isSelected = selected.has(a.protheus_code)
-              const settings = cfg[a.protheus_code] ?? { quantity: 1, factor: '1' }
+              const settings   = cfg[a.protheus_code] ?? { quantity: 1, factor: '1' }
               return (
-                <div key={a.protheus_code} className={`flex items-center transition-colors ${isSelected ? 'bg-primary/5' : ''} hover:bg-surface-container`}>
+                <div
+                  key={a.protheus_code}
+                  className={`flex items-center transition-colors ${
+                    isBlocked  ? 'opacity-35 cursor-not-allowed bg-surface-container-highest' :
+                    isSelected ? 'bg-primary/5 hover:bg-primary/8' :
+                                 'hover:bg-surface-container'
+                  }`}
+                >
                   <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/10 py-2">
-                    <input type="checkbox" checked={isSelected} onChange={() => onToggle(a.protheus_code)} className="accent-primary cursor-pointer" />
+                    <input type="checkbox" checked={isSelected} disabled={isBlocked} onChange={() => onToggle(a.protheus_code)} className="accent-primary cursor-pointer disabled:cursor-not-allowed" />
                   </div>
-                  <div className="w-36 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono text-primary truncate cursor-pointer" onClick={() => onToggle(a.protheus_code)}>
+                  <div className={`w-36 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono truncate ${isBlocked ? 'text-outline line-through' : 'text-primary cursor-pointer'}`} onClick={() => !isBlocked && onToggle(a.protheus_code)}>
                     {a.protheus_code}
                   </div>
-                  <div className="flex-1 border-r border-outline-variant/10 px-2 py-2 text-xs text-on-surface-variant truncate cursor-pointer" onClick={() => onToggle(a.protheus_code)}>
+                  <div className={`flex-1 border-r border-outline-variant/10 px-2 py-2 text-xs text-on-surface-variant truncate ${isBlocked ? '' : 'cursor-pointer'}`} onClick={() => !isBlocked && onToggle(a.protheus_code)}>
                     {a.name}
+                    {isBlocked && <span className="ml-1.5 text-[10px] text-outline font-mono">(selecionado como gatilho)</span>}
                   </div>
                   {/* QTD */}
                   <div className="w-16 shrink-0 border-r border-outline-variant/10 px-1.5 py-1">
                     <input
-                      type="number"
-                      min={1}
-                      value={settings.quantity}
+                      type="number" min={1} value={settings.quantity} disabled={isBlocked}
                       onChange={e => onCfgChange(a.protheus_code, 'quantity', e.target.value)}
-                      onClick={() => { if (!isSelected) onToggle(a.protheus_code) }}
-                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors ${
-                        isSelected ? 'text-on-surface' : 'text-outline/50'
-                      }`}
+                      onClick={() => { if (!isBlocked && !isSelected) onToggle(a.protheus_code) }}
+                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors disabled:cursor-not-allowed ${isSelected ? 'text-on-surface' : 'text-outline/50'}`}
                     />
                   </div>
                   {/* Fator Prop */}
                   <div className="w-20 shrink-0 px-1.5 py-1">
                     <input
-                      type="number"
-                      step="0.01"
-                      value={settings.factor}
+                      type="number" step="0.01" value={settings.factor} disabled={isBlocked} placeholder="1"
                       onChange={e => onCfgChange(a.protheus_code, 'factor', e.target.value)}
-                      onClick={() => { if (!isSelected) onToggle(a.protheus_code) }}
-                      placeholder="1"
-                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors ${
-                        isSelected ? 'text-on-surface' : 'text-outline/50'
-                      }`}
+                      onClick={() => { if (!isBlocked && !isSelected) onToggle(a.protheus_code) }}
+                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors disabled:cursor-not-allowed ${isSelected ? 'text-on-surface' : 'text-outline/50'}`}
                     />
                   </div>
                 </div>
