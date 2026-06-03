@@ -94,7 +94,7 @@ export default function RollerTableModal({ onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-surface-container rounded-lg border border-outline-variant shadow-2xl w-full max-w-4xl max-h-[94vh] flex flex-col animate-fade-in">
+      <div className="bg-surface-container rounded-lg border border-outline-variant shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col animate-fade-in">
 
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-outline-variant shrink-0">
