@@ -311,7 +311,7 @@ export default function DataTable({ tableName, schema }: Props) {
                             cell = <CellValue value={row[f.name]} type={f.type} />
                           }
                           return (
-                            <td key={f.name} className="px-4 py-3 text-on-surface-variant whitespace-nowrap">
+                            <td key={f.name} className={`px-4 py-3 text-on-surface-variant whitespace-nowrap${schema.columnFilters ? ' min-w-[150px]' : ''}`}>
                               {cell}
                             </td>
                           )
