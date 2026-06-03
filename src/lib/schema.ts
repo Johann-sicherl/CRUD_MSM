@@ -177,6 +177,7 @@ export const tables: Record<string, TableSchema> = {
     hasTimestamps: true,
     orderBy: 'legacy_group_id',
     columnFilters: true,
+    compactColumns: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
