@@ -143,6 +143,7 @@ export const tables: Record<string, TableSchema> = {
     hasTimestamps: true,
     orderBy: 'legacy_equipment_id',
     columnFilters: true,
+    compactColumns: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text',
