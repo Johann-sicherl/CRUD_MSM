@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Sidebar from '@/components/Sidebar'
+import ThemeZoomBar from '@/components/ThemeZoomBar'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [pinned, setPinned] = useState(true)
@@ -20,10 +21,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <>
       <Sidebar pinned={pinned} onPinChange={handlePinChange} />
       <main
-        className={`relative z-10 min-h-screen overflow-auto transition-[margin-left] duration-200 ${
+        className={`relative z-10 min-h-screen flex flex-col overflow-auto transition-[margin-left] duration-200 ${
           pinned ? 'ml-64' : 'ml-0'
         }`}
       >
+        <ThemeZoomBar />
         {children}
       </main>
     </>
