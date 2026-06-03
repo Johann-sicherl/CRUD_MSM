@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 /* ── Theme CSS Variables ──────────────────────────────────────────────────── */
-/* All color values are space-separated RGB (e.g. "250 189 0") so Tailwind's  */
-/* alpha modifier syntax works: rgb(var(--c-primary) / 0.2)                   */
+/* All color values are space-separated RGB so Tailwind alpha works:           */
+/* rgb(var(--c-primary) / 0.2)                                                 */
 
 :root {
   /* ── Ciberpunk Dourado — dark default ─────────────────────────────────── */
@@ -34,35 +34,7 @@
   --c-on-error-container:        255 218 214;
 }
 
-/* ── Ciberpunk Azul — deep blue + electric cyan ───────────────────────────── */
-[data-theme="azul"] {
-  color-scheme: dark;
-  --scan-visible: 1;
-
-  --c-primary:                   0 200 240;
-  --c-on-primary:                0 26 36;
-  --c-primary-container:         0 144 184;
-  --c-secondary:                 112 144 192;
-  --c-on-secondary:              8 16 32;
-  --c-secondary-container:       26 40 72;
-  --c-surface:                   12 18 32;
-  --c-on-surface:                200 228 240;
-  --c-surface-variant:           24 40 64;
-  --c-on-surface-variant:        122 170 200;
-  --c-outline:                   48 88 120;
-  --c-outline-variant:           24 40 64;
-  --c-background:                6 12 24;
-  --c-surface-container-lowest:  6 12 24;
-  --c-surface-container-low:     10 16 32;
-  --c-surface-container:         14 22 44;
-  --c-surface-container-high:    20 32 56;
-  --c-surface-container-highest: 28 44 80;
-  --c-error:                     255 128 144;
-  --c-error-container:           96 0 32;
-  --c-on-error-container:        255 216 224;
-}
-
-/* ── Cinza & Amarelo — neutral grays + white text + yellow ────────────────── */
+/* ── Cinza & Amarelo — neutral dark grays + white text + gold ─────────────── */
 [data-theme="cinza"] {
   color-scheme: dark;
   --scan-visible: 1;
@@ -88,6 +60,34 @@
   --c-error:                     255 128 128;
   --c-error-container:           88 0 0;
   --c-on-error-container:        255 218 214;
+}
+
+/* ── Luz — warm light + dark amber ───────────────────────────────────────── */
+[data-theme="luz"] {
+  color-scheme: light;
+  --scan-visible: 0;
+
+  --c-primary:                   154 110 0;
+  --c-on-primary:                255 255 255;
+  --c-primary-container:         255 224 128;
+  --c-secondary:                 106 100 88;
+  --c-on-secondary:              255 255 255;
+  --c-secondary-container:       224 216 192;
+  --c-surface:                   255 255 255;
+  --c-on-surface:                26 24 20;
+  --c-surface-variant:           237 232 216;
+  --c-on-surface-variant:        72 64 58;
+  --c-outline:                   136 128 112;
+  --c-outline-variant:           204 192 168;
+  --c-background:                245 242 232;
+  --c-surface-container-lowest:  255 248 232;
+  --c-surface-container-low:     248 244 232;
+  --c-surface-container:         236 232 216;
+  --c-surface-container-high:    228 224 208;
+  --c-surface-container-highest: 218 214 196;
+  --c-error:                     179 38 30;
+  --c-error-container:           249 222 220;
+  --c-on-error-container:        65 14 11;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */

@@ -33,8 +33,16 @@ const config: Config = {
         'on-error-container':        'rgb(var(--c-on-error-container) / <alpha-value>)',
       },
       fontFamily: {
-        sans:  ['Inter', 'sans-serif'],
-        mono:  ['"JetBrains Mono"', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
+      // Shift all font weights one step heavier globally
+      fontWeight: {
+        normal:    '500',
+        medium:    '600',
+        semibold:  '700',
+        bold:      '800',
+        extrabold: '900',
       },
       spacing: {
         'margin-desktop': '64px',

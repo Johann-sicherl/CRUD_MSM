@@ -1,75 +1,67 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 
 const THEMES = [
-  { id: 'cyberpunk', label: 'Ciberpunk',       bg: '#0d0e12', accent: '#fabd00' },
-  { id: 'azul',      label: 'Ciberpunk Azul',  bg: '#060c18', accent: '#00c8f0' },
-  { id: 'cinza',     label: 'Cinza & Amarelo',  bg: '#181818', accent: '#fabd00' },
+  { id: 'cyberpunk', label: 'Ciberpunk',      bg: '#0d0e12', accent: '#fabd00' },
+  { id: 'cinza',     label: 'Cinza & Amarelo', bg: '#181818', accent: '#fabd00' },
+  { id: 'luz',       label: 'Luz',             bg: '#f5f2e8', accent: '#9a6e00' },
 ]
 
-const MIN_ZOOM = 50
-const MAX_ZOOM = 130
-const STEP     = 5
+const STEP    = 5   // percent per +/− click
+const MIN_PCT = 50
+const MAX_PCT = 150
 
 function applyTheme(id: string) {
   document.documentElement.dataset.theme = id
-  document.documentElement.style.colorScheme = 'dark'
-}
-
-function applyZoom(z: number) {
-  document.documentElement.style.zoom = `${z}%`
+  document.documentElement.style.colorScheme = id === 'luz' ? 'light' : 'dark'
 }
 
 export default function ThemeZoomBar() {
-  const [theme, setTheme] = useState('cyberpunk')
-  const [zoom,  setZoom]  = useState(100)
+  const [theme,   setTheme]   = useState('cyberpunk')
+  // userPct: scale relative to auto-fit. 100 = auto-fit (all columns visible).
+  const [userPct, setUserPct] = useState(100)
+  // baseZoom: the absolute CSS zoom fraction that makes all columns fit (e.g. 0.72)
+  const baseZoomRef = useRef(1)
+  const pathname    = usePathname()
 
-  /* ── Auto-fit: set zoom so all table columns fit within main area ─────── */
+  /* ── Calculate auto-fit zoom so all columns (incl. Ações) fit on screen ── */
   const autoFit = useCallback(() => {
-    // 1. Reset to 100% so measurements are in natural pixel space
+    // Reset to 100% so DOM measurements are in natural pixel space
     document.documentElement.style.zoom = '100%'
 
-    // 2. Two frames: first triggers reflow, second measures after paint
+    // Two RAFs: first triggers reflow, second measures after paint
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const main = document.querySelector('main')
         if (!main) return
 
-        const availW   = main.clientWidth   // visible area width at 100% zoom
-        const contentW = main.scrollWidth   // total content width at 100% zoom
+        const availW   = main.clientWidth
+        const contentW = main.scrollWidth
 
-        if (contentW <= availW) {
-          setZoom(100)
-          localStorage.setItem('app-zoom', '100')
-          return
-        }
+        const base = contentW > availW
+          ? Math.max(MIN_PCT / 100, availW / contentW)
+          : 1
 
-        const z = Math.max(MIN_ZOOM, Math.round((availW / contentW) * 100))
-        applyZoom(z)
-        setZoom(z)
-        localStorage.setItem('app-zoom', String(z))
+        baseZoomRef.current = base
+        setUserPct(100)                                  // display always resets to 100%
+        document.documentElement.style.zoom = `${base * 100}%`
       })
     })
   }, [])
 
-  /* ── Init from localStorage ─────────────────────────────────────────────── */
+  /* ── Re-auto-fit on every route change (and on first mount) ─────────────── */
   useEffect(() => {
-    const t         = localStorage.getItem('app-theme') ?? 'cyberpunk'
-    const savedZoom = localStorage.getItem('app-zoom')
+    autoFit()
+  }, [pathname, autoFit])
 
+  /* ── Restore theme from localStorage on mount ───────────────────────────── */
+  useEffect(() => {
+    const t = localStorage.getItem('app-theme') ?? 'cyberpunk'
     setTheme(t)
     applyTheme(t)
-
-    if (savedZoom) {
-      const z = Number(savedZoom)
-      setZoom(z)
-      applyZoom(z)
-    } else {
-      // No saved zoom: auto-fit on first visit
-      autoFit()
-    }
-  }, [autoFit])
+  }, [])
 
   const handleTheme = (id: string) => {
     setTheme(id)
@@ -78,16 +70,15 @@ export default function ThemeZoomBar() {
   }
 
   const handleZoom = (delta: number) => {
-    setZoom(prev => {
-      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + delta))
-      applyZoom(next)
-      localStorage.setItem('app-zoom', String(next))
+    setUserPct(prev => {
+      const next = Math.max(MIN_PCT, Math.min(MAX_PCT, prev + delta))
+      document.documentElement.style.zoom = `${baseZoomRef.current * next}%`
       return next
     })
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-1.5 bg-surface-container-high border-b border-outline-variant/40 text-[10px] font-mono shrink-0 select-none">
+    <div className="flex items-center justify-between gap-4 px-4 py-1.5 bg-surface-container-high border-b border-outline-variant/40 font-mono shrink-0 select-none">
 
       {/* Theme selector */}
       <div className="flex items-center gap-1">
@@ -112,25 +103,18 @@ export default function ThemeZoomBar() {
         ))}
       </div>
 
-      {/* Zoom control */}
+      {/* Zoom control — 100% always = full table visible */}
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] uppercase tracking-widest text-outline/60">Zoom</span>
         <button
-          onClick={autoFit}
-          title="Ajustar zoom para caber todas as colunas na tela"
-          className="px-2 py-0.5 rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline transition-colors text-[9px] uppercase tracking-wider"
-        >
-          Auto
-        </button>
-        <button
           onClick={() => handleZoom(-STEP)}
-          disabled={zoom <= MIN_ZOOM}
+          disabled={userPct <= MIN_PCT}
           className="w-5 h-5 flex items-center justify-center rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline disabled:opacity-30 transition-colors text-sm leading-none"
         >−</button>
-        <span className="w-9 text-center text-primary font-semibold">{zoom}%</span>
+        <span className="w-9 text-center text-primary font-semibold text-[10px]">{userPct}%</span>
         <button
           onClick={() => handleZoom(+STEP)}
-          disabled={zoom >= MAX_ZOOM}
+          disabled={userPct >= MAX_PCT}
           className="w-5 h-5 flex items-center justify-center rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline disabled:opacity-30 transition-colors text-sm leading-none"
         >+</button>
       </div>
