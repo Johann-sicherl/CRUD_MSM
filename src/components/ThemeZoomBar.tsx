@@ -27,37 +27,43 @@ export default function ThemeZoomBar() {
   const pathname     = usePathname()
 
   /* ── Core auto-fit logic ─────────────────────────────────────────────────
-     Measures at CSS zoom=100% so values are in natural pixel space.
-     Uses sidebar offsetLeft in the formula so the sidebar width doesn't
-     compress the available area incorrectly when zoomed.              ─── */
+     KEY: main has overflow-auto and the table lives inside an overflow-x-auto
+     div. main.scrollWidth therefore equals main.clientWidth (the inner div
+     creates its own scroll context). We must read table.offsetWidth directly,
+     which reports the element's full layout width regardless of clipping.
+
+     Zoom formula: at zoom z, viewport CSS pixels = V/z (V = physical width).
+     Sidebar stays fixed at S CSS pixels. Table width T also stays fixed.
+     Need V/z - S >= T  →  z = V / (T + S)  where V = availW + sidebarW.   ─ */
   const autoFit = useCallback(() => {
     document.documentElement.style.zoom = '100%'
 
-    // Two RAFs: first triggers reflow, second measures after paint
+    // Two RAFs: first triggers layout reflow, second reads after paint
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const mainEl = document.querySelector('main')
+        const mainEl = document.querySelector('main') as HTMLElement | null
         if (!mainEl) return
 
-        const sidebarW = (mainEl as HTMLElement).offsetLeft  // 256 pinned, 0 unpinned
-        const availW   = mainEl.clientWidth                  // visible width of main
-        const contentW = mainEl.scrollWidth                  // total content width
+        const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not
+        const availW   = mainEl.clientWidth   // visible main width at zoom=100%
+
+        // Measure widest <table> inside main — bypasses overflow-x-auto clipping
+        const tables  = Array.from(mainEl.querySelectorAll('table')) as HTMLElement[]
+        const tableW  = tables.reduce((mx, t) => Math.max(mx, t.offsetWidth), 0)
+        const contentW = tableW > 0 ? tableW : mainEl.scrollWidth
 
         if (contentW <= availW) {
-          // Everything fits — keep at 100% CSS (base = 1)
           baseZoomRef.current = 1
           setUserPct(100)
+          document.documentElement.style.zoom = '100%'
           return
         }
 
-        // Correct formula: accounts for the fact that zooming out expands the
-        // viewport CSS-pixel space while the sidebar stays fixed in CSS pixels.
-        const base = Math.max(
-          MIN_PCT / 100,
-          (availW + sidebarW) / (contentW + sidebarW)
-        )
+        const V    = availW + sidebarW                         // true viewport width
+        const base = Math.max(MIN_PCT / 100, V / (contentW + sidebarW))
+
         baseZoomRef.current = base
-        setUserPct(100)                                       // always reset to 100%
+        setUserPct(100)
         document.documentElement.style.zoom = `${base * 100}%`
       })
     })
@@ -69,11 +75,14 @@ export default function ThemeZoomBar() {
     return () => clearTimeout(t)
   }, [pathname, autoFit])
 
-  /* ── Re-auto-fit when DataTable finishes loading real data ───────────── */
+  /* ── Re-auto-fit when DataTable finishes loading real data ──────────────
+     setPageData triggers React re-render asynchronously. We defer by 100ms
+     so the DOM has been updated with the full table before we measure.    ─ */
   useEffect(() => {
-    const handler = () => autoFit()
+    let t: ReturnType<typeof setTimeout>
+    const handler = () => { t = setTimeout(() => autoFit(), 100) }
     window.addEventListener('datatable:loaded', handler)
-    return () => window.removeEventListener('datatable:loaded', handler)
+    return () => { window.removeEventListener('datatable:loaded', handler); clearTimeout(t) }
   }, [autoFit])
 
   /* ── Restore theme from localStorage on mount ───────────────────────── */
