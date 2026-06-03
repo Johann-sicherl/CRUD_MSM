@@ -48,7 +48,7 @@ export default function ColumnFilter({
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative min-w-[160px]">
       <div className="relative">
         <input
           type="text"
