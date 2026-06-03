@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+
+interface DropdownPos { top: number; left: number; width: number }
 
 export default function ColumnFilter({
   searchValue,
@@ -20,15 +22,39 @@ export default function ColumnFilter({
   placeholder?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<DropdownPos | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
+  const openDropdown = useCallback(() => {
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 220) })
+    }
+    setOpen(true)
+  }, [])
+
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      if (ref.current) {
+        const r = ref.current.getBoundingClientRect()
+        setPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 220) })
+      }
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update) }
+  }, [open])
 
   const hasSelection = selectedValues.length > 0
 
@@ -54,7 +80,7 @@ export default function ColumnFilter({
           type="text"
           value={searchValue}
           onChange={e => onSearchChange(e.target.value)}
-          onFocus={() => setOpen(true)}
+          onFocus={openDropdown}
           onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
           placeholder={hasSelection ? `${selectedValues.length} sel.` : placeholder}
           className={`w-full min-w-[120px] h-[1.75rem] bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
@@ -64,7 +90,7 @@ export default function ColumnFilter({
           }`}
         />
         <button
-          onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
+          onMouseDown={e => { e.preventDefault(); open ? setOpen(false) : openDropdown() }}
           tabIndex={-1}
           className={`absolute right-1 top-1/2 -translate-y-1/2 leading-none transition-colors flex items-center gap-px ${
             hasSelection ? 'text-primary font-bold text-[9px]' : 'text-outline hover:text-primary text-[9px]'
@@ -75,9 +101,11 @@ export default function ColumnFilter({
         </button>
       </div>
 
-      {open && (
-        <div className="absolute z-50 top-full left-0 w-full min-w-[180px] mt-0.5 bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto">
-
+      {open && pos && (
+        <div
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          className="bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto"
+        >
           {/* Todos — limpa seleção */}
           <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none">
             <input
