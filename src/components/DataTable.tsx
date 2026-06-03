@@ -248,7 +248,7 @@ export default function DataTable({ tableName, schema }: Props) {
       </div>
 
       {/* Table */}
-      <div className="bg-surface-container rounded border border-outline-variant overflow-hidden">
+      <div className="bg-surface-container rounded border border-outline-variant overflow-hidden min-h-[32rem]">
         {loading && (
           <div className="flex items-center justify-center py-16 text-outline gap-3">
             <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
