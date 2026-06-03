@@ -12,8 +12,9 @@ const TYPE_LABELS: Record<RollerType, string> = {
   unique: 'Único',
 }
 
+const ROLLER_GROUP_ID = '12'
+
 interface Equip     { legacy_id: number; name: string }
-interface Group     { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
 
 interface Props {
@@ -23,10 +24,8 @@ interface Props {
 
 export default function RollerTableModal({ onClose, onSaved }: Props) {
   const [equipments, setEquipments] = useState<Equip[]>([])
-  const [groups,     setGroups]     = useState<Group[]>([])
   const [allAcc,     setAllAcc]     = useState<Accessory[]>([])
   const [equipId,    setEquipId]    = useState('')
-  const [groupId,    setGroupId]    = useState('12')
   const [sel,        setSel]        = useState<Set<string>>(new Set())
   const [cfg,        setCfg]        = useState<Record<string, RollerType>>({})
   const [saving,     setSaving]     = useState(false)
@@ -35,25 +34,16 @@ export default function RollerTableModal({ onClose, onSaved }: Props) {
   useEffect(() => {
     Promise.all([
       fetch('/api/equipments?limit=25000').then(r => r.json()),
-      fetch('/api/accessory_groups?limit=25000').then(r => r.json()),
       fetch('/api/accessories?limit=25000').then(r => r.json()),
-    ]).then(([eq, gr, ac]) => {
+    ]).then(([eq, ac]) => {
       setEquipments(eq.data || [])
-      setGroups(gr.data || [])
       setAllAcc(ac.data || [])
     })
   }, [])
 
-  // When group filter changes, clear selection
-  const handleGroupChange = (gid: string) => {
-    setGroupId(gid)
-    setSel(new Set())
-    setCfg({})
-  }
-
   const accList = useMemo(
-    () => groupId ? allAcc.filter(a => String(a.legacy_group_id) === groupId) : allAcc,
-    [allAcc, groupId]
+    () => allAcc.filter(a => String(a.legacy_group_id) === ROLLER_GROUP_ID),
+    [allAcc]
   )
 
   const toggle = (code: string) => {
@@ -117,43 +107,25 @@ export default function RollerTableModal({ onClose, onSaved }: Props) {
 
         <div className="overflow-y-auto flex-1 px-7 py-6 flex flex-col gap-6">
 
-          {/* Equipment + Group filters */}
-          <div className="grid grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">
-                Equipamento
-              </label>
-              <select
-                value={equipId}
-                onChange={e => setEquipId(e.target.value)}
-                className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-              >
-                <option value="">Selecione o equipamento...</option>
-                {equipments.map(eq => (
-                  <option key={eq.legacy_id} value={eq.legacy_id}>{eq.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">
-                Filtrar por Grupo
-              </label>
-              <select
-                value={groupId}
-                onChange={e => handleGroupChange(e.target.value)}
-                className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-              >
-                <option value="">Todos os grupos</option>
-                {groups.map(g => (
-                  <option key={g.legacy_id} value={g.legacy_id}>{g.name}</option>
-                ))}
-              </select>
-            </div>
+          {/* Equipment selector */}
+          <div>
+            <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">
+              Equipamento
+            </label>
+            <select
+              value={equipId}
+              onChange={e => setEquipId(e.target.value)}
+              className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+            >
+              <option value="">Selecione o equipamento...</option>
+              {equipments.map(eq => (
+                <option key={eq.legacy_id} value={eq.legacy_id}>{eq.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Component list */}
           <ComponentBox
-            key={groupId}
             items={accList}
             selected={sel}
             cfg={cfg}
