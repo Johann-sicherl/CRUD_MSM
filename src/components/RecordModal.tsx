@@ -60,7 +60,13 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
           init[f.name] = String(v)
         }
       } else {
-        init[f.name] = f.defaultValue !== undefined ? String(f.defaultValue) : ''
+        if (f.defaultValue !== undefined) {
+          init[f.name] = String(f.defaultValue)
+        } else if (f.type === 'select' && !f.nullable && f.options?.length) {
+          init[f.name] = String(f.options[0])
+        } else {
+          init[f.name] = ''
+        }
       }
     }
     return init
