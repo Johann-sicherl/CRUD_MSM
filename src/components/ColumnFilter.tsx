@@ -85,6 +85,7 @@ export default function ColumnFilter({
           onFocus={openDropdown}
           onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
           placeholder={hasSelection ? `${selectedValues.length} sel.` : placeholder}
+          size={compact ? 1 : undefined}
           className={`w-full h-[1.75rem]${compact ? '' : ' min-w-[120px]'} bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
             hasSelection
               ? 'border-primary bg-primary/5 placeholder:text-primary placeholder:font-semibold'
