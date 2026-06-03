@@ -269,7 +269,7 @@ export default function DataTable({ tableName, schema }: Props) {
                 <thead className="bg-surface-container-highest border-b border-outline-variant">
                   <tr>
                     {listFields.map(f => (
-                      <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ` align-top${schema.compactColumns ? '' : ' min-w-[150px]'}` : ''}`}>
+                      <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ` align-top${schema.compactColumns && !f.listKeepWidth ? '' : ' min-w-[150px]'}` : ''}`}>
                         <div>{f.label}</div>
                         {schema.columnFilters && (
                           <div className="mt-1.5">
@@ -280,7 +280,7 @@ export default function DataTable({ tableName, schema }: Props) {
                               onToggleValue={v => handleToggleFilter(f.name, v)}
                               onClearValues={() => handleClearFilter(f.name)}
                               options={columnOptions[f.name] ?? []}
-                              compact={schema.compactColumns}
+                              compact={schema.compactColumns && !f.listKeepWidth}
                             />
                           </div>
                         )}
@@ -312,7 +312,7 @@ export default function DataTable({ tableName, schema }: Props) {
                             cell = <CellValue value={row[f.name]} type={f.type} />
                           }
                           return (
-                            <td key={f.name} className={`px-4 py-3 text-on-surface-variant whitespace-nowrap${schema.columnFilters && !schema.compactColumns ? ' min-w-[150px]' : ''}`}>
+                            <td key={f.name} className={`px-4 py-3 text-on-surface-variant whitespace-nowrap${schema.columnFilters && (!schema.compactColumns || f.listKeepWidth) ? ' min-w-[150px]' : ''}`}>
                               {cell}
                             </td>
                           )

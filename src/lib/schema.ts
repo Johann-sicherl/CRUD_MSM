@@ -57,6 +57,7 @@ export interface Field {
   hideInForm?: boolean
   formFullWidth?: boolean
   listExpand?: boolean       // truncate cell in list view and show expand/collapse button
+  listKeepWidth?: boolean    // preserve min-w even when table uses compactColumns
   listFilterType?: 'select' | 'text'  // override column filter style (default: select)
   dynamicOptions?: string    // key in /api/field-options; renders a managed select with + button
 }
@@ -226,6 +227,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     batchInsert: true,
     columnFilters: true,
+    compactColumns: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
@@ -247,7 +249,7 @@ export const tables: Record<string, TableSchema> = {
         listFilterType: 'text',
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
-      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0, listExpand: true,
+      { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0, listExpand: true, listKeepWidth: true,
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },
         fetchOptions: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' } },
       { name: 'operation_time', label: 'Tempo de Operação (min)', type: 'number', nullable: true },
