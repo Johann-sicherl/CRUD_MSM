@@ -26,7 +26,7 @@ export default function RollerTableModal({ onClose, onSaved }: Props) {
   const [groups,     setGroups]     = useState<Group[]>([])
   const [allAcc,     setAllAcc]     = useState<Accessory[]>([])
   const [equipId,    setEquipId]    = useState('')
-  const [groupId,    setGroupId]    = useState('')
+  const [groupId,    setGroupId]    = useState('12')
   const [sel,        setSel]        = useState<Set<string>>(new Set())
   const [cfg,        setCfg]        = useState<Record<string, RollerType>>({})
   const [saving,     setSaving]     = useState(false)
