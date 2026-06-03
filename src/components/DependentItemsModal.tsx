@@ -230,23 +230,29 @@ function TriggerBox({
   title: string; items: Accessory[]; selected: Set<string>
   onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void; empty: boolean
 }) {
-  const [filterCode, setFilterCode] = useState('')
-  const [filterName, setFilterName] = useState('')
+  const [codeSearch,   setCodeSearch]   = useState('')
+  const [codeSelected, setCodeSelected] = useState<string[]>([])
+  const [nameSearch,   setNameSearch]   = useState('')
+  const [nameSelected, setNameSelected] = useState<string[]>([])
 
-  const codeOptions = useMemo(() => {
-    const pass = filterName ? items.filter(a => a.name.toLowerCase().includes(filterName.toLowerCase())) : items
-    return [...new Set(pass.map(a => a.protheus_code))].sort()
-  }, [items, filterName])
+  const passesCode = (a: Accessory) =>
+    codeSelected.length > 0 ? codeSelected.includes(a.protheus_code)
+      : (!codeSearch || a.protheus_code.toLowerCase().includes(codeSearch.toLowerCase()))
+  const passesName = (a: Accessory) =>
+    nameSelected.length > 0 ? nameSelected.includes(a.name)
+      : (!nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()))
 
-  const nameOptions = useMemo(() => {
-    const pass = filterCode ? items.filter(a => a.protheus_code.toLowerCase().includes(filterCode.toLowerCase())) : items
-    return [...new Set(pass.map(a => a.name))].sort()
-  }, [items, filterCode])
+  const codeOptions = useMemo(() =>
+    [...new Set(items.filter(passesName).map(a => a.protheus_code))].sort()
+  , [items, nameSearch, nameSelected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const visible = useMemo(() => items.filter(a =>
-    (!filterCode || a.protheus_code.toLowerCase().includes(filterCode.toLowerCase())) &&
-    (!filterName || a.name.toLowerCase().includes(filterName.toLowerCase()))
-  ), [items, filterCode, filterName])
+  const nameOptions = useMemo(() =>
+    [...new Set(items.filter(passesCode).map(a => a.name))].sort()
+  , [items, codeSearch, codeSelected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visible = useMemo(() =>
+    items.filter(a => passesCode(a) && passesName(a))
+  , [items, codeSearch, codeSelected, nameSearch, nameSelected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allSel = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
 
@@ -270,11 +276,11 @@ function TriggerBox({
             </div>
             <div className="w-44 shrink-0 border-r border-outline-variant/30 px-2 py-2 flex flex-col gap-1.5">
               <span>Código</span>
-              <ColumnFilter value={filterCode} onChange={setFilterCode} onSelect={setFilterCode} options={codeOptions} placeholder="filtrar..." />
+              <ColumnFilter searchValue={codeSearch} onSearchChange={setCodeSearch} selectedValues={codeSelected} onToggleValue={v => setCodeSelected(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} onClearValues={() => setCodeSelected([])} options={codeOptions} />
             </div>
             <div className="flex-1 px-2 py-2 flex flex-col gap-1.5">
               <span>Nome</span>
-              <ColumnFilter value={filterName} onChange={setFilterName} onSelect={setFilterName} options={nameOptions} placeholder="filtrar..." />
+              <ColumnFilter searchValue={nameSearch} onSearchChange={setNameSearch} selectedValues={nameSelected} onToggleValue={v => setNameSelected(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} onClearValues={() => setNameSelected([])} options={nameOptions} />
             </div>
           </div>
           <div className="overflow-y-auto max-h-72 divide-y divide-outline-variant/20">
@@ -310,23 +316,29 @@ function DependentBox({
   onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void
   onCfgChange: (code: string, field: 'quantity' | 'factor', val: string) => void; empty: boolean
 }) {
-  const [filterCode, setFilterCode] = useState('')
-  const [filterName, setFilterName] = useState('')
+  const [codeSearch,   setCodeSearch]   = useState('')
+  const [codeSelected, setCodeSelected] = useState<string[]>([])
+  const [nameSearch,   setNameSearch]   = useState('')
+  const [nameSelected, setNameSelected] = useState<string[]>([])
 
-  const codeOptions = useMemo(() => {
-    const pass = filterName ? items.filter(a => a.name.toLowerCase().includes(filterName.toLowerCase())) : items
-    return [...new Set(pass.map(a => a.protheus_code))].sort()
-  }, [items, filterName])
+  const passesCode = (a: Accessory) =>
+    codeSelected.length > 0 ? codeSelected.includes(a.protheus_code)
+      : (!codeSearch || a.protheus_code.toLowerCase().includes(codeSearch.toLowerCase()))
+  const passesName = (a: Accessory) =>
+    nameSelected.length > 0 ? nameSelected.includes(a.name)
+      : (!nameSearch || a.name.toLowerCase().includes(nameSearch.toLowerCase()))
 
-  const nameOptions = useMemo(() => {
-    const pass = filterCode ? items.filter(a => a.protheus_code.toLowerCase().includes(filterCode.toLowerCase())) : items
-    return [...new Set(pass.map(a => a.name))].sort()
-  }, [items, filterCode])
+  const codeOptions = useMemo(() =>
+    [...new Set(items.filter(passesName).map(a => a.protheus_code))].sort()
+  , [items, nameSearch, nameSelected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const visible = useMemo(() => items.filter(a =>
-    (!filterCode || a.protheus_code.toLowerCase().includes(filterCode.toLowerCase())) &&
-    (!filterName || a.name.toLowerCase().includes(filterName.toLowerCase()))
-  ), [items, filterCode, filterName])
+  const nameOptions = useMemo(() =>
+    [...new Set(items.filter(passesCode).map(a => a.name))].sort()
+  , [items, codeSearch, codeSelected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visible = useMemo(() =>
+    items.filter(a => passesCode(a) && passesName(a))
+  , [items, codeSearch, codeSelected, nameSearch, nameSelected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectableVisible = visible.filter(a => !blockedCodes.has(a.protheus_code))
   const allSel = selectableVisible.length > 0 && selectableVisible.every(a => selected.has(a.protheus_code))
@@ -352,11 +364,11 @@ function DependentBox({
             </div>
             <div className="w-36 shrink-0 border-r border-outline-variant/30 px-2 py-2 flex flex-col gap-1.5">
               <span>Código</span>
-              <ColumnFilter value={filterCode} onChange={setFilterCode} onSelect={setFilterCode} options={codeOptions} placeholder="filtrar..." />
+              <ColumnFilter searchValue={codeSearch} onSearchChange={setCodeSearch} selectedValues={codeSelected} onToggleValue={v => setCodeSelected(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} onClearValues={() => setCodeSelected([])} options={codeOptions} />
             </div>
             <div className="flex-1 border-r border-outline-variant/30 px-2 py-2 flex flex-col gap-1.5">
               <span>Nome</span>
-              <ColumnFilter value={filterName} onChange={setFilterName} onSelect={setFilterName} options={nameOptions} placeholder="filtrar..." />
+              <ColumnFilter searchValue={nameSearch} onSearchChange={setNameSearch} selectedValues={nameSelected} onToggleValue={v => setNameSelected(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} onClearValues={() => setNameSelected([])} options={nameOptions} />
             </div>
             <div className="w-16 shrink-0 border-r border-outline-variant/30 px-2 py-2 text-center">
               <div>Qtd.</div>

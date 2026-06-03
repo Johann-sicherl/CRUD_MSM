@@ -42,17 +42,17 @@ function getDisplayValue(
 
 function applyFilters(
   rows: Record<string, unknown>[],
-  filters: Record<string, string>,
+  filters: Record<string, string[]>,
   fields: Field[],
   lookups: LookupMap,
 ): Record<string, unknown>[] {
-  const active = Object.entries(filters).filter(([, v]) => v !== '')
+  const active = Object.entries(filters).filter(([, v]) => v.length > 0)
   if (!active.length) return rows
   return rows.filter(row =>
-    active.every(([name, fv]) => {
+    active.every(([name, vals]) => {
       const field = fields.find(f => f.name === name)
       const display = getDisplayValue(row, name, field, lookups)
-      return display.toLowerCase().includes(fv.toLowerCase())
+      return vals.includes(display)
     })
   )
 }
@@ -72,27 +72,14 @@ export default function DataTable({ tableName, schema }: Props) {
   const [nonCombModal,    setNonCombModal]    = useState(false)
   const [depItemsModal,   setDepItemsModal]   = useState(false)
   const [rollerModal,     setRollerModal]     = useState(false)
-  const [colFilters, setColFilters] = useState<Record<string, string>>({})
-  // Separate input state for text filters — debounced before applying to colFilters
-  const [textInputs, setTextInputs] = useState<Record<string, string>>({})
+  // colFilters: selected values per column (multi-select checkboxes)
+  const [colFilters,    setColFilters]    = useState<Record<string, string[]>>({})
+  // filterSearch: text typed in each filter's search box (narrows dropdown, doesn't filter table)
+  const [filterSearch,  setFilterSearch]  = useState<Record<string, string>>({})
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
-  useEffect(() => { setColFilters({}); setTextInputs({}) }, [tableName])
-
-  // Debounce text filter inputs: wait 400ms after user stops typing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setColFilters(prev => {
-        const next = { ...prev }
-        for (const [name, val] of Object.entries(textInputs)) {
-          next[name] = val
-        }
-        return next
-      })
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [textInputs])
+  useEffect(() => { setColFilters({}); setFilterSearch({}) }, [tableName])
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -179,12 +166,17 @@ export default function DataTable({ tableName, schema }: Props) {
     return result
   }, [pageData, colFilters, lookups, listFields, schema.columnFilters])
 
-  const hasActiveColFilters = Object.values(textInputs).some(v => v !== '')
+  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
 
-  // Immediate update for dropdown selections (bypasses debounce)
-  const handleFilterSelect = useCallback((name: string, val: string) => {
-    setTextInputs(prev => ({ ...prev, [name]: val }))
-    setColFilters(prev => ({ ...prev, [name]: val }))
+  const handleToggleFilter = useCallback((name: string, val: string) => {
+    setColFilters(prev => {
+      const cur = prev[name] ?? []
+      return { ...prev, [name]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] }
+    })
+  }, [])
+
+  const handleClearFilter = useCallback((name: string) => {
+    setColFilters(prev => ({ ...prev, [name]: [] }))
   }, [])
 
   const handleSearch = () => setSearch(searchInput)
@@ -235,7 +227,7 @@ export default function DataTable({ tableName, schema }: Props) {
           )}
           {hasActiveColFilters && (
             <button
-              onClick={() => { setColFilters({}); setTextInputs({}) }}
+              onClick={() => { setColFilters({}); setFilterSearch({}) }}
               className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
             >
               ✕ Limpar filtros
@@ -282,9 +274,11 @@ export default function DataTable({ tableName, schema }: Props) {
                         {schema.columnFilters && (
                           <div className="mt-1.5">
                             <ColumnFilter
-                              value={textInputs[f.name] ?? ''}
-                              onChange={v => setTextInputs(prev => ({ ...prev, [f.name]: v }))}
-                              onSelect={v => handleFilterSelect(f.name, v)}
+                              searchValue={filterSearch[f.name] ?? ''}
+                              onSearchChange={v => setFilterSearch(prev => ({ ...prev, [f.name]: v }))}
+                              selectedValues={colFilters[f.name] ?? []}
+                              onToggleValue={v => handleToggleFilter(f.name, v)}
+                              onClearValues={() => handleClearFilter(f.name)}
                               options={columnOptions[f.name] ?? []}
                             />
                           </div>
