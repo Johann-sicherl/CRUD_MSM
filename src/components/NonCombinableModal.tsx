@@ -307,7 +307,7 @@ function AccBox({
           </div>
 
           {/* Items */}
-          <div className="overflow-y-auto max-h-72 divide-y divide-outline-variant/20">
+          <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
             ) : (

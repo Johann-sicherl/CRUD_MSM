@@ -266,7 +266,7 @@ function ComponentBox({
       </div>
 
       {/* Items */}
-      <div className="overflow-y-auto max-h-96 divide-y divide-outline-variant/20">
+      <div className="overflow-y-auto min-h-[22rem] max-h-96 divide-y divide-outline-variant/20">
         {visible.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-outline italic">Nenhum resultado</div>
         ) : (

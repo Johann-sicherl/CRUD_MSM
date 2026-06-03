@@ -283,7 +283,7 @@ function TriggerBox({
               <ColumnFilter searchValue={nameSearch} onSearchChange={setNameSearch} selectedValues={nameSelected} onToggleValue={v => setNameSelected(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} onClearValues={() => setNameSelected([])} options={nameOptions} />
             </div>
           </div>
-          <div className="overflow-y-auto max-h-72 divide-y divide-outline-variant/20">
+          <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
             ) : visible.map(a => (
@@ -381,7 +381,7 @@ function DependentBox({
           </div>
 
           {/* Items */}
-          <div className="overflow-y-auto max-h-72 divide-y divide-outline-variant/20">
+          <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
             ) : visible.map(a => {
