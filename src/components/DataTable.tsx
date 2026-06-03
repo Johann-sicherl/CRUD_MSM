@@ -269,7 +269,7 @@ export default function DataTable({ tableName, schema }: Props) {
                 <thead className="bg-surface-container-highest border-b border-outline-variant">
                   <tr>
                     {listFields.map(f => (
-                      <th key={f.name} className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono">
+                      <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ' min-w-[150px]' : ''}`}>
                         <div>{f.label}</div>
                         {schema.columnFilters && (
                           <div className="mt-1.5">

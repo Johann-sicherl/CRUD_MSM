@@ -57,7 +57,7 @@ export default function ColumnFilter({
           onFocus={() => setOpen(true)}
           onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
           placeholder={hasSelection ? `${selectedValues.length} sel.` : placeholder}
-          className={`w-full min-w-[72px] bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
+          className={`w-full min-w-[120px] bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
             hasSelection
               ? 'border-primary bg-primary/5 placeholder:text-primary placeholder:font-semibold'
               : 'border-outline-variant text-on-surface hover:border-outline placeholder:text-outline/40'
@@ -76,7 +76,7 @@ export default function ColumnFilter({
       </div>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 min-w-full mt-0.5 bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 w-full min-w-[180px] mt-0.5 bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto">
 
           {/* Todos — limpa seleção */}
           <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none">
