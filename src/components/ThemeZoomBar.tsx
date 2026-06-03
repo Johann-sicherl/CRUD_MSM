@@ -12,6 +12,7 @@ const THEMES = [
 const STEP    = 5    // percent per +/− click
 const MIN_PCT = 50
 const MAX_PCT = 150
+const MARGIN  = 40   // px buffer so the Ações column never clips at the edge
 
 function applyTheme(id: string) {
   document.documentElement.dataset.theme = id
@@ -20,25 +21,18 @@ function applyTheme(id: string) {
 
 export default function ThemeZoomBar() {
   const [theme,   setTheme]   = useState('cyberpunk')
-  // userPct: scale relative to auto-fit. 100 = auto-fit (all columns visible)
   const [userPct, setUserPct] = useState(100)
-  // baseZoom: CSS zoom fraction so all columns fit (e.g. 0.72 means 72% CSS zoom)
-  const baseZoomRef  = useRef(1)
-  const pathname     = usePathname()
+  const baseZoomRef     = useRef(1)
+  const autoFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pathname        = usePathname()
 
   /* ── Core auto-fit logic ─────────────────────────────────────────────────
-     KEY: main has overflow-auto and the table lives inside an overflow-x-auto
-     div. main.scrollWidth therefore equals main.clientWidth (the inner div
-     creates its own scroll context). We must read table.offsetWidth directly,
-     which reports the element's full layout width regardless of clipping.
-
-     Zoom formula: at zoom z, viewport CSS pixels = V/z (V = physical width).
-     Sidebar stays fixed at S CSS pixels. Table width T also stays fixed.
-     Need V/z - S >= T  →  z = V / (T + S)  where V = availW + sidebarW.   ─ */
+     Reset zoom to 100% first so measurements are in natural CSS pixels.
+     Two RAFs: first triggers layout reflow, second reads after paint.
+     MARGIN added to contentW so the rightmost column (Ações) never clips.  ─ */
   const autoFit = useCallback(() => {
     document.documentElement.style.zoom = '100%'
 
-    // Two RAFs: first triggers layout reflow, second reads after paint
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const mainEl = document.querySelector('main') as HTMLElement | null
@@ -47,15 +41,11 @@ export default function ThemeZoomBar() {
         const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not
         const availW   = mainEl.clientWidth   // visible main width at zoom=100%
 
-        // Measure widest <table> inside main — bypasses overflow-x-auto clipping
         const tables  = Array.from(mainEl.querySelectorAll('table')) as HTMLElement[]
         const tableW  = tables.reduce((mx, t) => Math.max(mx, t.offsetWidth), 0)
-        const contentW = tableW > 0 ? tableW : mainEl.scrollWidth
+        const contentW = (tableW > 0 ? tableW : mainEl.scrollWidth) + MARGIN
 
-        // Formula works both ways:
-        //  table too wide  → base < 1 → zoom out so table fits
-        //  table too narrow → base > 1 → zoom in so table fills available space
-        const V    = availW + sidebarW                         // true viewport width
+        const V    = availW + sidebarW
         const base = Math.min(
           MAX_PCT / 100,
           Math.max(MIN_PCT / 100, V / (contentW + sidebarW))
@@ -68,23 +58,33 @@ export default function ThemeZoomBar() {
     })
   }, [])
 
-  /* ── Re-auto-fit on route change (backup: 400ms for non-table pages) ─── */
-  useEffect(() => {
-    const t = setTimeout(() => autoFit(), 400)
-    return () => clearTimeout(t)
-  }, [pathname, autoFit])
-
-  /* ── Re-auto-fit when DataTable finishes loading real data ──────────────
-     setPageData triggers React re-render asynchronously. We defer by 100ms
-     so the DOM has been updated with the full table before we measure.    ─ */
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout>
-    const handler = () => { t = setTimeout(() => autoFit(), 100) }
-    window.addEventListener('datatable:loaded', handler)
-    return () => { window.removeEventListener('datatable:loaded', handler); clearTimeout(t) }
+  /* ── Shared debounce — cancels any pending call before scheduling a new one.
+     This ensures that route-change (400ms) and datatable:loaded (100ms) never
+     both fire: whichever arrives last wins, producing a single zoom update.  ─ */
+  const scheduleAutoFit = useCallback((delay: number) => {
+    if (autoFitTimerRef.current !== null) clearTimeout(autoFitTimerRef.current)
+    autoFitTimerRef.current = setTimeout(() => {
+      autoFitTimerRef.current = null
+      autoFit()
+    }, delay)
   }, [autoFit])
 
-  /* ── Restore theme from localStorage on mount ───────────────────────── */
+  /* ── Re-auto-fit on route change (fallback for pages with no table) ─────── */
+  useEffect(() => {
+    scheduleAutoFit(400)
+    return () => {
+      if (autoFitTimerRef.current !== null) clearTimeout(autoFitTimerRef.current)
+    }
+  }, [pathname, scheduleAutoFit])
+
+  /* ── Re-auto-fit when DataTable finishes loading real data ──────────────── */
+  useEffect(() => {
+    const handler = () => scheduleAutoFit(100)
+    window.addEventListener('datatable:loaded', handler)
+    return () => window.removeEventListener('datatable:loaded', handler)
+  }, [scheduleAutoFit])
+
+  /* ── Restore theme from localStorage on mount ───────────────────────────── */
   useEffect(() => {
     const t = localStorage.getItem('app-theme') ?? 'cyberpunk'
     setTheme(t)
