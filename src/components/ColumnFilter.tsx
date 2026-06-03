@@ -12,6 +12,7 @@ export default function ColumnFilter({
   onClearValues,
   options,
   placeholder = 'filtrar...',
+  compact = false,
 }: {
   searchValue: string
   onSearchChange: (v: string) => void
@@ -20,6 +21,7 @@ export default function ColumnFilter({
   onClearValues: () => void
   options: string[]
   placeholder?: string
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<DropdownPos | null>(null)
@@ -74,7 +76,7 @@ export default function ColumnFilter({
   }
 
   return (
-    <div ref={ref} className="relative min-w-[160px]">
+    <div ref={ref} className={`relative${compact ? '' : ' min-w-[160px]'}`}>
       <div className="relative">
         <input
           type="text"
@@ -83,7 +85,7 @@ export default function ColumnFilter({
           onFocus={openDropdown}
           onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
           placeholder={hasSelection ? `${selectedValues.length} sel.` : placeholder}
-          className={`w-full min-w-[120px] h-[1.75rem] bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
+          className={`w-full h-[1.75rem]${compact ? '' : ' min-w-[120px]'} bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
             hasSelection
               ? 'border-primary bg-primary/5 placeholder:text-primary placeholder:font-semibold'
               : 'border-outline-variant text-on-surface hover:border-outline placeholder:text-outline/40'

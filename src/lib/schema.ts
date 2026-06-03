@@ -71,6 +71,7 @@ export interface TableSchema {
   doubleInsert?: boolean
   batchInsert?: boolean
   columnFilters?: boolean   // show per-column filter inputs in the list header
+  compactColumns?: boolean  // auto-fit column widths to content instead of fixed min-w
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
@@ -98,6 +99,7 @@ export const tables: Record<string, TableSchema> = {
     hasTimestamps: true,
     orderBy: 'legacy_id',
     columnFilters: true,
+    compactColumns: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Leg.', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
