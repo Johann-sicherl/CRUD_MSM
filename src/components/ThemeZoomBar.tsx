@@ -52,15 +52,14 @@ export default function ThemeZoomBar() {
         const tableW  = tables.reduce((mx, t) => Math.max(mx, t.offsetWidth), 0)
         const contentW = tableW > 0 ? tableW : mainEl.scrollWidth
 
-        if (contentW <= availW) {
-          baseZoomRef.current = 1
-          setUserPct(100)
-          document.documentElement.style.zoom = '100%'
-          return
-        }
-
+        // Formula works both ways:
+        //  table too wide  → base < 1 → zoom out so table fits
+        //  table too narrow → base > 1 → zoom in so table fills available space
         const V    = availW + sidebarW                         // true viewport width
-        const base = Math.max(MIN_PCT / 100, V / (contentW + sidebarW))
+        const base = Math.min(
+          MAX_PCT / 100,
+          Math.max(MIN_PCT / 100, V / (contentW + sidebarW))
+        )
 
         baseZoomRef.current = base
         setUserPct(100)
