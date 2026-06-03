@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 
 const THEMES = [
-  { id: 'cyberpunk', label: 'Ciberpunk',      bg: '#0d0e12', accent: '#fabd00' },
-  { id: 'cinza',     label: 'Cinza & Amarelo', bg: '#181818', accent: '#fabd00' },
-  { id: 'luz',       label: 'Luz',             bg: '#f5f2e8', accent: '#9a6e00' },
+  { id: 'cyberpunk', label: 'Ciberpunk',       bg: '#0d0e12', accent: '#fabd00' },
+  { id: 'cinza',     label: 'Cinza & Amarelo',  bg: '#181818', accent: '#fabd00' },
+  { id: 'luz',       label: 'Luz',              bg: '#f5f2e8', accent: '#9a6e00' },
 ]
 
-const STEP    = 5   // percent per +/− click
+const STEP    = 5    // percent per +/− click
 const MIN_PCT = 50
 const MAX_PCT = 150
 
@@ -20,43 +20,63 @@ function applyTheme(id: string) {
 
 export default function ThemeZoomBar() {
   const [theme,   setTheme]   = useState('cyberpunk')
-  // userPct: scale relative to auto-fit. 100 = auto-fit (all columns visible).
+  // userPct: scale relative to auto-fit. 100 = auto-fit (all columns visible)
   const [userPct, setUserPct] = useState(100)
-  // baseZoom: the absolute CSS zoom fraction that makes all columns fit (e.g. 0.72)
-  const baseZoomRef = useRef(1)
-  const pathname    = usePathname()
+  // baseZoom: CSS zoom fraction so all columns fit (e.g. 0.72 means 72% CSS zoom)
+  const baseZoomRef  = useRef(1)
+  const pathname     = usePathname()
 
-  /* ── Calculate auto-fit zoom so all columns (incl. Ações) fit on screen ── */
+  /* ── Core auto-fit logic ─────────────────────────────────────────────────
+     Measures at CSS zoom=100% so values are in natural pixel space.
+     Uses sidebar offsetLeft in the formula so the sidebar width doesn't
+     compress the available area incorrectly when zoomed.              ─── */
   const autoFit = useCallback(() => {
-    // Reset to 100% so DOM measurements are in natural pixel space
     document.documentElement.style.zoom = '100%'
 
     // Two RAFs: first triggers reflow, second measures after paint
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const main = document.querySelector('main')
-        if (!main) return
+        const mainEl = document.querySelector('main')
+        if (!mainEl) return
 
-        const availW   = main.clientWidth
-        const contentW = main.scrollWidth
+        const sidebarW = (mainEl as HTMLElement).offsetLeft  // 256 pinned, 0 unpinned
+        const availW   = mainEl.clientWidth                  // visible width of main
+        const contentW = mainEl.scrollWidth                  // total content width
 
-        const base = contentW > availW
-          ? Math.max(MIN_PCT / 100, availW / contentW)
-          : 1
+        if (contentW <= availW) {
+          // Everything fits — keep at 100% CSS (base = 1)
+          baseZoomRef.current = 1
+          setUserPct(100)
+          return
+        }
 
+        // Correct formula: accounts for the fact that zooming out expands the
+        // viewport CSS-pixel space while the sidebar stays fixed in CSS pixels.
+        const base = Math.max(
+          MIN_PCT / 100,
+          (availW + sidebarW) / (contentW + sidebarW)
+        )
         baseZoomRef.current = base
-        setUserPct(100)                                  // display always resets to 100%
+        setUserPct(100)                                       // always reset to 100%
         document.documentElement.style.zoom = `${base * 100}%`
       })
     })
   }, [])
 
-  /* ── Re-auto-fit on every route change (and on first mount) ─────────────── */
+  /* ── Re-auto-fit on route change (backup: 400ms for non-table pages) ─── */
   useEffect(() => {
-    autoFit()
+    const t = setTimeout(() => autoFit(), 400)
+    return () => clearTimeout(t)
   }, [pathname, autoFit])
 
-  /* ── Restore theme from localStorage on mount ───────────────────────────── */
+  /* ── Re-auto-fit when DataTable finishes loading real data ───────────── */
+  useEffect(() => {
+    const handler = () => autoFit()
+    window.addEventListener('datatable:loaded', handler)
+    return () => window.removeEventListener('datatable:loaded', handler)
+  }, [autoFit])
+
+  /* ── Restore theme from localStorage on mount ───────────────────────── */
   useEffect(() => {
     const t = localStorage.getItem('app-theme') ?? 'cyberpunk'
     setTheme(t)
@@ -103,7 +123,7 @@ export default function ThemeZoomBar() {
         ))}
       </div>
 
-      {/* Zoom control — 100% always = full table visible */}
+      {/* Zoom — 100% always means all columns visible */}
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] uppercase tracking-widest text-outline/60">Zoom</span>
         <button

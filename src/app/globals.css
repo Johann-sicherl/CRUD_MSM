@@ -96,7 +96,7 @@
   html { font-size: 13px; }
   body {
     @apply bg-background text-on-surface font-sans;
-    font-weight: 500;
+    font-weight: 600;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }

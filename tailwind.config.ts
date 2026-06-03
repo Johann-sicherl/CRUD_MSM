@@ -36,12 +36,14 @@ const config: Config = {
         sans: ['Inter', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
-      // Shift all font weights one step heavier globally
+      // Shift all font weights heavier so text is noticeably bolder everywhere
       fontWeight: {
-        normal:    '500',
-        medium:    '600',
-        semibold:  '700',
-        bold:      '800',
+        thin:      '300',
+        light:     '400',
+        normal:    '600',
+        medium:    '700',
+        semibold:  '800',
+        bold:      '900',
         extrabold: '900',
       },
       spacing: {
