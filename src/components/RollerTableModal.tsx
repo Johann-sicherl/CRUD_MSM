@@ -226,7 +226,7 @@ function ComponentBox({
   const allSel = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
 
   return (
-    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden">
+    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[32rem]">
 
       {/* Box header */}
       <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">

@@ -257,7 +257,7 @@ function TriggerBox({
   const allSel = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
 
   return (
-    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden">
+    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[28rem]">
       <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">
         <span className="text-xs font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
         <div className="flex items-center gap-2 text-xs">
@@ -344,7 +344,7 @@ function DependentBox({
   const allSel = selectableVisible.length > 0 && selectableVisible.every(a => selected.has(a.protheus_code))
 
   return (
-    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden">
+    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[28rem]">
       <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">
         <span className="text-xs font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
         <div className="flex items-center gap-2 text-xs">
