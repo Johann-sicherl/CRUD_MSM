@@ -1,19 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 const THEMES = [
   { id: 'cyberpunk', label: 'Ciberpunk',       bg: '#0d0e12', accent: '#fabd00' },
-  { id: 'amarelo',   label: 'Amarelo & Branco', bg: '#f5f0e0', accent: '#c8800a' },
-  { id: 'salvia',    label: 'Verde Salvia',     bg: '#f2f7f4', accent: '#3d7a50' },
-  { id: 'ardosia',   label: 'Azul Ardósia',     bg: '#f3f5fa', accent: '#3a5f9c' },
+  { id: 'azul',      label: 'Ciberpunk Azul',  bg: '#060c18', accent: '#00c8f0' },
+  { id: 'cinza',     label: 'Cinza & Amarelo',  bg: '#181818', accent: '#fabd00' },
 ]
 
-const ZOOM_STEPS = [80, 90, 100, 110, 120, 130]
+const MIN_ZOOM = 50
+const MAX_ZOOM = 130
+const STEP     = 5
 
 function applyTheme(id: string) {
   document.documentElement.dataset.theme = id
-  document.documentElement.style.colorScheme = id === 'cyberpunk' ? 'dark' : 'light'
+  document.documentElement.style.colorScheme = 'dark'
 }
 
 function applyZoom(z: number) {
@@ -24,14 +25,51 @@ export default function ThemeZoomBar() {
   const [theme, setTheme] = useState('cyberpunk')
   const [zoom,  setZoom]  = useState(100)
 
-  useEffect(() => {
-    const t = localStorage.getItem('app-theme') ?? 'cyberpunk'
-    const z = Number(localStorage.getItem('app-zoom') ?? '100')
-    setTheme(t)
-    setZoom(z)
-    applyTheme(t)
-    applyZoom(z)
+  /* ── Auto-fit: set zoom so all table columns fit within main area ─────── */
+  const autoFit = useCallback(() => {
+    // 1. Reset to 100% so measurements are in natural pixel space
+    document.documentElement.style.zoom = '100%'
+
+    // 2. Two frames: first triggers reflow, second measures after paint
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const main = document.querySelector('main')
+        if (!main) return
+
+        const availW   = main.clientWidth   // visible area width at 100% zoom
+        const contentW = main.scrollWidth   // total content width at 100% zoom
+
+        if (contentW <= availW) {
+          setZoom(100)
+          localStorage.setItem('app-zoom', '100')
+          return
+        }
+
+        const z = Math.max(MIN_ZOOM, Math.round((availW / contentW) * 100))
+        applyZoom(z)
+        setZoom(z)
+        localStorage.setItem('app-zoom', String(z))
+      })
+    })
   }, [])
+
+  /* ── Init from localStorage ─────────────────────────────────────────────── */
+  useEffect(() => {
+    const t         = localStorage.getItem('app-theme') ?? 'cyberpunk'
+    const savedZoom = localStorage.getItem('app-zoom')
+
+    setTheme(t)
+    applyTheme(t)
+
+    if (savedZoom) {
+      const z = Number(savedZoom)
+      setZoom(z)
+      applyZoom(z)
+    } else {
+      // No saved zoom: auto-fit on first visit
+      autoFit()
+    }
+  }, [autoFit])
 
   const handleTheme = (id: string) => {
     setTheme(id)
@@ -40,11 +78,12 @@ export default function ThemeZoomBar() {
   }
 
   const handleZoom = (delta: number) => {
-    const idx  = ZOOM_STEPS.indexOf(zoom)
-    const next = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, idx + delta))]
-    setZoom(next)
-    applyZoom(next)
-    localStorage.setItem('app-zoom', String(next))
+    setZoom(prev => {
+      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + delta))
+      applyZoom(next)
+      localStorage.setItem('app-zoom', String(next))
+      return next
+    })
   }
 
   return (
@@ -65,7 +104,7 @@ export default function ThemeZoomBar() {
             }`}
           >
             <span
-              className="w-3 h-3 rounded-full shrink-0 border border-black/10"
+              className="w-3 h-3 rounded-full shrink-0 border border-white/10"
               style={{ background: `linear-gradient(135deg, ${th.bg} 50%, ${th.accent} 50%)` }}
             />
             {th.label}
@@ -77,14 +116,21 @@ export default function ThemeZoomBar() {
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] uppercase tracking-widest text-outline/60">Zoom</span>
         <button
-          onClick={() => handleZoom(-1)}
-          disabled={zoom <= ZOOM_STEPS[0]}
+          onClick={autoFit}
+          title="Ajustar zoom para caber todas as colunas na tela"
+          className="px-2 py-0.5 rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline transition-colors text-[9px] uppercase tracking-wider"
+        >
+          Auto
+        </button>
+        <button
+          onClick={() => handleZoom(-STEP)}
+          disabled={zoom <= MIN_ZOOM}
           className="w-5 h-5 flex items-center justify-center rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline disabled:opacity-30 transition-colors text-sm leading-none"
         >−</button>
-        <span className="w-8 text-center text-primary font-semibold">{zoom}%</span>
+        <span className="w-9 text-center text-primary font-semibold">{zoom}%</span>
         <button
-          onClick={() => handleZoom(1)}
-          disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]}
+          onClick={() => handleZoom(+STEP)}
+          disabled={zoom >= MAX_ZOOM}
           className="w-5 h-5 flex items-center justify-center rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline disabled:opacity-30 transition-colors text-sm leading-none"
         >+</button>
       </div>

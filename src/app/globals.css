@@ -7,7 +7,7 @@
 /* alpha modifier syntax works: rgb(var(--c-primary) / 0.2)                   */
 
 :root {
-  /* Ciberpunk — dark default */
+  /* ── Ciberpunk Dourado — dark default ─────────────────────────────────── */
   color-scheme: dark;
   --scan-visible: 1;
 
@@ -34,88 +34,60 @@
   --c-on-error-container:        255 218 214;
 }
 
-/* ── Amarelo & Branco ─────────────────────────────────────────────────────── */
-[data-theme="amarelo"] {
-  color-scheme: light;
-  --scan-visible: 0;
+/* ── Ciberpunk Azul — deep blue + electric cyan ───────────────────────────── */
+[data-theme="azul"] {
+  color-scheme: dark;
+  --scan-visible: 1;
 
-  --c-primary:                   200 128 10;
-  --c-on-primary:                255 255 255;
-  --c-primary-container:         255 214 128;
-  --c-secondary:                 122 108 80;
-  --c-on-secondary:              255 255 255;
-  --c-secondary-container:       232 217 176;
-  --c-surface:                   255 255 255;
-  --c-on-surface:                28 24 0;
-  --c-surface-variant:           240 232 204;
-  --c-on-surface-variant:        74 62 32;
-  --c-outline:                   139 112 64;
-  --c-outline-variant:           212 192 144;
-  --c-background:                245 240 224;
-  --c-surface-container-lowest:  255 248 224;
-  --c-surface-container-low:     250 244 224;
-  --c-surface-container:         240 232 204;
-  --c-surface-container-high:    232 223 192;
-  --c-surface-container-highest: 223 212 176;
-  --c-error:                     179 38 30;
-  --c-error-container:           249 222 220;
-  --c-on-error-container:        65 14 11;
+  --c-primary:                   0 200 240;
+  --c-on-primary:                0 26 36;
+  --c-primary-container:         0 144 184;
+  --c-secondary:                 112 144 192;
+  --c-on-secondary:              8 16 32;
+  --c-secondary-container:       26 40 72;
+  --c-surface:                   12 18 32;
+  --c-on-surface:                200 228 240;
+  --c-surface-variant:           24 40 64;
+  --c-on-surface-variant:        122 170 200;
+  --c-outline:                   48 88 120;
+  --c-outline-variant:           24 40 64;
+  --c-background:                6 12 24;
+  --c-surface-container-lowest:  6 12 24;
+  --c-surface-container-low:     10 16 32;
+  --c-surface-container:         14 22 44;
+  --c-surface-container-high:    20 32 56;
+  --c-surface-container-highest: 28 44 80;
+  --c-error:                     255 128 144;
+  --c-error-container:           96 0 32;
+  --c-on-error-container:        255 216 224;
 }
 
-/* ── Verde Salvia ─────────────────────────────────────────────────────────── */
-[data-theme="salvia"] {
-  color-scheme: light;
-  --scan-visible: 0;
+/* ── Cinza & Amarelo — neutral grays + white text + yellow ────────────────── */
+[data-theme="cinza"] {
+  color-scheme: dark;
+  --scan-visible: 1;
 
-  --c-primary:                   61 122 80;
-  --c-on-primary:                255 255 255;
-  --c-primary-container:         188 223 200;
-  --c-secondary:                 78 104 85;
-  --c-on-secondary:              255 255 255;
-  --c-secondary-container:       206 234 219;
-  --c-surface:                   255 255 255;
-  --c-on-surface:                12 31 20;
-  --c-surface-variant:           219 232 223;
-  --c-on-surface-variant:        56 78 62;
-  --c-outline:                   90 122 98;
-  --c-outline-variant:           180 207 192;
-  --c-background:                242 247 244;
-  --c-surface-container-lowest:  238 245 240;
-  --c-surface-container-low:     245 250 247;
-  --c-surface-container:         232 240 235;
-  --c-surface-container-high:    221 232 226;
-  --c-surface-container-highest: 209 224 216;
-  --c-error:                     179 38 30;
-  --c-error-container:           249 222 220;
-  --c-on-error-container:        65 14 11;
-}
-
-/* ── Azul Ardósia ─────────────────────────────────────────────────────────── */
-[data-theme="ardosia"] {
-  color-scheme: light;
-  --scan-visible: 0;
-
-  --c-primary:                   58 95 156;
-  --c-on-primary:                255 255 255;
-  --c-primary-container:         197 213 240;
-  --c-secondary:                 74 88 128;
-  --c-on-secondary:              255 255 255;
-  --c-secondary-container:       208 217 240;
-  --c-surface:                   255 255 255;
-  --c-on-surface:                13 22 40;
-  --c-surface-variant:           220 227 245;
-  --c-on-surface-variant:        56 71 108;
-  --c-outline:                   96 112 160;
-  --c-outline-variant:           184 196 223;
-  --c-background:                243 245 250;
-  --c-surface-container-lowest:  238 241 250;
-  --c-surface-container-low:     245 247 252;
-  --c-surface-container:         232 236 247;
-  --c-surface-container-high:    221 225 242;
-  --c-surface-container-highest: 210 215 236;
-  --c-error:                     179 38 30;
-  --c-error-container:           249 222 220;
-  --c-on-error-container:        65 14 11;
+  --c-primary:                   250 189 0;
+  --c-on-primary:                26 20 0;
+  --c-primary-container:         224 168 0;
+  --c-secondary:                 192 192 176;
+  --c-on-secondary:              28 28 16;
+  --c-secondary-container:       72 72 64;
+  --c-surface:                   35 35 35;
+  --c-on-surface:                248 248 248;
+  --c-surface-variant:           51 51 51;
+  --c-on-surface-variant:        200 200 184;
+  --c-outline:                   132 132 132;
+  --c-outline-variant:           72 72 72;
+  --c-background:                24 24 24;
+  --c-surface-container-lowest:  20 20 20;
+  --c-surface-container-low:     30 30 30;
+  --c-surface-container:         40 40 40;
+  --c-surface-container-high:    50 50 50;
+  --c-surface-container-highest: 60 60 60;
+  --c-error:                     255 128 128;
+  --c-error-container:           88 0 0;
+  --c-on-error-container:        255 218 214;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
