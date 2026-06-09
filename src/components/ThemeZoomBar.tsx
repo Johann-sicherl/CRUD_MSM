@@ -12,7 +12,8 @@ const THEMES = [
 const STEP    = 5    // percent per +/− click
 const MIN_PCT = 50
 const MAX_PCT = 150
-const MARGIN  = 40   // px buffer so the Ações column never clips at the edge
+// Page wrapper uses p-8 (32px × 2 sides = 64px). Add 16px visual buffer → 80px total.
+const MARGIN  = 80
 
 function applyTheme(id: string) {
   document.documentElement.dataset.theme = id
@@ -28,15 +29,19 @@ export default function ThemeZoomBar() {
   const pathname        = usePathname()
 
   /* ── Core auto-fit logic ─────────────────────────────────────────────────
-     1. Increment generation so any in-flight RAF chain from a prior call aborts.
-     2. Reset zoom to 100% so all measurements are in natural CSS pixels.
-     3. Two RAFs: first triggers reflow, second reads stable post-paint geometry.
-     4. If no <table> is present (page is loading or has no table), reset to 100%
-        and bail — this prevents applying a wrong zoom calculated from scrollWidth.
-     5. MARGIN added to contentW so the Ações column never clips at the edge.    ─ */
+     No zoom reset: read the current zoom from the DOM, derive the physical
+     viewport width (W_p), then compute the target in one shot.
+     This eliminates the visible "zoom-out → zoom-in" trembling that happened
+     when we first reset to 100% and then snapped to the fit value.
+
+     Math: CSS `zoom` on <html> scales the initial containing block.
+       main.clientWidth  (CSS px) = W_p / curZ − sidebarW
+       →  W_p = (main.clientWidth + sidebarW) × curZ
+       target base = W_p / (tableW + MARGIN + sidebarW)
+
+     fitGenRef prevents stale RAF chains from overwriting a newer fit.      ─ */
   const autoFit = useCallback(() => {
     const gen = ++fitGenRef.current
-    document.documentElement.style.zoom = '100%'
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -48,23 +53,23 @@ export default function ThemeZoomBar() {
         const tables  = Array.from(mainEl.querySelectorAll('table')) as HTMLElement[]
         const tableW  = tables.reduce((mx, t) => Math.max(mx, t.offsetWidth), 0)
 
-        // No table yet (loading state or table-free page) — stay at 100%
+        // No table (loading state or table-free page like dashboard) → reset to 100%
         if (tableW === 0) {
           baseZoomRef.current = 1
           setUserPct(100)
+          document.documentElement.style.zoom = '100%'
           return
         }
 
-        const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not
-        const availW   = mainEl.clientWidth   // visible main width at zoom=100%
+        const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not (zoom-independent CSS px)
+        // Current zoom factor — read directly from DOM to stay accurate across all callers
+        const curZ     = parseFloat(document.documentElement.style.zoom) / 100 || 1
+        const W_p      = (mainEl.clientWidth + sidebarW) * curZ   // physical viewport width
         const contentW = tableW + MARGIN
 
-        // zoom that makes the table fill exactly the available area, accounting
-        // for the sidebar also scaling with CSS zoom (position: fixed scales too)
-        const V    = availW + sidebarW
         const base = Math.min(
           MAX_PCT / 100,
-          Math.max(MIN_PCT / 100, V / (contentW + sidebarW))
+          Math.max(MIN_PCT / 100, W_p / (contentW + sidebarW))
         )
 
         baseZoomRef.current = base
