@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 interface DropdownPos { top: number; left: number; width: number }
 
@@ -23,47 +24,62 @@ export default function ColumnFilter({
   placeholder?: string
   compact?: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<DropdownPos | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
+  const [open, setOpen]     = useState(false)
+  const [pos, setPos]       = useState<DropdownPos | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const triggerRef  = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const openDropdown = useCallback(() => {
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect()
-      setPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 220) })
-    }
-    setOpen(true)
+  useEffect(() => { setMounted(true) }, [])
+
+  const calcPos = useCallback((): DropdownPos | null => {
+    if (!triggerRef.current) return null
+    const r = triggerRef.current.getBoundingClientRect()
+    const w = Math.max(r.width, 220)
+    // Flip left when dropdown would overflow the viewport on the right
+    const left = r.left + w > window.innerWidth
+      ? Math.max(0, r.right - w)
+      : r.left
+    return { top: r.bottom + 2, left, width: w }
   }, [])
 
+  const openDropdown = useCallback(() => {
+    const p = calcPos()
+    if (p) setPos(p)
+    setOpen(true)
+  }, [calcPos])
+
+  // Close when click lands outside BOTH the trigger and the portal dropdown
   useEffect(() => {
     if (!open) return
     const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (triggerRef.current?.contains(e.target as Node)) return
+      if (dropdownRef.current?.contains(e.target as Node)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [open])
 
-  // Reposition on scroll/resize while open
+  // Keep dropdown aligned when the page scrolls or window resizes
   useEffect(() => {
     if (!open) return
     const update = () => {
-      if (ref.current) {
-        const r = ref.current.getBoundingClientRect()
-        setPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 220) })
-      }
+      const p = calcPos()
+      if (p) setPos(p)
     }
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
-    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update) }
-  }, [open])
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open, calcPos])
 
   const hasSelection = selectedValues.length > 0
-
   const filtered = options.filter(o =>
     !searchValue || o.toLowerCase().includes(searchValue.toLowerCase())
   )
-
   const allFilteredSelected =
     filtered.length > 0 && filtered.every(o => selectedValues.includes(o))
 
@@ -75,8 +91,70 @@ export default function ColumnFilter({
     }
   }
 
+  // Rendered into document.body via portal — fully escapes overflow/stacking context
+  const dropdown = open && pos && mounted ? createPortal(
+    <div
+      ref={dropdownRef}
+      style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+      className="bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto"
+    >
+      {/* Todos — clears selection */}
+      <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={!hasSelection}
+          onChange={() => { if (hasSelection) onClearValues() }}
+          className="accent-primary"
+        />
+        <span className={`font-mono ${!hasSelection ? 'text-primary font-semibold' : 'text-outline'}`}>
+          — Todos —
+        </span>
+      </label>
+
+      {/* Select / deselect all visible */}
+      {filtered.length > 1 && (
+        <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/20 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={toggleAllFiltered}
+            className="accent-primary"
+          />
+          <span className="font-mono text-outline italic">
+            {allFilteredSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+          </span>
+        </label>
+      )}
+
+      {filtered.length === 0 ? (
+        <div className="px-2.5 py-1.5 text-[10px] text-outline italic">Sem resultados</div>
+      ) : (
+        filtered.map(opt => {
+          const checked = selectedValues.includes(opt)
+          return (
+            <label
+              key={opt}
+              className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high cursor-pointer select-none ${checked ? 'bg-primary/5' : ''}`}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggleValue(opt)}
+                className="accent-primary"
+              />
+              <span className={`font-mono truncate ${checked ? 'text-primary font-semibold' : 'text-on-surface-variant'}`}>
+                {opt}
+              </span>
+            </label>
+          )
+        })
+      )}
+    </div>,
+    document.body
+  ) : null
+
   return (
-    <div ref={ref} className={`relative${compact ? '' : ' min-w-[160px]'}`}>
+    <div ref={triggerRef} className={`relative${compact ? '' : ' min-w-[160px]'}`}>
       <div className="relative">
         <input
           type="text"
@@ -103,65 +181,7 @@ export default function ColumnFilter({
           <span>▾</span>
         </button>
       </div>
-
-      {open && pos && (
-        <div
-          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
-          className="bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto"
-        >
-          {/* Todos — limpa seleção */}
-          <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={!hasSelection}
-              onChange={() => { if (hasSelection) onClearValues() }}
-              className="accent-primary"
-            />
-            <span className={`font-mono ${!hasSelection ? 'text-primary font-semibold' : 'text-outline'}`}>
-              — Todos —
-            </span>
-          </label>
-
-          {/* Selecionar / desmarcar todos visíveis */}
-          {filtered.length > 1 && (
-            <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/20 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={allFilteredSelected}
-                onChange={toggleAllFiltered}
-                className="accent-primary"
-              />
-              <span className="font-mono text-outline italic">
-                {allFilteredSelected ? 'Desmarcar todos' : 'Selecionar todos'}
-              </span>
-            </label>
-          )}
-
-          {filtered.length === 0 ? (
-            <div className="px-2.5 py-1.5 text-[10px] text-outline italic">Sem resultados</div>
-          ) : (
-            filtered.map(opt => {
-              const checked = selectedValues.includes(opt)
-              return (
-                <label
-                  key={opt}
-                  className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high cursor-pointer select-none ${checked ? 'bg-primary/5' : ''}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => onToggleValue(opt)}
-                    className="accent-primary"
-                  />
-                  <span className={`font-mono truncate ${checked ? 'text-primary font-semibold' : 'text-on-surface-variant'}`}>
-                    {opt}
-                  </span>
-                </label>
-              )
-            })
-          )}
-        </div>
-      )}
+      {dropdown}
     </div>
   )
 }
