@@ -246,7 +246,7 @@ export const tables: Record<string, TableSchema> = {
         listFilterType: 'text',
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'operation_time', label: 'Tempo de Operação (min)', type: 'number', nullable: true },
-      { name: 'maximum_quantity', label: 'Qtd. Máxima', type: 'number', nullable: false, defaultValue: 1 },
+      { name: 'maximum_quantity', label: 'Qtd. Máxima', type: 'number', nullable: true },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'inactive'], showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
@@ -309,6 +309,8 @@ export const tables: Record<string, TableSchema> = {
       { name: 'protheus_item_code', label: 'Cód. Dependente', type: 'text', nullable: false, showInList: true, listFilterType: 'text' },
       { name: 'nome_dependente', label: 'Nome Dependente', type: 'text', nullable: true, showInList: true, hideInForm: true, listFilterType: 'text',
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_item_code' } },
+      { name: 'name',        label: 'Nome',      type: 'text',     nullable: false },
+      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'group_name_dep', label: 'Grupo Dependente', type: 'text', nullable: true, showInList: true, hideInForm: true,
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_item_code',
           through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } } },
@@ -396,8 +398,12 @@ export const tables: Record<string, TableSchema> = {
       { name: 'customized', label: 'Customizado?', type: 'boolean', nullable: false, defaultValue: false },
       { name: 'exported', label: 'Exportado?', type: 'boolean', nullable: false, defaultValue: false },
       { name: 'origin', label: 'Origem', type: 'select', nullable: false, options: ['user', 'combination', 'rule'] },
-      { name: 'observations', label: 'Observações', type: 'textarea', nullable: true },
-      { name: 'price', label: 'Preço (R$)', type: 'decimal', nullable: true },
+      { name: 'observations',   label: 'Observações',           type: 'textarea', nullable: true },
+      { name: 'price',          label: 'Preço (R$)',             type: 'decimal',  nullable: true },
+      { name: 'item_id',        label: 'ID Item',               type: 'text',     nullable: true },
+      { name: 'parent_item_id', label: 'ID Item Pai',           type: 'text',     nullable: true },
+      { name: 'suggested_price',label: 'Preço Sugerido (JSON)', type: 'jsonb',    nullable: true },
+      { name: 'selling_price',  label: 'Preço de Venda (JSON)', type: 'jsonb',    nullable: true },
     ],
   },
 
@@ -420,6 +426,28 @@ export const tables: Record<string, TableSchema> = {
   },
 
   // ── PLATAFORMA ────────────────────────────────────────────────────────────
+
+  users: {
+    label: 'Usuários',
+    description: 'Contas de acesso ao sistema',
+    domain: 'plataforma',
+    hasTimestamps: true,
+    orderBy: 'created_at DESC',
+    columnFilters: true,
+    fields: [
+      { name: 'id',          label: 'ID',         type: 'uuid',      nullable: false, isPk: true, isReadonly: true },
+      { name: 'email',       label: 'E-mail',      type: 'text',      nullable: false, showInList: true, listFilterType: 'text' },
+      { name: 'first_name',  label: 'Nome',        type: 'text',      nullable: false, showInList: true },
+      { name: 'last_name',   label: 'Sobrenome',   type: 'text',      nullable: true,  showInList: true },
+      { name: 'password',    label: 'Senha',       type: 'password',  nullable: false },
+      { name: 'role',        label: 'Perfil',      type: 'select',    nullable: false, defaultValue: 'user', options: ['admin', 'user'], showInList: true },
+      { name: 'active',      label: 'Ativo?',      type: 'boolean',   nullable: false, defaultValue: true,  showInList: true },
+      { name: 'deleted',     label: 'Excluído?',   type: 'boolean',   nullable: true,  defaultValue: false },
+      { name: 'last_login',  label: 'Último login',type: 'timestamp', nullable: true,  isReadonly: true },
+      { name: 'created_at',  label: 'Criado em',   type: 'timestamp', nullable: false, isReadonly: true },
+      { name: 'updated_at',  label: 'Atualizado em',type: 'timestamp',nullable: false, isReadonly: true },
+    ],
+  },
 
 }
 
