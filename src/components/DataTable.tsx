@@ -307,7 +307,7 @@ export default function DataTable({ tableName, schema }: Props) {
                     <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap sticky right-0 bg-surface-container-highest border-l border-outline-variant/40 z-10">
                       <div>Ações</div>
                       {canScrollRight && (
-                        <div className="text-[8px] text-primary/50 font-normal normal-case tracking-normal mt-0.5 animate-pulse">
+                        <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded bg-primary/20 border border-primary/30 text-primary text-[9px] font-semibold normal-case tracking-wide animate-pulse">
                           ← rolar
                         </div>
                       )}
@@ -362,7 +362,7 @@ export default function DataTable({ tableName, schema }: Props) {
               </div>
               {/* Fade gradient — visible only when table can scroll right */}
               {canScrollRight && (
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-surface-container to-transparent z-[5]" />
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-surface-container via-surface-container/70 to-transparent z-[5]" />
               )}
             </div>
 
