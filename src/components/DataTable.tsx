@@ -39,7 +39,7 @@ function getDisplayValue(
   }
   const raw = row[fieldName]
   if (field?.type === 'boolean') return raw ? 'Sim' : 'Não'
-  if (raw === null || raw === undefined) return ''
+  if (raw === null || raw === undefined || raw === 'null' || raw === '') return 'N/A'
   return String(raw)
 }
 
@@ -185,7 +185,12 @@ export default function DataTable({ tableName, schema }: Props) {
         const val = getDisplayValue(row, field.name, field, lookups)
         if (val !== '' && val !== 'null' && val !== 'undefined') seen.add(val)
       }
-      result[field.name] = Array.from(seen).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      // N/A first, rest alphabetical
+      result[field.name] = Array.from(seen).sort((a, b) => {
+        if (a === 'N/A') return -1
+        if (b === 'N/A') return 1
+        return a.localeCompare(b, 'pt-BR')
+      })
     }
     return result
   }, [pageData, colFilters, lookups, listFields, schema.columnFilters])
