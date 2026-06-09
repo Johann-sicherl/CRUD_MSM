@@ -216,6 +216,7 @@ export default function DataTable({ tableName, schema }: Props) {
     try {
       const rows = await parseImportFile(file, schema.fields)
       setImportRows(rows)
+      window.dispatchEvent(new CustomEvent('import-review:open'))
     } catch (err) {
       showToast((err as Error).message || 'Erro ao importar arquivo', true)
     } finally {
@@ -530,9 +531,10 @@ export default function DataTable({ tableName, schema }: Props) {
           schema={schema}
           tableName={tableName}
           initialRows={importRows}
-          onClose={() => setImportRows(null)}
+          onClose={() => { setImportRows(null); window.dispatchEvent(new CustomEvent('import-review:close')) }}
           onDone={saved => {
             setImportRows(null)
+            window.dispatchEvent(new CustomEvent('import-review:close'))
             fetchData()
             showToast(`${saved} registro${saved !== 1 ? 's' : ''} importado${saved !== 1 ? 's' : ''} com sucesso!`)
           }}
