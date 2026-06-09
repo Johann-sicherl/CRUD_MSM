@@ -35,12 +35,17 @@ export default function ColumnFilter({
   const calcPos = useCallback((): DropdownPos | null => {
     if (!triggerRef.current) return null
     const r = triggerRef.current.getBoundingClientRect()
+    // Anchor below the full header row so the dropdown never overlaps adjacent
+    // filter inputs in the same <thead> row (the th has extra bottom padding
+    // that r.bottom alone doesn't account for)
+    const thead = triggerRef.current.closest('thead')
+    const top = (thead ? thead.getBoundingClientRect().bottom : r.bottom) + 4
     const w = Math.max(r.width, 220)
     // Flip left when dropdown would overflow the viewport on the right
     const left = r.left + w > window.innerWidth
       ? Math.max(0, r.right - w)
       : r.left
-    return { top: r.bottom + 2, left, width: w }
+    return { top, left, width: w }
   }, [])
 
   const openDropdown = useCallback(() => {
