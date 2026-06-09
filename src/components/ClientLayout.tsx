@@ -15,8 +15,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const handlePinChange = (v: boolean) => {
     setPinned(v)
     localStorage.setItem('sidebar-pinned', String(v))
-    // Wait for the CSS margin-left transition (200ms) to finish before re-fitting
-    setTimeout(() => window.dispatchEvent(new CustomEvent('layout:changed')), 220)
   }
 
   return (

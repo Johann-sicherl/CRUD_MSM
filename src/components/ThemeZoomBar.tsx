@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 
 const THEMES = [
   { id: 'cyberpunk', label: 'Ciberpunk',       bg: '#0d0e12', accent: '#fabd00' },
@@ -9,119 +8,31 @@ const THEMES = [
   { id: 'luz',       label: 'Luz',              bg: '#f5f2e8', accent: '#9a6e00' },
 ]
 
-const STEP    = 5    // percent per +/− click
+const STEP    = 5
 const MIN_PCT = 50
 const MAX_PCT = 150
-// Page wrapper uses p-8 (32px × 2 sides = 64px). Add 16px visual buffer → 80px total.
-const MARGIN  = 80
 
 function applyTheme(id: string) {
   document.documentElement.dataset.theme = id
   document.documentElement.style.colorScheme = id === 'luz' ? 'light' : 'dark'
 }
 
+function applyZoom(pct: number) {
+  document.documentElement.style.zoom = pct === 100 ? '' : `${pct}%`
+}
+
 export default function ThemeZoomBar() {
-  const [theme,   setTheme]   = useState('cyberpunk')
-  const [userPct, setUserPct] = useState(100)
-  const baseZoomRef     = useRef(1)
-  const autoFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fitGenRef       = useRef(0)   // increments on each autoFit call; stale RAF chains abort
-  const pathname        = usePathname()
+  const [theme, setTheme] = useState('cyberpunk')
+  const [zoom,  setZoom]  = useState(100)
 
-  /* ── Core auto-fit logic ─────────────────────────────────────────────────
-     No zoom reset: read the current zoom from the DOM, derive the physical
-     viewport width (W_p), then compute the target in one shot.
-     This eliminates the visible "zoom-out → zoom-in" trembling that happened
-     when we first reset to 100% and then snapped to the fit value.
-
-     Math: CSS `zoom` on <html> scales the initial containing block.
-       main.clientWidth  (CSS px) = W_p / curZ − sidebarW
-       →  W_p = (main.clientWidth + sidebarW) × curZ
-       target base = W_p / (tableW + MARGIN + sidebarW)
-
-     fitGenRef prevents stale RAF chains from overwriting a newer fit.      ─ */
-  const autoFit = useCallback(() => {
-    const gen = ++fitGenRef.current
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (fitGenRef.current !== gen) return   // stale — a newer call took over
-
-        const mainEl = document.querySelector('main') as HTMLElement | null
-        if (!mainEl) return
-
-        const tables  = Array.from(mainEl.querySelectorAll('table')) as HTMLElement[]
-        const tableW  = tables.reduce((mx, t) => Math.max(mx, t.offsetWidth), 0)
-
-        // No table (loading state or table-free page like dashboard) → reset to 100%
-        if (tableW === 0) {
-          baseZoomRef.current = 1
-          setUserPct(100)
-          document.documentElement.style.zoom = '100%'
-          return
-        }
-
-        const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not (zoom-independent CSS px)
-        // Current zoom factor — read directly from DOM to stay accurate across all callers
-        const curZ     = parseFloat(document.documentElement.style.zoom) / 100 || 1
-        const W_p      = (mainEl.clientWidth + sidebarW) * curZ   // physical viewport width
-        const contentW = tableW + MARGIN
-
-        const base = Math.min(
-          MAX_PCT / 100,
-          Math.max(MIN_PCT / 100, W_p / (contentW + sidebarW))
-        )
-
-        baseZoomRef.current = base
-        setUserPct(100)
-        document.documentElement.style.zoom = `${base * 100}%`
-      })
-    })
-  }, [])
-
-  /* ── Shared debounce — cancels any pending timer before scheduling a new one ─ */
-  const scheduleAutoFit = useCallback((delay: number) => {
-    if (autoFitTimerRef.current !== null) clearTimeout(autoFitTimerRef.current)
-    autoFitTimerRef.current = setTimeout(() => {
-      autoFitTimerRef.current = null
-      autoFit()
-    }, delay)
-  }, [autoFit])
-
-  /* ── Re-auto-fit on route change (fallback for pages with no table) ─────── */
-  useEffect(() => {
-    scheduleAutoFit(400)
-    return () => {
-      if (autoFitTimerRef.current !== null) clearTimeout(autoFitTimerRef.current)
-    }
-  }, [pathname, scheduleAutoFit])
-
-  /* ── Re-auto-fit when DataTable finishes rendering real data ────────────── */
-  useEffect(() => {
-    const handler = () => scheduleAutoFit(50)
-    window.addEventListener('datatable:loaded', handler)
-    return () => window.removeEventListener('datatable:loaded', handler)
-  }, [scheduleAutoFit])
-
-  /* ── Re-auto-fit whenever the browser window is resized ────────────────── */
-  useEffect(() => {
-    const handler = () => scheduleAutoFit(150)
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
-  }, [scheduleAutoFit])
-
-  /* ── Re-auto-fit after sidebar is pinned/unpinned (post-transition) ─────── */
-  useEffect(() => {
-    const handler = () => scheduleAutoFit(0)
-    window.addEventListener('layout:changed', handler)
-    return () => window.removeEventListener('layout:changed', handler)
-  }, [scheduleAutoFit])
-
-  /* ── Restore theme from localStorage on mount ───────────────────────────── */
   useEffect(() => {
     const t = localStorage.getItem('app-theme') ?? 'cyberpunk'
     setTheme(t)
     applyTheme(t)
+
+    const z = parseInt(localStorage.getItem('app-zoom') ?? '100', 10)
+    setZoom(z)
+    applyZoom(z)
   }, [])
 
   const handleTheme = (id: string) => {
@@ -131,9 +42,10 @@ export default function ThemeZoomBar() {
   }
 
   const handleZoom = (delta: number) => {
-    setUserPct(prev => {
+    setZoom(prev => {
       const next = Math.max(MIN_PCT, Math.min(MAX_PCT, prev + delta))
-      document.documentElement.style.zoom = `${baseZoomRef.current * next}%`
+      applyZoom(next)
+      localStorage.setItem('app-zoom', String(next))
       return next
     })
   }
@@ -164,18 +76,18 @@ export default function ThemeZoomBar() {
         ))}
       </div>
 
-      {/* Zoom — 100% always means all columns visible */}
+      {/* Manual zoom */}
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] uppercase tracking-widest text-outline/60">Zoom</span>
         <button
           onClick={() => handleZoom(-STEP)}
-          disabled={userPct <= MIN_PCT}
+          disabled={zoom <= MIN_PCT}
           className="w-5 h-5 flex items-center justify-center rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline disabled:opacity-30 transition-colors text-sm leading-none"
         >−</button>
-        <span className="w-9 text-center text-primary font-semibold text-[10px]">{userPct}%</span>
+        <span className="w-9 text-center text-primary font-semibold text-[10px]">{zoom}%</span>
         <button
           onClick={() => handleZoom(+STEP)}
-          disabled={userPct >= MAX_PCT}
+          disabled={zoom >= MAX_PCT}
           className="w-5 h-5 flex items-center justify-center rounded border border-outline-variant/40 hover:border-primary/40 hover:text-primary text-outline disabled:opacity-30 transition-colors text-sm leading-none"
         >+</button>
       </div>

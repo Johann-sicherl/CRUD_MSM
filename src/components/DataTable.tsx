@@ -140,12 +140,6 @@ export default function DataTable({ tableName, schema }: Props) {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Signal ThemeZoomBar after React has committed + painted the new rows
-  useEffect(() => {
-    if (!pageData) return
-    window.dispatchEvent(new CustomEvent('datatable:loaded'))
-  }, [pageData])
-
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
     if (!pageData) return []
@@ -292,7 +286,7 @@ export default function DataTable({ tableName, schema }: Props) {
                         )}
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap">
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap sticky right-0 bg-surface-container-highest border-l border-outline-variant/40 z-10">
                       {schema.columnFilters ? <div>Ações</div> : 'Ações'}
                     </th>
                   </tr>
@@ -306,7 +300,7 @@ export default function DataTable({ tableName, schema }: Props) {
                     </tr>
                   ) : (
                     filteredRows.map((row, i) => (
-                      <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors">
+                      <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors group">
                         {listFields.map(f => {
                           let cell: React.ReactNode
                           if (f.lookupFrom && lookups[f.name]) {
@@ -323,7 +317,7 @@ export default function DataTable({ tableName, schema }: Props) {
                             </td>
                           )
                         })}
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <td className="px-4 py-3 text-right whitespace-nowrap sticky right-0 bg-surface-container group-hover:bg-surface-container-high transition-colors border-l border-outline-variant/40 z-10">
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
                             className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
