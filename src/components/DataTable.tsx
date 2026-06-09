@@ -303,7 +303,13 @@ export default function DataTable({ tableName, schema }: Props) {
           {schema.importExport && newMenuOpen && (
             <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] bg-surface-container-high border border-outline-variant rounded shadow-xl overflow-hidden">
               <button
-                onClick={() => { setNewMenuOpen(false); setEditRecord(null); setModalOpen(true) }}
+                onClick={() => {
+                  setNewMenuOpen(false)
+                  if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
+                  else if (tableName === 'dependant_items') { setDepItemsModal(true) }
+                  else if (tableName === 'roller_tables')   { setRollerModal(true) }
+                  else { setEditRecord(null); setModalOpen(true) }
+                }}
                 className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-highest hover:text-primary transition-colors"
               >
                 + Novo registro manual
