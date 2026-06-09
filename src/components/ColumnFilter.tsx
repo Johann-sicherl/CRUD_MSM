@@ -5,6 +5,20 @@ import { createPortal } from 'react-dom'
 
 interface DropdownPos { top: number; left: number; width: number }
 
+/** The app applies CSS `zoom` on <html> (user zoom preference). Coordinates
+ *  from getBoundingClientRect() are in visual (zoomed) space, but top/left on
+ *  a position:fixed element inside the zoomed root get re-scaled by the zoom —
+ *  so they must be divided by the zoom factor to land where intended. */
+function getRootZoom(): number {
+  const el = document.documentElement as HTMLElement & { currentCSSZoom?: number }
+  if (typeof el.currentCSSZoom === 'number' && el.currentCSSZoom > 0) return el.currentCSSZoom
+  const z = getComputedStyle(el).zoom
+  if (!z || z === 'normal') return 1
+  const n = parseFloat(z)
+  if (isNaN(n) || n <= 0) return 1
+  return z.includes('%') ? n / 100 : n
+}
+
 export default function ColumnFilter({
   searchValue,
   onSearchChange,
@@ -44,13 +58,15 @@ export default function ColumnFilter({
       thead ? thead.getBoundingClientRect().bottom : 0,
       th    ? th.getBoundingClientRect().bottom    : 0,
       r.bottom,
-    ) + 8
+    ) + 4
     const w = Math.max(r.width, 220)
     // Flip left when dropdown would overflow the viewport on the right
     const left = r.left + w > window.innerWidth
       ? Math.max(0, r.right - w)
       : r.left
-    return { top, left, width: w }
+    // Convert from visual coordinates back to the zoomed coordinate space
+    const zoom = getRootZoom()
+    return { top: top / zoom, left: left / zoom, width: w / zoom }
   }, [])
 
   const openDropdown = useCallback(() => {
