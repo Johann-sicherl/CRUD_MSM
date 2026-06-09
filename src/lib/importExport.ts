@@ -55,12 +55,12 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   XLSX.writeFile(wb, filename)
 }
 
-/** Read the first row of an Excel file and map it back to field names.
+/** Read ALL data rows of an Excel file and map them back to field names.
  *  Comma/pt-BR decimal values are normalised to dots automatically. */
 export function parseImportFile(
   file: File,
   fields: Field[],
-): Promise<Record<string, string>> {
+): Promise<Record<string, string>[]> {
   const cols = editableFields(fields)
   const labelMap = Object.fromEntries(cols.map(f => [f.label, f]))
   const numericTypes = new Set(['decimal', 'integer', 'number'])
@@ -72,32 +72,33 @@ export function parseImportFile(
         const XLSX = await import('xlsx')
         const wb = XLSX.read(e.target?.result, { type: 'binary' })
         const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+        const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
 
-        if (rows.length === 0) {
+        if (rawRows.length === 0) {
           reject(new Error('O arquivo está vazio ou não contém dados'))
           return
         }
 
-        const firstRow = rows[0]
-        const result: Record<string, string> = {}
+        const results: Record<string, string>[] = []
 
-        for (const [colLabel, raw] of Object.entries(firstRow)) {
-          const field = labelMap[colLabel]
-          if (!field) continue
-          let val = String(raw ?? '').trim()
-          if (numericTypes.has(field.type)) {
-            val = normaliseDecimal(val)
+        for (const rawRow of rawRows) {
+          const row: Record<string, string> = {}
+          for (const [colLabel, raw] of Object.entries(rawRow)) {
+            const field = labelMap[colLabel]
+            if (!field) continue
+            let val = String(raw ?? '').trim()
+            if (numericTypes.has(field.type)) val = normaliseDecimal(val)
+            row[field.name] = val
           }
-          result[field.name] = val
+          if (Object.keys(row).length > 0) results.push(row)
         }
 
-        if (Object.keys(result).length === 0) {
+        if (results.length === 0) {
           reject(new Error('Nenhuma coluna reconhecida. Verifique se os cabeçalhos correspondem à Matriz exportada.'))
           return
         }
 
-        resolve(result)
+        resolve(results)
       } catch (err) {
         reject(err instanceof Error ? err : new Error('Erro ao processar o arquivo'))
       }

@@ -10,6 +10,7 @@ import NonCombinableModal from './NonCombinableModal'
 import DependentItemsModal from './DependentItemsModal'
 import RollerTableModal from './RollerTableModal'
 import ColumnFilter from './ColumnFilter'
+import ImportReviewModal from './ImportReviewModal'
 
 interface Props {
   tableName: string
@@ -80,9 +81,9 @@ export default function DataTable({ tableName, schema }: Props) {
   const scrollRef   = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(false)
-  const [prefillRecord, setPrefillRecord]   = useState<Record<string, string> | null>(null)
-  const [importLoading, setImportLoading]   = useState(false)
-  const [newMenuOpen,   setNewMenuOpen]     = useState(false)
+  const [importRows,    setImportRows]     = useState<Record<string, string>[] | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [newMenuOpen,   setNewMenuOpen]   = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -213,10 +214,8 @@ export default function DataTable({ tableName, schema }: Props) {
     if (!file) return
     setImportLoading(true)
     try {
-      const data = await parseImportFile(file, schema.fields)
-      setPrefillRecord(data)
-      setEditRecord(null)
-      setModalOpen(true)
+      const rows = await parseImportFile(file, schema.fields)
+      setImportRows(rows)
     } catch (err) {
       showToast((err as Error).message || 'Erro ao importar arquivo', true)
     } finally {
@@ -516,14 +515,26 @@ export default function DataTable({ tableName, schema }: Props) {
           schema={schema}
           tableName={tableName}
           record={editRecord}
-          prefill={prefillRecord}
-          onClose={() => { setModalOpen(false); setEditRecord(null); setPrefillRecord(null) }}
+          onClose={() => { setModalOpen(false); setEditRecord(null) }}
           onSaved={() => {
             setModalOpen(false)
             setEditRecord(null)
-            setPrefillRecord(null)
             fetchData()
             showToast(editRecord ? 'Registro atualizado!' : 'Registro criado!')
+          }}
+        />
+      )}
+
+      {importRows && (
+        <ImportReviewModal
+          schema={schema}
+          tableName={tableName}
+          initialRows={importRows}
+          onClose={() => setImportRows(null)}
+          onDone={saved => {
+            setImportRows(null)
+            fetchData()
+            showToast(`${saved} registro${saved !== 1 ? 's' : ''} importado${saved !== 1 ? 's' : ''} com sucesso!`)
           }}
         />
       )}
