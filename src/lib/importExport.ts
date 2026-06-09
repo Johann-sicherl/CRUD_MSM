@@ -90,6 +90,14 @@ export function parseImportFile(
             if (numericTypes.has(field.type)) val = normaliseDecimal(val)
             row[field.name] = val
           }
+
+          // Apply schema defaults for fields that are missing or empty
+          for (const col of cols) {
+            if ((!row[col.name] || row[col.name] === '') && col.defaultValue !== undefined) {
+              row[col.name] = String(col.defaultValue)
+            }
+          }
+
           if (Object.keys(row).length > 0) results.push(row)
         }
 
