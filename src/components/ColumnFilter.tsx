@@ -37,9 +37,14 @@ export default function ColumnFilter({
     const r = triggerRef.current.getBoundingClientRect()
     // Anchor below the full header row so the dropdown never overlaps adjacent
     // filter inputs in the same <thead> row (the th has extra bottom padding
-    // that r.bottom alone doesn't account for)
+    // that r.bottom alone doesn't account for). Take whichever edge is lowest.
     const thead = triggerRef.current.closest('thead')
-    const top = (thead ? thead.getBoundingClientRect().bottom : r.bottom) + 4
+    const th    = triggerRef.current.closest('th')
+    const top = Math.max(
+      thead ? thead.getBoundingClientRect().bottom : 0,
+      th    ? th.getBoundingClientRect().bottom    : 0,
+      r.bottom,
+    ) + 8
     const w = Math.max(r.width, 220)
     // Flip left when dropdown would overflow the viewport on the right
     const left = r.left + w > window.innerWidth
