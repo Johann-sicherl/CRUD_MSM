@@ -7,6 +7,7 @@ interface Props {
   schema: TableSchema
   tableName: string
   record?: Record<string, unknown> | null
+  prefill?: Record<string, string> | null
   onClose: () => void
   onSaved: () => void
 }
@@ -38,7 +39,7 @@ const EMPTY_CASCADE: CascadeState = {
   selected: new Set(),
 }
 
-export default function RecordModal({ schema, tableName, record, onClose, onSaved }: Props) {
+export default function RecordModal({ schema, tableName, record, prefill, onClose, onSaved }: Props) {
   const isEdit = !!record
   const isBatch = !!schema.batchInsert && !isEdit
   const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
@@ -60,7 +61,10 @@ export default function RecordModal({ schema, tableName, record, onClose, onSave
           init[f.name] = String(v)
         }
       } else {
-        if (f.defaultValue !== undefined) {
+        // Prefill from imported data takes priority over defaults
+        if (prefill && prefill[f.name] !== undefined) {
+          init[f.name] = prefill[f.name]
+        } else if (f.defaultValue !== undefined) {
           init[f.name] = String(f.defaultValue)
         } else if (f.type === 'select' && !f.nullable && f.options?.length) {
           init[f.name] = String(f.options[0])

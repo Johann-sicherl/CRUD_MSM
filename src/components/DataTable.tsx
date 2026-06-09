@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields } from '@/lib/schema'
+import { exportMatrix, parseImportFile } from '@/lib/importExport'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -76,8 +77,11 @@ export default function DataTable({ tableName, schema }: Props) {
   const [colFilters,    setColFilters]    = useState<Record<string, string[]>>({})
   // filterSearch: text typed in each filter's search box (narrows dropdown, doesn't filter table)
   const [filterSearch,  setFilterSearch]  = useState<Record<string, string>>({})
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef   = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  const [prefillRecord, setPrefillRecord]   = useState<Record<string, string> | null>(null)
+  const [importLoading, setImportLoading]   = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -198,6 +202,27 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const handleSearch = () => setSearch(searchInput)
 
+  const handleExportMatrix = () => {
+    exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImportLoading(true)
+    try {
+      const data = await parseImportFile(file, schema.fields)
+      setPrefillRecord(data)
+      setEditRecord(null)
+      setModalOpen(true)
+    } catch (err) {
+      showToast((err as Error).message || 'Erro ao importar arquivo', true)
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     setDeleteId(null)
     const res = await fetch(`/api/${tableName}/${id}`, { method: 'DELETE' })
@@ -251,17 +276,45 @@ export default function DataTable({ tableName, schema }: Props) {
             </button>
           )}
         </div>
-        <button
-          onClick={() => {
-            if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
-            else if (tableName === 'dependant_items')  { setDepItemsModal(true) }
-            else if (tableName === 'roller_tables')    { setRollerModal(true) }
-            else { setEditRecord(null); setModalOpen(true) }
-          }}
-          className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
-        >
-          + Novo Registro
-        </button>
+        <div className="flex items-center gap-2">
+          {schema.importExport && (
+            <>
+              <button
+                onClick={handleExportMatrix}
+                className="px-3 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap font-mono"
+                title="Baixar planilha Excel com os cabeçalhos para preenchimento"
+              >
+                ↓ Exportar Matriz
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importLoading}
+                className="px-3 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap font-mono disabled:opacity-50"
+                title="Importar dados de planilha Excel (.xlsx)"
+              >
+                {importLoading ? '…' : '↑ Importar'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </>
+          )}
+          <button
+            onClick={() => {
+              if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
+              else if (tableName === 'dependant_items')  { setDepItemsModal(true) }
+              else if (tableName === 'roller_tables')    { setRollerModal(true) }
+              else { setEditRecord(null); setModalOpen(true) }
+            }}
+            className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
+          >
+            + Novo Registro
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -445,10 +498,12 @@ export default function DataTable({ tableName, schema }: Props) {
           schema={schema}
           tableName={tableName}
           record={editRecord}
-          onClose={() => { setModalOpen(false); setEditRecord(null) }}
+          prefill={prefillRecord}
+          onClose={() => { setModalOpen(false); setEditRecord(null); setPrefillRecord(null) }}
           onSaved={() => {
             setModalOpen(false)
             setEditRecord(null)
+            setPrefillRecord(null)
             fetchData()
             showToast(editRecord ? 'Registro atualizado!' : 'Registro criado!')
           }}
