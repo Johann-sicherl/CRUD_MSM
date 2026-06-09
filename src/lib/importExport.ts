@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx'
 import type { Field } from './schema'
 
 function editableFields(fields: Field[]): Field[] {
@@ -21,6 +20,7 @@ function normaliseDecimal(raw: string): string {
  *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog;
  *  falls back to a standard browser download on other browsers. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
+  const XLSX = await import('xlsx')
   const cols = editableFields(fields)
   const headers = cols.map(f => f.label)
 
@@ -67,8 +67,9 @@ export function parseImportFile(
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = e => {
+    reader.onload = async e => {
       try {
+        const XLSX = await import('xlsx')
         const wb = XLSX.read(e.target?.result, { type: 'binary' })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
