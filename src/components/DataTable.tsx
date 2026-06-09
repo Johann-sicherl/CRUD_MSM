@@ -82,6 +82,7 @@ export default function DataTable({ tableName, schema }: Props) {
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [prefillRecord, setPrefillRecord]   = useState<Record<string, string> | null>(null)
   const [importLoading, setImportLoading]   = useState(false)
+  const [newMenuOpen,   setNewMenuOpen]     = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -276,44 +277,61 @@ export default function DataTable({ tableName, schema }: Props) {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {schema.importExport && (
-            <>
-              <button
-                onClick={handleExportMatrix}
-                className="px-3 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap font-mono"
-                title="Baixar planilha Excel com os cabeçalhos para preenchimento"
-              >
-                ↓ Exportar Matriz
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importLoading}
-                className="px-3 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap font-mono disabled:opacity-50"
-                title="Importar dados de planilha Excel (.xlsx)"
-              >
-                {importLoading ? '…' : '↑ Importar'}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={handleImportFile}
-              />
-            </>
+        <div className="relative">
+          {/* Backdrop to close dropdown on outside click */}
+          {newMenuOpen && (
+            <div className="fixed inset-0 z-10" onClick={() => setNewMenuOpen(false)} />
           )}
+
           <button
             onClick={() => {
+              if (schema.importExport) { setNewMenuOpen(o => !o); return }
               if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
               else if (tableName === 'dependant_items')  { setDepItemsModal(true) }
               else if (tableName === 'roller_tables')    { setRollerModal(true) }
               else { setEditRecord(null); setModalOpen(true) }
             }}
-            className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
           >
             + Novo Registro
+            {schema.importExport && (
+              <span className={`text-xs transition-transform duration-150 ${newMenuOpen ? 'rotate-180' : ''}`}>▾</span>
+            )}
           </button>
+
+          {/* Dropdown */}
+          {schema.importExport && newMenuOpen && (
+            <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] bg-surface-container-high border border-outline-variant rounded shadow-xl overflow-hidden">
+              <button
+                onClick={() => { setNewMenuOpen(false); setEditRecord(null); setModalOpen(true) }}
+                className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-highest hover:text-primary transition-colors"
+              >
+                + Novo registro manual
+              </button>
+              <div className="border-t border-outline-variant/40" />
+              <button
+                onClick={() => { setNewMenuOpen(false); handleExportMatrix() }}
+                className="w-full text-left px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-colors"
+              >
+                ↓ Exportar Matriz
+              </button>
+              <button
+                onClick={() => { setNewMenuOpen(false); fileInputRef.current?.click() }}
+                disabled={importLoading}
+                className="w-full text-left px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-colors disabled:opacity-50"
+              >
+                {importLoading ? '…' : '↑ Importar Excel'}
+              </button>
+            </div>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportFile}
+          />
         </div>
       </div>
 
