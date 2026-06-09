@@ -39,7 +39,8 @@ function getDisplayValue(
   }
   const raw = row[fieldName]
   if (field?.type === 'boolean') return raw ? 'Sim' : 'Não'
-  return String(raw ?? '')
+  if (raw === null || raw === undefined) return ''
+  return String(raw)
 }
 
 function applyFilters(
@@ -104,11 +105,11 @@ export default function DataTable({ tableName, schema }: Props) {
         const [mainJson, throughJson] = await Promise.all([mainRes.json(), throughRes.json()])
         const intermediateMap: Record<string, string> = {}
         for (const row of (mainJson.data || [])) {
-          intermediateMap[String(row[lc.keyField])] = String(row[lc.displayField] ?? '')
+          intermediateMap[String(row[lc.keyField])] = row[lc.displayField] == null ? '' : String(row[lc.displayField])
         }
         const throughMap: Record<string, string> = {}
         for (const row of (throughJson.data || [])) {
-          throughMap[String(row[lc.through.keyField])] = String(row[lc.through.displayField])
+          throughMap[String(row[lc.through.keyField])] = row[lc.through.displayField] == null ? '' : String(row[lc.through.displayField])
         }
         const map: Record<string, string> = {}
         for (const [key, mid] of Object.entries(intermediateMap)) {
@@ -123,7 +124,7 @@ export default function DataTable({ tableName, schema }: Props) {
       const json = await res.json()
       const map: Record<string, string> = {}
       for (const row of (json.data || [])) {
-        map[String(row[lc.keyField])] = String(row[lc.displayField])
+        map[String(row[lc.keyField])] = row[lc.displayField] == null ? '' : String(row[lc.displayField])
       }
       setLookups(prev => ({ ...prev, [field.name]: map }))
     })
@@ -579,8 +580,8 @@ function TruncatedCell({ text, maxLen = 32 }: { text: string; maxLen?: number })
 }
 
 function CellValue({ value, type }: { value: unknown; type: string }) {
-  if (value === null || value === undefined) {
-    return <span className="text-outline text-xs font-mono">null</span>
+  if (value === null || value === undefined || value === 'null') {
+    return <span className="text-outline text-xs font-mono">N/A</span>
   }
   if (type === 'boolean') {
     return (

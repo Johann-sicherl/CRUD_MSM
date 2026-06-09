@@ -140,7 +140,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
                     <td key={f.name} className="px-1.5 py-1.5">
                       <input
                         type="text"
-                        value={row[f.name] ?? ''}
+                        value={row[f.name] === 'null' ? '' : (row[f.name] ?? '')}
                         onChange={e => handleChange(ri, f.name, e.target.value)}
                         disabled={phase === 'importing'}
                         className="w-full min-w-[80px] bg-surface-container border border-outline-variant/50 rounded px-1.5 py-0.5 text-on-surface text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors disabled:opacity-40"
