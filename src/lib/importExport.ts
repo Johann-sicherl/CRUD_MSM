@@ -56,13 +56,22 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
+ *  Accepts both Portuguese label headers (from exportMatrix) and raw DB column
+ *  name headers (from direct DB exports via Supabase / pgAdmin / DBeaver).
  *  Comma/pt-BR decimal values are normalised to dots automatically. */
 export function parseImportFile(
   file: File,
   fields: Field[],
 ): Promise<Record<string, string>[]> {
   const cols = editableFields(fields)
-  const labelMap = Object.fromEntries(cols.map(f => [f.label, f]))
+
+  // Build a single lookup that matches both PT labels and raw DB column names.
+  const colMap: Record<string, Field> = {}
+  for (const f of cols) {
+    colMap[f.label] = f   // e.g. "Custo (R$)"
+    colMap[f.name]  = f   // e.g. "cost_std"
+  }
+
   const numericTypes = new Set(['decimal', 'integer', 'number'])
 
   return new Promise((resolve, reject) => {
@@ -84,7 +93,7 @@ export function parseImportFile(
         for (const rawRow of rawRows) {
           const row: Record<string, string> = {}
           for (const [colLabel, raw] of Object.entries(rawRow)) {
-            const field = labelMap[colLabel]
+            const field = colMap[colLabel]
             if (!field) continue
             let val = String(raw ?? '').trim()
             if (numericTypes.has(field.type)) val = normaliseDecimal(val)
