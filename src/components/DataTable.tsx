@@ -76,6 +76,8 @@ export default function DataTable({ tableName, schema }: Props) {
   const [colFilters,    setColFilters]    = useState<Record<string, string[]>>({})
   // filterSearch: text typed in each filter's search box (narrows dropdown, doesn't filter table)
   const [filterSearch,  setFilterSearch]  = useState<Record<string, string>>({})
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -139,6 +141,21 @@ export default function DataTable({ tableName, schema }: Props) {
   }, [tableName, page, search])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+
+  useEffect(() => {
+    checkScroll()
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(checkScroll)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [pageData, checkScroll])
 
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
@@ -264,7 +281,8 @@ export default function DataTable({ tableName, schema }: Props) {
 
         {!loading && !error && pageData && (
           <>
-            <div className="overflow-x-auto">
+            <div className="relative">
+              <div ref={scrollRef} onScroll={checkScroll} className="overflow-x-auto">
               <table className={`${schema.compactColumns ? 'min-w-full' : 'w-full'} text-sm`}>
                 <thead className="bg-surface-container-highest border-b border-outline-variant">
                   <tr>
@@ -287,7 +305,12 @@ export default function DataTable({ tableName, schema }: Props) {
                       </th>
                     ))}
                     <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap sticky right-0 bg-surface-container-highest border-l border-outline-variant/40 z-10">
-                      {schema.columnFilters ? <div>Ações</div> : 'Ações'}
+                      <div>Ações</div>
+                      {canScrollRight && (
+                        <div className="text-[8px] text-primary/50 font-normal normal-case tracking-normal mt-0.5 animate-pulse">
+                          ← rolar
+                        </div>
+                      )}
                     </th>
                   </tr>
                 </thead>
@@ -336,6 +359,11 @@ export default function DataTable({ tableName, schema }: Props) {
                   )}
                 </tbody>
               </table>
+              </div>
+              {/* Fade gradient — visible only when table can scroll right */}
+              {canScrollRight && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-surface-container to-transparent z-[5]" />
+              )}
             </div>
 
             {/* Record count */}
