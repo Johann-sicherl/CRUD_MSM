@@ -136,11 +136,15 @@ export default function DataTable({ tableName, schema }: Props) {
     const json = await res.json()
     setPageData(json)
     setLoading(false)
-    // Signal ThemeZoomBar to re-measure after real data renders
-    window.dispatchEvent(new CustomEvent('datatable:loaded'))
   }, [tableName, page, search])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Signal ThemeZoomBar after React has committed + painted the new rows
+  useEffect(() => {
+    if (!pageData) return
+    window.dispatchEvent(new CustomEvent('datatable:loaded'))
+  }, [pageData])
 
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {

@@ -24,27 +24,43 @@ export default function ThemeZoomBar() {
   const [userPct, setUserPct] = useState(100)
   const baseZoomRef     = useRef(1)
   const autoFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fitGenRef       = useRef(0)   // increments on each autoFit call; stale RAF chains abort
   const pathname        = usePathname()
 
   /* ── Core auto-fit logic ─────────────────────────────────────────────────
-     Reset zoom to 100% first so measurements are in natural CSS pixels.
-     Two RAFs: first triggers layout reflow, second reads after paint.
-     MARGIN added to contentW so the rightmost column (Ações) never clips.  ─ */
+     1. Increment generation so any in-flight RAF chain from a prior call aborts.
+     2. Reset zoom to 100% so all measurements are in natural CSS pixels.
+     3. Two RAFs: first triggers reflow, second reads stable post-paint geometry.
+     4. If no <table> is present (page is loading or has no table), reset to 100%
+        and bail — this prevents applying a wrong zoom calculated from scrollWidth.
+     5. MARGIN added to contentW so the Ações column never clips at the edge.    ─ */
   const autoFit = useCallback(() => {
+    const gen = ++fitGenRef.current
     document.documentElement.style.zoom = '100%'
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (fitGenRef.current !== gen) return   // stale — a newer call took over
+
         const mainEl = document.querySelector('main') as HTMLElement | null
         if (!mainEl) return
 
-        const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not
-        const availW   = mainEl.clientWidth   // visible main width at zoom=100%
-
         const tables  = Array.from(mainEl.querySelectorAll('table')) as HTMLElement[]
         const tableW  = tables.reduce((mx, t) => Math.max(mx, t.offsetWidth), 0)
-        const contentW = (tableW > 0 ? tableW : mainEl.scrollWidth) + MARGIN
 
+        // No table yet (loading state or table-free page) — stay at 100%
+        if (tableW === 0) {
+          baseZoomRef.current = 1
+          setUserPct(100)
+          return
+        }
+
+        const sidebarW = mainEl.offsetLeft    // 256 when pinned, 0 when not
+        const availW   = mainEl.clientWidth   // visible main width at zoom=100%
+        const contentW = tableW + MARGIN
+
+        // zoom that makes the table fill exactly the available area, accounting
+        // for the sidebar also scaling with CSS zoom (position: fixed scales too)
         const V    = availW + sidebarW
         const base = Math.min(
           MAX_PCT / 100,
@@ -58,9 +74,7 @@ export default function ThemeZoomBar() {
     })
   }, [])
 
-  /* ── Shared debounce — cancels any pending call before scheduling a new one.
-     This ensures that route-change (400ms) and datatable:loaded (100ms) never
-     both fire: whichever arrives last wins, producing a single zoom update.  ─ */
+  /* ── Shared debounce — cancels any pending timer before scheduling a new one ─ */
   const scheduleAutoFit = useCallback((delay: number) => {
     if (autoFitTimerRef.current !== null) clearTimeout(autoFitTimerRef.current)
     autoFitTimerRef.current = setTimeout(() => {
@@ -77,11 +91,25 @@ export default function ThemeZoomBar() {
     }
   }, [pathname, scheduleAutoFit])
 
-  /* ── Re-auto-fit when DataTable finishes loading real data ──────────────── */
+  /* ── Re-auto-fit when DataTable finishes rendering real data ────────────── */
   useEffect(() => {
-    const handler = () => scheduleAutoFit(100)
+    const handler = () => scheduleAutoFit(50)
     window.addEventListener('datatable:loaded', handler)
     return () => window.removeEventListener('datatable:loaded', handler)
+  }, [scheduleAutoFit])
+
+  /* ── Re-auto-fit whenever the browser window is resized ────────────────── */
+  useEffect(() => {
+    const handler = () => scheduleAutoFit(150)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [scheduleAutoFit])
+
+  /* ── Re-auto-fit after sidebar is pinned/unpinned (post-transition) ─────── */
+  useEffect(() => {
+    const handler = () => scheduleAutoFit(0)
+    window.addEventListener('layout:changed', handler)
+    return () => window.removeEventListener('layout:changed', handler)
   }, [scheduleAutoFit])
 
   /* ── Restore theme from localStorage on mount ───────────────────────────── */
