@@ -57,21 +57,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  // Validate fields that must exist in another table before inserting
+  // Validate fields that must exist in another table before inserting.
+  // If displayField is set, also try matching by name so the user can put
+  // either the numeric key or the display name in the Excel file.
   for (const field of schema.fields.filter(f => f.validateExistsIn)) {
     const val = insertBody[field.name]
     if (val === null || val === undefined || val === '') continue
     const vi = field.validateExistsIn!
-    const { data: found } = await supabaseAdmin
+
+    // Try exact match on the key field first
+    const { data: foundByKey } = await supabaseAdmin
       .from(vi.table)
       .select(vi.field)
       .eq(vi.field, String(val))
       .maybeSingle()
-    if (!found) {
-      return NextResponse.json({
-        error: vi.errorMessage ?? `"${val}" não encontrado em ${vi.table}`,
-      }, { status: 400 })
+
+    if (foundByKey) continue // key matched — nothing to do
+
+    // Key didn't match — try resolving by displayField (user put the name)
+    if (vi.displayField) {
+      const cols = `${vi.field},${vi.displayField}`
+      const { data: foundByName } = await supabaseAdmin
+        .from(vi.table)
+        .select(cols)
+        .ilike(vi.displayField, String(val))
+        .maybeSingle()
+      if (foundByName) {
+        // Replace the name with the resolved numeric key so the INSERT works
+        insertBody[field.name] = (foundByName as unknown as Record<string, unknown>)[vi.field]
+        continue
+      }
     }
+
+    return NextResponse.json({
+      error: vi.errorMessage ?? `"${val}" não encontrado em ${vi.table}`,
+    }, { status: 400 })
   }
 
   // Auto-increment: compute MAX(field)+1 for fields marked autoIncrement

@@ -52,7 +52,7 @@ export interface Field {
   lookupFrom?: LookupConfig
   fetchOptions?: LookupConfig
   cascadeLookup?: CascadeLookupConfig
-  validateExistsIn?: { table: string; field: string; errorMessage?: string }
+  validateExistsIn?: { table: string; field: string; displayField?: string; errorMessage?: string }
   autoIncrement?: boolean
   hideInForm?: boolean
   hideInImport?: boolean
@@ -155,7 +155,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text',
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
-        validateExistsIn: { table: 'equipments', field: 'legacy_id', errorMessage: 'ID de Equipamento não encontrado — verifique a coluna "Equipamento" (deve ser um ID Leg. válido da tabela Grupo de Equipamentos)' } },
+        validateExistsIn: { table: 'equipments', field: 'legacy_id', displayField: 'name', errorMessage: 'Equipamento não encontrado — coluna "Equipamento" deve conter o ID numérico ou o nome exato do equipamento' } },
       { name: 'protheus_code',   label: 'Cód. Protheus',       type: 'text',    nullable: false, showInList: true, listFilterType: 'text' },
       { name: 'processor',       label: 'Processador',         type: 'text',    nullable: true },
       { name: 'memory',          label: 'Memória',             type: 'text',    nullable: true },
