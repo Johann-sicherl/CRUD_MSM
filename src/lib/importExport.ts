@@ -1,7 +1,7 @@
 import type { Field } from './schema'
 
 function editableFields(fields: Field[]): Field[] {
-  return fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
+  return fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm && !f.hideInImport)
 }
 
 /** Normalises a cell value to a SQL-safe decimal string.
