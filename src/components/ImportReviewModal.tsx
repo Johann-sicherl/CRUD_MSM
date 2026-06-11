@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { TableSchema, Field } from '@/lib/schema'
 
 interface Props {
@@ -13,30 +13,36 @@ interface Props {
 
 type Phase = 'validating' | 'review' | 'importing' | 'done'
 
-// field.name → Map<keyOrName, resolvedKey>
-type LookupCache = Record<string, Map<string, string>>
+interface LookupEntry {
+  byKeyOrName: Map<string, string>  // lowercase key or name → resolved key
+  byKey: Map<string, string>        // key → display name (for reverse lookup)
+}
+type LookupCache = Record<string, LookupEntry>
 
-/** Fields that can be resolved: must have fetchOptions with both keyField and displayField */
 function lookupFields(schema: TableSchema): Field[] {
-  return schema.fields.filter(
-    f => f.validateExistsIn?.displayField && f.fetchOptions
-  )
+  return schema.fields.filter(f => f.validateExistsIn?.displayField && f.fetchOptions)
 }
 
 export default function ImportReviewModal({ schema, tableName, initialRows, onClose, onDone }: Props) {
   const editableCols = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
+  const lFields = lookupFields(schema)
+  const lFieldNames = new Set(lFields.map(f => f.name))
 
+  // rows: values to submit — lookup fields hold the resolved KEY (ID)
   const [rows,     setRows]     = useState<Record<string, string>[]>(initialRows)
+  // display: what's shown in lookup inputs (the human-readable name)
+  const [display,  setDisplay]  = useState<Record<number, Record<string, string>>>({})
+  // warnings: unresolved lookup fields → prevent import
+  const [warnings, setWarnings] = useState<Record<number, Record<string, string>>>({})
   const [phase,    setPhase]    = useState<Phase>('validating')
   const [done,     setDone]     = useState(0)
   const [total,    setTotal]    = useState(0)
   const [errLines, setErrLines] = useState<string[]>([])
-  // row index → field name → warning message
-  const [warnings, setWarnings] = useState<Record<number, Record<string, string>>>({})
 
-  // On mount: fetch lookup tables, auto-resolve display names → keys, flag unknowns
+  const cacheRef = useRef<LookupCache>({})
+
+  // On mount: fetch lookup tables, build cache, resolve all rows
   useEffect(() => {
-    const lFields = lookupFields(schema)
     if (lFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
@@ -49,69 +55,104 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           const res = await fetch(`/api/${fo.table}?limit=25000`)
           if (!res.ok) return
           const json = await res.json()
-          const map = new Map<string, string>()
+          const byKeyOrName = new Map<string, string>()
+          const byKey       = new Map<string, string>()
           for (const row of (json.data || [])) {
-            const key = String(row[vi.field] ?? '')
-            const name = String(row[vi.displayField!] ?? '').toLowerCase()
-            if (key) {
-              map.set(key.toLowerCase(), key)   // key → key (exact)
-              if (name) map.set(name, key)       // name → key
+            const key  = String(row[vi.field]        ?? '')
+            const name = String(row[vi.displayField!] ?? '')
+            if (!key) continue
+            byKeyOrName.set(key.toLowerCase(), key)
+            if (name) {
+              byKeyOrName.set(name.toLowerCase(), key)
+              byKey.set(key, name)
             }
           }
-          cache[f.name] = map
-        } catch { /* network error — skip validation for this field */ }
+          cache[f.name] = { byKeyOrName, byKey }
+        } catch { /* skip if API unreachable */ }
       }))
 
-      // Auto-resolve rows and collect warnings
-      setRows(prev => {
-        const next = prev.map(row => ({ ...row }))
-        const newWarnings: Record<number, Record<string, string>> = {}
+      cacheRef.current = cache
 
-        for (let ri = 0; ri < next.length; ri++) {
-          for (const f of lFields) {
-            const map = cache[f.name]
-            if (!map) continue
-            const raw = (next[ri][f.name] ?? '').trim()
-            if (!raw) continue
-            const resolved = map.get(raw.toLowerCase())
-            if (resolved) {
-              next[ri][f.name] = resolved  // auto-resolve name → key
-            } else {
-              if (!newWarnings[ri]) newWarnings[ri] = {}
-              newWarnings[ri][f.name] = `"${raw}" não encontrado`
+      const newRows:     Record<string, string>[]              = initialRows.map(r => ({ ...r }))
+      const newDisplay:  Record<number, Record<string, string>> = {}
+      const newWarnings: Record<number, Record<string, string>> = {}
+
+      for (let ri = 0; ri < newRows.length; ri++) {
+        for (const f of lFields) {
+          const entry = cache[f.name]
+          const raw   = (newRows[ri][f.name] ?? '').trim()
+          if (!raw) continue
+
+          if (entry) {
+            const resolvedKey = entry.byKeyOrName.get(raw.toLowerCase())
+            if (resolvedKey) {
+              newRows[ri][f.name]                       = resolvedKey
+              if (!newDisplay[ri]) newDisplay[ri] = {}
+              newDisplay[ri][f.name] = entry.byKey.get(resolvedKey) ?? raw
+              continue
             }
           }
+          // Not resolved
+          if (!newDisplay[ri]) newDisplay[ri] = {}
+          newDisplay[ri][f.name] = raw
+          if (!newWarnings[ri]) newWarnings[ri] = {}
+          newWarnings[ri][f.name] = `"${raw}" não encontrado`
         }
+      }
 
-        setWarnings(newWarnings)
-        return next
-      })
-
+      setRows(newRows)
+      setDisplay(newDisplay)
+      setWarnings(newWarnings)
       setPhase('review')
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleChange = (ri: number, name: string, val: string) => {
-    setRows(prev => prev.map((r, i) => i === ri ? { ...r, [name]: val } : r))
-    // Clear warning for the edited cell
-    setWarnings(prev => {
-      if (!prev[ri]?.[name]) return prev
-      const next = { ...prev, [ri]: { ...prev[ri] } }
-      delete next[ri][name]
-      if (Object.keys(next[ri]).length === 0) delete next[ri]
-      return next
-    })
-  }
+  const handleChange = useCallback((ri: number, fieldName: string, val: string) => {
+    if (lFieldNames.has(fieldName)) {
+      // Lookup field: update display, resolve live against cache
+      setDisplay(prev => ({ ...prev, [ri]: { ...prev[ri], [fieldName]: val } }))
+
+      const entry = cacheRef.current[fieldName]
+      const resolvedKey = entry?.byKeyOrName.get(val.trim().toLowerCase())
+
+      if (resolvedKey) {
+        setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: resolvedKey } : r))
+        setWarnings(prev => {
+          if (!prev[ri]?.[fieldName]) return prev
+          const next = { ...prev, [ri]: { ...prev[ri] } }
+          delete next[ri][fieldName]
+          if (!Object.keys(next[ri]).length) delete next[ri]
+          return next
+        })
+      } else {
+        setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: val } : r))
+        setWarnings(prev => ({
+          ...prev,
+          [ri]: { ...prev[ri], [fieldName]: val.trim() ? `"${val.trim()}" não encontrado` : 'Campo obrigatório' },
+        }))
+      }
+    } else {
+      // Regular field
+      setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: val } : r))
+    }
+  }, [lFieldNames])
 
   const handleRemove = (ri: number) => {
     setRows(prev => prev.filter((_, i) => i !== ri))
-    setWarnings(prev => {
-      const next: Record<number, Record<string, string>> = {}
+    setDisplay(prev => {
+      const next: typeof prev = {}
       for (const [k, v] of Object.entries(prev)) {
         const idx = Number(k)
-        if (idx === ri) continue
-        next[idx < ri ? idx : idx - 1] = v
+        if (idx !== ri) next[idx < ri ? idx : idx - 1] = v
+      }
+      return next
+    })
+    setWarnings(prev => {
+      const next: typeof prev = {}
+      for (const [k, v] of Object.entries(prev)) {
+        const idx = Number(k)
+        if (idx !== ri) next[idx < ri ? idx : idx - 1] = v
       }
       return next
     })
@@ -144,38 +185,32 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
     setPhase('done')
   }
 
-  const saved = done - errLines.length
-  const pct   = total ? Math.round((done / total) * 100) : 0
+  const saved         = done - errLines.length
+  const pct           = total ? Math.round((done / total) * 100) : 0
   const totalWarnings = Object.values(warnings).reduce((s, w) => s + Object.keys(w).length, 0)
+  const hasErrors     = totalWarnings > 0
 
-  /* ── Done screen ─────────────────────────────────────────────────────── */
+  /* ── Done ─────────────────────────────────────────────────────────────── */
   if (phase === 'done') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
         <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in p-6 flex flex-col gap-4">
           <h2 className="text-base font-semibold text-on-surface">Importação concluída</h2>
-
           <div className="flex flex-col gap-1.5 text-sm">
             <span className="text-primary font-medium">
               ✓ {saved} registro{saved !== 1 ? 's' : ''} salvo{saved !== 1 ? 's' : ''} com sucesso
             </span>
             {errLines.length > 0 && (
               <>
-                <span className="text-error font-medium mt-1">
-                  ✕ {errLines.length} erro{errLines.length !== 1 ? 's' : ''}:
-                </span>
+                <span className="text-error font-medium mt-1">✕ {errLines.length} erro{errLines.length !== 1 ? 's' : ''}:</span>
                 <ul className="list-disc list-inside text-error/80 text-xs max-h-40 overflow-y-auto bg-surface-container-highest rounded p-2 border border-error/20">
                   {errLines.map((e, i) => <li key={i}>{e}</li>)}
                 </ul>
               </>
             )}
           </div>
-
           <div className="flex justify-end">
-            <button
-              onClick={() => onDone(saved)}
-              className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow"
-            >
+            <button onClick={() => onDone(saved)} className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow">
               Fechar
             </button>
           </div>
@@ -184,7 +219,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
     )
   }
 
-  /* ── Review / Importing / Validating screen ──────────────────────────── */
+  /* ── Review / Validating / Importing ─────────────────────────────────── */
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-[95vw] max-h-[90vh] flex flex-col animate-fade-in">
@@ -200,17 +235,17 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             </p>
           </div>
           {phase === 'review' && (
-            <button onClick={onClose} className="text-outline hover:text-on-surface transition-colors text-xl leading-none ml-4">✕</button>
+            <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none ml-4">✕</button>
           )}
         </div>
 
-        {/* Warning banner */}
-        {phase === 'review' && totalWarnings > 0 && (
-          <div className="px-5 py-2.5 bg-amber-900/20 border-b border-amber-700/30 text-amber-400 text-xs flex items-start gap-2">
-            <span className="shrink-0 mt-px">⚠</span>
+        {/* Error banner */}
+        {phase === 'review' && hasErrors && (
+          <div className="px-5 py-2.5 bg-error/10 border-b border-error/30 text-error text-xs flex items-start gap-2">
+            <span className="shrink-0 mt-px">✕</span>
             <span>
-              {totalWarnings} campo{totalWarnings !== 1 ? 's' : ''} com valor não reconhecido (destacado em laranja).
-              Corrija antes de importar ou remova as linhas problemáticas.
+              {totalWarnings} campo{totalWarnings !== 1 ? 's' : ''} com valor não reconhecido (em vermelho).
+              Corrija ou remova as linhas antes de importar.
             </span>
           </div>
         )}
@@ -223,62 +258,76 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
               Verificando referências…
             </div>
           ) : (
-          <table className="min-w-full text-xs">
-            <thead className="bg-surface-container-highest border-b border-outline-variant sticky top-0 z-10">
-              <tr>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider w-8">#</th>
-                {editableCols.map(f => (
-                  <th key={f.name} className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider whitespace-nowrap min-w-[90px]">
-                    {f.label}
-                  </th>
-                ))}
-                <th className="px-3 py-2 w-8" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant/30">
-              {rows.length === 0 ? (
+            <table className="min-w-full text-xs">
+              <thead className="bg-surface-container-highest border-b border-outline-variant sticky top-0 z-10">
                 <tr>
-                  <td colSpan={editableCols.length + 2} className="px-4 py-10 text-center text-outline text-sm">
-                    Nenhuma linha. Remova o arquivo e importe novamente com dados.
-                  </td>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider w-8">#</th>
+                  {editableCols.map(f => (
+                    <th key={f.name} className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider whitespace-nowrap min-w-[90px]">
+                      {f.label}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 w-8" />
                 </tr>
-              ) : rows.map((row, ri) => (
-                <tr key={ri} className={`hover:bg-surface-container-high/50 ${warnings[ri] ? 'bg-amber-900/10' : ''}`}>
-                  <td className="px-3 py-1.5 text-outline/40 font-mono text-[10px] select-none">{ri + 1}</td>
-                  {editableCols.map(f => {
-                    const warn = warnings[ri]?.[f.name]
-                    return (
-                      <td key={f.name} className="px-1.5 py-1.5">
-                        <input
-                          type="text"
-                          value={row[f.name] === 'null' ? '' : (row[f.name] ?? '')}
-                          onChange={e => handleChange(ri, f.name, e.target.value)}
+              </thead>
+              <tbody className="divide-y divide-outline-variant/30">
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={editableCols.length + 2} className="px-4 py-10 text-center text-outline text-sm">
+                      Nenhuma linha. Remova o arquivo e importe novamente com dados.
+                    </td>
+                  </tr>
+                ) : rows.map((row, ri) => {
+                  const rowHasError = !!warnings[ri]
+                  return (
+                    <tr key={ri} className={`hover:bg-surface-container-high/50 ${rowHasError ? 'bg-error/5' : ''}`}>
+                      <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${rowHasError ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
+                      {editableCols.map(f => {
+                        const isLookup = lFieldNames.has(f.name)
+                        const warn     = warnings[ri]?.[f.name]
+                        const shownVal = isLookup
+                          ? (display[ri]?.[f.name] ?? row[f.name] ?? '')
+                          : (row[f.name] === 'null' ? '' : (row[f.name] ?? ''))
+                        const resolvedId = isLookup && !warn ? row[f.name] : null
+
+                        return (
+                          <td key={f.name} className="px-1.5 py-1.5">
+                            <input
+                              type="text"
+                              value={shownVal}
+                              onChange={e => handleChange(ri, f.name, e.target.value)}
+                              disabled={phase === 'importing'}
+                              title={warn ?? (resolvedId ? `ID: ${resolvedId}` : undefined)}
+                              className={`w-full min-w-[80px] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 transition-colors disabled:opacity-40 ${
+                                warn
+                                  ? 'bg-error/10 border border-error/60 text-error focus:border-error focus:ring-error/20'
+                                  : resolvedId
+                                    ? 'bg-green-900/10 border border-green-700/40 text-on-surface focus:border-green-600 focus:ring-green-600/20'
+                                    : 'bg-surface-container border border-outline-variant/50 text-on-surface focus:border-primary focus:ring-primary/20'
+                              }`}
+                            />
+                            {warn && (
+                              <div className="text-[9px] text-error mt-0.5 leading-tight">{warn}</div>
+                            )}
+                            {resolvedId && (
+                              <div className="text-[9px] text-green-500/70 mt-0.5 leading-tight font-mono">ID: {resolvedId}</div>
+                            )}
+                          </td>
+                        )
+                      })}
+                      <td className="px-2 py-1.5 text-center">
+                        <button
+                          onClick={() => handleRemove(ri)}
                           disabled={phase === 'importing'}
-                          title={warn}
-                          className={`w-full min-w-[80px] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 transition-colors disabled:opacity-40 ${
-                            warn
-                              ? 'bg-amber-900/20 border border-amber-600/60 text-amber-300 focus:border-amber-500 focus:ring-amber-500/20'
-                              : 'bg-surface-container border border-outline-variant/50 text-on-surface focus:border-primary focus:ring-primary/20'
-                          }`}
-                        />
-                        {warn && (
-                          <div className="text-[9px] text-amber-500 mt-0.5 leading-tight">{warn}</div>
-                        )}
+                          title="Remover linha"
+                          className="text-outline/30 hover:text-error transition-colors disabled:invisible text-sm leading-none"
+                        >✕</button>
                       </td>
-                    )
-                  })}
-                  <td className="px-2 py-1.5 text-center">
-                    <button
-                      onClick={() => handleRemove(ri)}
-                      disabled={phase === 'importing'}
-                      title="Remover linha"
-                      className="text-outline/30 hover:text-error transition-colors disabled:invisible text-sm leading-none"
-                    >✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
 
@@ -287,19 +336,14 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           {phase === 'importing' ? (
             <div className="flex items-center gap-3 flex-1">
               <div className="flex-1 bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-200"
-                  style={{ width: `${pct}%` }}
-                />
+                <div className="h-full bg-primary transition-all duration-200" style={{ width: `${pct}%` }} />
               </div>
               <span className="text-xs text-outline font-mono whitespace-nowrap">{done} / {total}</span>
             </div>
           ) : (
             <span className="text-xs text-outline flex-1">
               {rows.length} registro{rows.length !== 1 ? 's' : ''} para importar
-              {totalWarnings > 0 && (
-                <span className="text-amber-400 ml-2">· {totalWarnings} aviso{totalWarnings !== 1 ? 's' : ''}</span>
-              )}
+              {hasErrors && <span className="text-error ml-2">· {totalWarnings} erro{totalWarnings !== 1 ? 's' : ''} impedem o import</span>}
             </span>
           )}
 
@@ -313,12 +357,11 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             </button>
             <button
               onClick={handleImport}
-              disabled={phase === 'importing' || phase === 'validating' || rows.length === 0}
-              className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 whitespace-nowrap"
+              disabled={phase !== 'review' || rows.length === 0 || hasErrors}
+              title={hasErrors ? 'Corrija os campos em vermelho antes de importar' : undefined}
+              className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {phase === 'importing'
-                ? 'Importando…'
-                : `Importar ${rows.length} registro${rows.length !== 1 ? 's' : ''}`}
+              {phase === 'importing' ? 'Importando…' : `Importar ${rows.length} registro${rows.length !== 1 ? 's' : ''}`}
             </button>
           </div>
         </div>
