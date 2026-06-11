@@ -18,7 +18,9 @@ function normaliseDecimal(raw: string): string {
 
 /** Generate an Excel template with just the column headers and trigger save.
  *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog;
- *  falls back to a standard browser download on other browsers. */
+ *  falls back to a standard browser download on other browsers.
+ *  After saving, attempts to open the file immediately via a blob URL — on
+ *  Windows/Mac with Excel installed the OS usually opens it directly. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
@@ -30,29 +32,47 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Dados')
 
+  const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+  const blob = new Blob([buf], { type: xlsxMime })
+
   // Try native Save-As dialog (Chrome / Edge on HTTPS or localhost)
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
       const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
         .showSaveFilePicker({
           suggestedName: filename,
-          types: [{
-            description: 'Planilha Excel',
-            accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
-          }],
+          types: [{ description: 'Planilha Excel', accept: { [xlsxMime]: ['.xlsx'] } }],
         })
-      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
       const writable = await handle.createWritable()
-      await writable.write(new Uint8Array(buf))
+      await writable.write(blob)
       await writable.close()
+      openXlsxBlob(blob)
       return
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return // user cancelled
+      if ((e as Error).name === 'AbortError') return
       // fall through to standard download
     }
   }
 
-  XLSX.writeFile(wb, filename)
+  // Fallback: anchor download + open attempt
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  openXlsxBlob(blob, url)
+}
+
+/** Open the xlsx blob in a new tab. On Windows/Mac with Excel installed,
+ *  the OS intercepts the blob URL and launches Excel directly. */
+function openXlsxBlob(blob: Blob, existingUrl?: string) {
+  const url = existingUrl ?? URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  // Revoke after enough time for Excel to start reading the blob
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
