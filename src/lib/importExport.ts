@@ -18,6 +18,18 @@ function normaliseDecimal(raw: string): string {
 
 const EXPORT_FOLDER_KEY = 'export-folder-path'
 
+/** Folder the user saves exports into — used only to compose the full path
+ *  copied to the clipboard (the browser sandbox never reveals the real path). */
+export function getExportFolder(): string {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(EXPORT_FOLDER_KEY) ?? ''
+}
+
+export function setExportFolder(folder: string) {
+  if (folder.trim()) localStorage.setItem(EXPORT_FOLDER_KEY, folder)
+  else localStorage.removeItem(EXPORT_FOLDER_KEY)
+}
+
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text)
@@ -34,11 +46,11 @@ export interface ExportResult {
 }
 
 /** Generate an Excel template and save it via the native Save-As dialog
- *  (Chrome/Edge), letting the user pick the destination folder. The browser
- *  sandbox never reveals the chosen folder's absolute path, so we ask the user
- *  to confirm the folder once (remembered in localStorage and pre-filled on the
- *  next export) and copy `<folder>\<file>` to the clipboard — ready to paste
- *  into the Windows Explorer address bar or Win+R to open in Excel.
+ *  (Chrome/Edge), letting the user pick the destination folder. Silently copies
+ *  `<configured folder>\<file>` to the clipboard — ready to paste into the
+ *  Windows Explorer address bar or Win+R to open in Excel. The folder comes
+ *  from getExportFolder() (set once in the export menu) because the browser
+ *  sandbox never reveals the real chosen path.
  *  Falls back to a normal Downloads download on browsers without the API. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx'): Promise<ExportResult> {
   const XLSX = await import('xlsx')
@@ -69,17 +81,8 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
       await writable.write(blob)
       await writable.close()
 
-      // The sandbox hides the folder path — confirm it with the user (pre-filled
-      // with the last value) so we can copy the full openable path.
       const savedName = handle.name || filename
-      const stored = localStorage.getItem(EXPORT_FOLDER_KEY) ?? ''
-      const input = window.prompt(
-        'Arquivo salvo! Confirme a pasta onde salvou para copiar o caminho completo:',
-        stored,
-      )
-      const folder = (input ?? stored).trim().replace(/[\\/]+$/, '')
-      if (input !== null && folder) localStorage.setItem(EXPORT_FOLDER_KEY, folder)
-
+      const folder = getExportFolder().trim().replace(/[\\/]+$/, '')
       const path = folder ? `${folder}\\${savedName}` : savedName
       return { path, copied: await copyToClipboard(path) }
     } catch (e) {

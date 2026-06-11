@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields } from '@/lib/schema'
-import { exportMatrix, parseImportFile } from '@/lib/importExport'
+import { exportMatrix, parseImportFile, getExportFolder, setExportFolder } from '@/lib/importExport'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -85,6 +85,9 @@ export default function DataTable({ tableName, schema }: Props) {
   const [importRows,    setImportRows]     = useState<Record<string, string>[] | null>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [newMenuOpen,   setNewMenuOpen]   = useState(false)
+  // Folder used to compose the full path copied after export (browser can't read it)
+  const [exportFolder,  setExportFolderState] = useState('')
+  useEffect(() => { setExportFolderState(getExportFolder()) }, [])
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -214,11 +217,15 @@ export default function DataTable({ tableName, schema }: Props) {
     try {
       const { path, copied, cancelled } = await exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
       if (cancelled) return
-      showToast(
-        copied
-          ? `Caminho copiado! Cole no Explorer ou Win+R para abrir: ${path}`
-          : `Salvo. Caminho para abrir: ${path}`,
-      )
+      if (!getExportFolder()) {
+        showToast('Salvo! Defina a "Pasta de exportação" no menu ▾ para copiar o caminho completo')
+      } else {
+        showToast(
+          copied
+            ? `Caminho copiado! Cole no Explorer ou Win+R para abrir: ${path}`
+            : `Salvo. Caminho: ${path}`,
+        )
+      }
     } catch {
       showToast('Erro ao exportar matriz', true)
     }
@@ -344,6 +351,23 @@ export default function DataTable({ tableName, schema }: Props) {
               >
                 {importLoading ? '…' : '↑ Importar Excel'}
               </button>
+              <div className="border-t border-outline-variant/40" />
+              <div className="px-4 py-2.5">
+                <div className="text-[10px] text-outline uppercase tracking-wider font-mono mb-1">
+                  Pasta de exportação
+                </div>
+                <input
+                  type="text"
+                  value={exportFolder}
+                  onChange={e => { setExportFolderState(e.target.value); setExportFolder(e.target.value) }}
+                  placeholder="C:\Users\voce\Documentos"
+                  spellCheck={false}
+                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-on-surface font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 placeholder:text-outline/40"
+                />
+                <div className="text-[9px] text-outline/60 mt-1 leading-tight">
+                  Usada para copiar o caminho completo após exportar
+                </div>
+              </div>
             </div>
           )}
 
