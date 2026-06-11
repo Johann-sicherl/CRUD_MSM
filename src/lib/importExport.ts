@@ -17,10 +17,8 @@ function normaliseDecimal(raw: string): string {
 }
 
 /** Generate an Excel template with just the column headers and trigger save.
- *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog;
- *  falls back to a standard browser download on other browsers.
- *  After saving, attempts to open the file immediately via a blob URL — on
- *  Windows/Mac with Excel installed the OS usually opens it directly. */
+ *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog
+ *  with a proper filename; falls back to a standard anchor download on other browsers. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
@@ -36,7 +34,7 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
   const blob = new Blob([buf], { type: xlsxMime })
 
-  // Try native Save-As dialog (Chrome / Edge on HTTPS or localhost)
+  // Native Save-As dialog (Chrome / Edge on HTTPS or localhost)
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
       const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
@@ -47,15 +45,14 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
       const writable = await handle.createWritable()
       await writable.write(blob)
       await writable.close()
-      openXlsxBlob(blob)
       return
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
-      // fall through to standard download
+      // fall through to anchor download
     }
   }
 
-  // Fallback: anchor download + open attempt
+  // Fallback: anchor with download attribute — browser saves to Downloads with correct filename
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -63,16 +60,7 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  openXlsxBlob(blob, url)
-}
-
-/** Open the xlsx blob in a new tab. On Windows/Mac with Excel installed,
- *  the OS intercepts the blob URL and launches Excel directly. */
-function openXlsxBlob(blob: Blob, existingUrl?: string) {
-  const url = existingUrl ?? URL.createObjectURL(blob)
-  window.open(url, '_blank')
-  // Revoke after enough time for Excel to start reading the blob
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
