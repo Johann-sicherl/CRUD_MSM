@@ -16,43 +16,10 @@ function normaliseDecimal(raw: string): string {
   return s.replace(',', '.')
 }
 
-const EXPORT_FOLDER_KEY = 'export-folder-path'
-
-/** Folder the user saves exports into — used only to compose the full path
- *  copied to the clipboard (the browser sandbox never reveals the real path). */
-export function getExportFolder(): string {
-  if (typeof window === 'undefined') return ''
-  return localStorage.getItem(EXPORT_FOLDER_KEY) ?? ''
-}
-
-export function setExportFolder(folder: string) {
-  if (folder.trim()) localStorage.setItem(EXPORT_FOLDER_KEY, folder)
-  else localStorage.removeItem(EXPORT_FOLDER_KEY)
-}
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    return false
-  }
-}
-
-export interface ExportResult {
-  path: string
-  copied: boolean
-  cancelled?: boolean
-}
-
-/** Generate an Excel template and save it via the native Save-As dialog
- *  (Chrome/Edge), letting the user pick the destination folder. Silently copies
- *  `<configured folder>\<file>` to the clipboard — ready to paste into the
- *  Windows Explorer address bar or Win+R to open in Excel. The folder comes
- *  from getExportFolder() (set once in the export menu) because the browser
- *  sandbox never reveals the real chosen path.
- *  Falls back to a normal Downloads download on browsers without the API. */
-export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx'): Promise<ExportResult> {
+/** Generate an Excel template with just the column headers and trigger save.
+ *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog;
+ *  falls back to a standard anchor download on other browsers. */
+export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
   const headers = cols.map(f => f.label)
@@ -67,8 +34,6 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
   const blob = new Blob([buf], { type: xlsxMime })
 
-  // Native Save-As dialog → user picks the folder. `id` makes Chrome reopen
-  // the dialog in the last-used directory on subsequent exports.
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
       const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
@@ -80,18 +45,13 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
       const writable = await handle.createWritable()
       await writable.write(blob)
       await writable.close()
-
-      const savedName = handle.name || filename
-      const folder = getExportFolder().trim().replace(/[\\/]+$/, '')
-      const path = folder ? `${folder}\\${savedName}` : savedName
-      return { path, copied: await copyToClipboard(path) }
+      return
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return { path: '', copied: false, cancelled: true }
-      // fall through to anchor download
+      if ((e as Error).name === 'AbortError') return
     }
   }
 
-  // Fallback (Firefox / Safari): anchor download → Downloads folder
+  // Fallback: anchor download
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -100,9 +60,6 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
-
-  const path = `%USERPROFILE%\\Downloads\\${filename}`
-  return { path, copied: await copyToClipboard(path) }
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
