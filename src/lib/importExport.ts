@@ -18,7 +18,9 @@ function normaliseDecimal(raw: string): string {
 
 /** Generate an Excel template with just the column headers and trigger save.
  *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog
- *  with a proper filename; falls back to a standard anchor download on other browsers. */
+ *  with a proper filename; falls back to a standard anchor download on other browsers.
+ *  After saving, opens the file in a new tab — if Excel (or the OS handler) is
+ *  configured for .xlsx the file opens directly in Excel. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
@@ -32,7 +34,8 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
 
   const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
-  const blob = new Blob([buf], { type: xlsxMime })
+  // File (not Blob) so the name is preserved when the browser downloads via window.open
+  const file = new File([buf], filename, { type: xlsxMime })
 
   // Native Save-As dialog (Chrome / Edge on HTTPS or localhost)
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
@@ -43,8 +46,12 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
           types: [{ description: 'Planilha Excel', accept: { [xlsxMime]: ['.xlsx'] } }],
         })
       const writable = await handle.createWritable()
-      await writable.write(blob)
+      await writable.write(file)
       await writable.close()
+      // Try to open the saved file — browser uses the File name, not a UUID
+      const url = URL.createObjectURL(await handle.getFile())
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
       return
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
@@ -52,15 +59,11 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
     }
   }
 
-  // Fallback: anchor with download attribute — browser saves to Downloads with correct filename
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  // Fallback: window.open with a File object preserves the filename
+  // (Blob URLs use UUID as name; File URLs use File.name)
+  const url = URL.createObjectURL(file)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
