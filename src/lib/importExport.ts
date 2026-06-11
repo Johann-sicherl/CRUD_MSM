@@ -16,23 +16,31 @@ function normaliseDecimal(raw: string): string {
   return s.replace(',', '.')
 }
 
-/** Generate an Excel template, save it to the Downloads folder, and copy a
- *  Windows-resolvable path to the clipboard. Browsers cannot expose the absolute
- *  path of a saved file (the File System Access sandbox hides it), so we save to
- *  the known Downloads folder and copy `%USERPROFILE%\Downloads\<file>` — pasting
- *  that into Win+R or the Explorer address bar opens the file directly in Excel.
- *
- *  Returns the copied path (or null if the clipboard write failed) so the caller
- *  can show feedback. */
-export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx'): Promise<{ path: string; copied: boolean }> {
-  // Copy the path first, while the click's user-activation is still fresh
-  const winPath = `%USERPROFILE%\\Downloads\\${filename}`
-  let copied = false
-  try {
-    await navigator.clipboard.writeText(winPath)
-    copied = true
-  } catch { /* clipboard blocked — caller still gets the path to show */ }
+const EXPORT_FOLDER_KEY = 'export-folder-path'
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export interface ExportResult {
+  path: string
+  copied: boolean
+  cancelled?: boolean
+}
+
+/** Generate an Excel template and save it via the native Save-As dialog
+ *  (Chrome/Edge), letting the user pick the destination folder. The browser
+ *  sandbox never reveals the chosen folder's absolute path, so we ask the user
+ *  to confirm the folder once (remembered in localStorage and pre-filled on the
+ *  next export) and copy `<folder>\<file>` to the clipboard — ready to paste
+ *  into the Windows Explorer address bar or Win+R to open in Excel.
+ *  Falls back to a normal Downloads download on browsers without the API. */
+export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx'): Promise<ExportResult> {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
   const headers = cols.map(f => f.label)
@@ -47,7 +55,40 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
   const blob = new Blob([buf], { type: xlsxMime })
 
-  // Anchor download → saves to Downloads with the correct filename (matches winPath)
+  // Native Save-As dialog → user picks the folder. `id` makes Chrome reopen
+  // the dialog in the last-used directory on subsequent exports.
+  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+    try {
+      const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
+        .showSaveFilePicker({
+          id: 'export-matrix',
+          suggestedName: filename,
+          types: [{ description: 'Planilha Excel', accept: { [xlsxMime]: ['.xlsx'] } }],
+        })
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+
+      // The sandbox hides the folder path — confirm it with the user (pre-filled
+      // with the last value) so we can copy the full openable path.
+      const savedName = handle.name || filename
+      const stored = localStorage.getItem(EXPORT_FOLDER_KEY) ?? ''
+      const input = window.prompt(
+        'Arquivo salvo! Confirme a pasta onde salvou para copiar o caminho completo:',
+        stored,
+      )
+      const folder = (input ?? stored).trim().replace(/[\\/]+$/, '')
+      if (input !== null && folder) localStorage.setItem(EXPORT_FOLDER_KEY, folder)
+
+      const path = folder ? `${folder}\\${savedName}` : savedName
+      return { path, copied: await copyToClipboard(path) }
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return { path: '', copied: false, cancelled: true }
+      // fall through to anchor download
+    }
+  }
+
+  // Fallback (Firefox / Safari): anchor download → Downloads folder
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -57,7 +98,8 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 
-  return { path: winPath, copied }
+  const path = `%USERPROFILE%\\Downloads\\${filename}`
+  return { path, copied: await copyToClipboard(path) }
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.

@@ -212,11 +212,12 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const handleExportMatrix = async () => {
     try {
-      const { path, copied } = await exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
+      const { path, copied, cancelled } = await exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
+      if (cancelled) return
       showToast(
         copied
-          ? `Salvo em Downloads. Caminho copiado — cole no Windows (Win+R) para abrir: ${path}`
-          : `Salvo em Downloads. Caminho para abrir no Windows (Win+R): ${path}`,
+          ? `Caminho copiado! Cole no Explorer ou Win+R para abrir: ${path}`
+          : `Salvo. Caminho para abrir: ${path}`,
       )
     } catch {
       showToast('Erro ao exportar matriz', true)
