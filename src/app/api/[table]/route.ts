@@ -123,8 +123,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const { data, error } = await supabaseAdmin.from(table).insert(insertBody).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) return NextResponse.json({ error: translateDbError(error.message) }, { status: 400 })
   return NextResponse.json(data, { status: 201 })
+}
+
+function translateDbError(msg: string): string {
+  if (msg.includes('violates foreign key constraint')) {
+    const table = msg.match(/on table "([^"]+)"/)?.[1] ?? ''
+    const constraint = msg.match(/constraint "([^"]+)"/)?.[1] ?? ''
+    return `Valor inválido: referência não encontrada (tabela: ${table || '?'}, restrição: ${constraint || '?'}). Verifique se os IDs informados existem nas tabelas relacionadas.`
+  }
+  if (msg.includes('violates not-null constraint')) {
+    const col = msg.match(/column "([^"]+)"/)?.[1] ?? ''
+    return `Campo obrigatório não preenchido${col ? `: "${col}"` : ''}.`
+  }
+  if (msg.includes('duplicate key') || msg.includes('unique constraint')) {
+    const col = msg.match(/\(([^)]+)\)/)?.[1] ?? ''
+    return `Valor duplicado${col ? ` no campo "${col}"` : ''} — este registro já existe.`
+  }
+  return msg
 }
 
 function parseValue(type: string, value: unknown): unknown {
