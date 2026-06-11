@@ -94,6 +94,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }, { status: 400 })
   }
 
+  // Unique-field check: reject if a record with this value already exists
+  for (const field of schema.fields.filter(f => f.unique && !f.isPk)) {
+    const val = insertBody[field.name]
+    if (val === null || val === undefined || val === '') continue
+    const { data: existing } = await supabaseAdmin
+      .from(table)
+      .select(field.name)
+      .eq(field.name, String(val))
+      .maybeSingle()
+    if (existing) {
+      return NextResponse.json({
+        error: `${field.label}: "${val}" já existe — valor duplicado não é permitido`,
+      }, { status: 400 })
+    }
+  }
+
   // Auto-increment: compute MAX(field)+1 for fields marked autoIncrement
   const autoIncrFields = schema.fields.filter(f => f.autoIncrement)
   for (const field of autoIncrFields) {

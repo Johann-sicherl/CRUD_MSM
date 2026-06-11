@@ -24,9 +24,10 @@ function lookupFields(schema: TableSchema): Field[] {
 }
 
 export default function ImportReviewModal({ schema, tableName, initialRows, onClose, onDone }: Props) {
-  const editableCols = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
-  const lFields = lookupFields(schema)
-  const lFieldNames = new Set(lFields.map(f => f.name))
+  const editableCols  = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
+  const lFields       = lookupFields(schema)
+  const lFieldNames   = new Set(lFields.map(f => f.name))
+  const uniqueFields  = schema.fields.filter(f => f.unique && !f.isPk)
 
   // rows: values to submit — lookup fields hold the resolved KEY (ID)
   const [rows,     setRows]     = useState<Record<string, string>[]>(initialRows)
@@ -185,9 +186,40 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
     setPhase('done')
   }
 
-  const saved         = done - errLines.length
-  const pct           = total ? Math.round((done / total) * 100) : 0
-  const totalWarnings = Object.values(warnings).reduce((s, w) => s + Object.keys(w).length, 0)
+  const saved = done - errLines.length
+  const pct   = total ? Math.round((done / total) * 100) : 0
+
+  // Detect duplicates within the current batch for unique fields
+  const batchDuplicates: Record<number, Record<string, string>> = {}
+  for (const f of uniqueFields) {
+    const seen = new Map<string, number>()  // value → first row index
+    for (let ri = 0; ri < rows.length; ri++) {
+      const val = (rows[ri][f.name] ?? '').trim()
+      if (!val) continue
+      if (seen.has(val)) {
+        const first = seen.get(val)!
+        if (!batchDuplicates[ri]) batchDuplicates[ri] = {}
+        batchDuplicates[ri][f.name] = `Duplicado no lote (linha ${first + 1})`
+        if (!batchDuplicates[first]) batchDuplicates[first] = {}
+        batchDuplicates[first][f.name] = `Duplicado no lote (linha ${ri + 1})`
+      } else {
+        seen.set(val, ri)
+      }
+    }
+  }
+
+  // Merge lookup warnings + batch duplicate warnings
+  const allWarnings: Record<number, Record<string, string>> = {}
+  const mergeIn = (src: Record<number, Record<string, string>>) => {
+    for (const [k, v] of Object.entries(src)) {
+      const idx = Number(k)
+      allWarnings[idx] = { ...allWarnings[idx], ...v }
+    }
+  }
+  mergeIn(warnings)
+  mergeIn(batchDuplicates)
+
+  const totalWarnings = Object.values(allWarnings).reduce((s, w) => s + Object.keys(w).length, 0)
   const hasErrors     = totalWarnings > 0
 
   /* ── Done ─────────────────────────────────────────────────────────────── */
@@ -278,13 +310,13 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
                     </td>
                   </tr>
                 ) : rows.map((row, ri) => {
-                  const rowHasError = !!warnings[ri]
+                  const rowHasError = !!allWarnings[ri]
                   return (
                     <tr key={ri} className={`hover:bg-surface-container-high/50 ${rowHasError ? 'bg-error/5' : ''}`}>
                       <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${rowHasError ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
                       {editableCols.map(f => {
                         const isLookup = lFieldNames.has(f.name)
-                        const warn     = warnings[ri]?.[f.name]
+                        const warn     = allWarnings[ri]?.[f.name]
                         const shownVal = isLookup
                           ? (display[ri]?.[f.name] ?? row[f.name] ?? '')
                           : (row[f.name] === 'null' ? '' : (row[f.name] ?? ''))

@@ -54,6 +54,7 @@ export interface Field {
   cascadeLookup?: CascadeLookupConfig
   validateExistsIn?: { table: string; field: string; displayField?: string; errorMessage?: string }
   autoIncrement?: boolean
+  unique?: boolean
   hideInForm?: boolean
   hideInImport?: boolean
   formFullWidth?: boolean
@@ -156,7 +157,7 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         validateExistsIn: { table: 'equipments', field: 'legacy_id', displayField: 'name', errorMessage: 'Equipamento não encontrado — coluna "Equipamento" deve conter o ID numérico ou o nome exato do equipamento' } },
-      { name: 'protheus_code',   label: 'Cód. Protheus',       type: 'text',    nullable: false, showInList: true, listFilterType: 'text' },
+      { name: 'protheus_code',   label: 'Cód. Protheus',       type: 'text',    nullable: false, unique: true, showInList: true, listFilterType: 'text' },
       { name: 'processor',       label: 'Processador',         type: 'text',    nullable: true },
       { name: 'memory',          label: 'Memória',             type: 'text',    nullable: true },
       { name: 'storage',         label: 'Armazenamento',       type: 'text',    nullable: true },
@@ -189,7 +190,7 @@ export const tables: Record<string, TableSchema> = {
     importExport: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, showInList: true },
+      { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, unique: true, showInList: true },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
       { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: true, showInList: true,
         lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
