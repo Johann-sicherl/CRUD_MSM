@@ -108,7 +108,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id',              label: 'ID',                  type: 'uuid',    nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id',       label: 'ID Leg.',             type: 'number',  nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
       { name: 'name',            label: 'Modelo',              type: 'text',    nullable: false, showInList: true, listFilterType: 'text' },
-      { name: 'commercial_name', label: 'Nome Com.',           type: 'text',    nullable: false, showInList: true, listFilterType: 'text', hideInImport: true },
+      { name: 'commercial_name', label: 'Nome Com.',           type: 'text',    nullable: false, showInList: true, listFilterType: 'text' },
       { name: 'ipi_tax_rate',    label: 'IPI (%)',             type: 'decimal', nullable: false, defaultValue: 0, showInList: true, listFilterType: 'text' },
       { name: 'contribution_margin_ratio', label: 'Marg. (%)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true, listFilterType: 'text' },
       { name: 'seller_commission',   label: 'Com. Vend. (%)',  type: 'decimal', nullable: false, defaultValue: 0, showInList: true, listFilterType: 'text' },
