@@ -19,8 +19,11 @@ function normaliseDecimal(raw: string): string {
 /** Generate an Excel template with just the column headers and trigger save.
  *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog
  *  with a proper filename; falls back to a standard anchor download on other browsers.
- *  After saving, opens the file in a new tab — if Excel (or the OS handler) is
- *  configured for .xlsx the file opens directly in Excel. */
+ *
+ *  NOTE: browsers cannot launch the saved file in Excel — the File System Access
+ *  sandbox provides no "open with external app" capability, and window.open on a
+ *  blob URL just re-downloads the file to Downloads with a UUID name. So we only
+ *  save; the user opens the file from their chosen folder. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
@@ -34,10 +37,9 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
 
   const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
-  // File (not Blob) so the name is preserved when the browser downloads via window.open
-  const file = new File([buf], filename, { type: xlsxMime })
+  const blob = new Blob([buf], { type: xlsxMime })
 
-  // Native Save-As dialog (Chrome / Edge on HTTPS or localhost)
+  // Native Save-As dialog (Chrome / Edge on HTTPS or localhost) → saves to chosen folder
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
       const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
@@ -46,16 +48,8 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
           types: [{ description: 'Planilha Excel', accept: { [xlsxMime]: ['.xlsx'] } }],
         })
       const writable = await handle.createWritable()
-      await writable.write(file)
+      await writable.write(blob)
       await writable.close()
-      // File is saved to the chosen folder. Open is best-effort in a separate
-      // try so a failure here never causes a fall-through to the Downloads path.
-      try {
-        const saved = await handle.getFile()
-        const openUrl = URL.createObjectURL(saved)
-        window.open(openUrl, '_blank')
-        setTimeout(() => URL.revokeObjectURL(openUrl), 60_000)
-      } catch { /* opening failed silently — file was already saved */ }
       return
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
@@ -63,8 +57,8 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
     }
   }
 
-  // Fallback (Firefox / Safari): anchor download — browser saves to Downloads
-  const url = URL.createObjectURL(file)
+  // Fallback (Firefox / Safari): anchor download with correct filename → Downloads
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
