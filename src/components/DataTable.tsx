@@ -210,8 +210,17 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const handleSearch = () => setSearch(searchInput)
 
-  const handleExportMatrix = () => {
-    exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
+  const handleExportMatrix = async () => {
+    try {
+      const { path, copied } = await exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
+      showToast(
+        copied
+          ? `Salvo em Downloads. Caminho copiado — cole no Windows (Win+R) para abrir: ${path}`
+          : `Salvo em Downloads. Caminho para abrir no Windows (Win+R): ${path}`,
+      )
+    } catch {
+      showToast('Erro ao exportar matriz', true)
+    }
   }
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

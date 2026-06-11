@@ -16,15 +16,23 @@ function normaliseDecimal(raw: string): string {
   return s.replace(',', '.')
 }
 
-/** Generate an Excel template with just the column headers and trigger save.
- *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog
- *  with a proper filename; falls back to a standard anchor download on other browsers.
+/** Generate an Excel template, save it to the Downloads folder, and copy a
+ *  Windows-resolvable path to the clipboard. Browsers cannot expose the absolute
+ *  path of a saved file (the File System Access sandbox hides it), so we save to
+ *  the known Downloads folder and copy `%USERPROFILE%\Downloads\<file>` — pasting
+ *  that into Win+R or the Explorer address bar opens the file directly in Excel.
  *
- *  NOTE: browsers cannot launch the saved file in Excel — the File System Access
- *  sandbox provides no "open with external app" capability, and window.open on a
- *  blob URL just re-downloads the file to Downloads with a UUID name. So we only
- *  save; the user opens the file from their chosen folder. */
-export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
+ *  Returns the copied path (or null if the clipboard write failed) so the caller
+ *  can show feedback. */
+export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx'): Promise<{ path: string; copied: boolean }> {
+  // Copy the path first, while the click's user-activation is still fresh
+  const winPath = `%USERPROFILE%\\Downloads\\${filename}`
+  let copied = false
+  try {
+    await navigator.clipboard.writeText(winPath)
+    copied = true
+  } catch { /* clipboard blocked — caller still gets the path to show */ }
+
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
   const headers = cols.map(f => f.label)
@@ -39,25 +47,7 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
   const blob = new Blob([buf], { type: xlsxMime })
 
-  // Native Save-As dialog (Chrome / Edge on HTTPS or localhost) → saves to chosen folder
-  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-    try {
-      const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
-        .showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: 'Planilha Excel', accept: { [xlsxMime]: ['.xlsx'] } }],
-        })
-      const writable = await handle.createWritable()
-      await writable.write(blob)
-      await writable.close()
-      return
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return
-      // fall through to anchor download
-    }
-  }
-
-  // Fallback (Firefox / Safari): anchor download with correct filename → Downloads
+  // Anchor download → saves to Downloads with the correct filename (matches winPath)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -66,6 +56,8 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+
+  return { path: winPath, copied }
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
