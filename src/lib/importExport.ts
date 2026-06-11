@@ -48,10 +48,14 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
       const writable = await handle.createWritable()
       await writable.write(file)
       await writable.close()
-      // Try to open the saved file — browser uses the File name, not a UUID
-      const url = URL.createObjectURL(await handle.getFile())
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      // File is saved to the chosen folder. Open is best-effort in a separate
+      // try so a failure here never causes a fall-through to the Downloads path.
+      try {
+        const saved = await handle.getFile()
+        const openUrl = URL.createObjectURL(saved)
+        window.open(openUrl, '_blank')
+        setTimeout(() => URL.revokeObjectURL(openUrl), 60_000)
+      } catch { /* opening failed silently — file was already saved */ }
       return
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
@@ -59,11 +63,15 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
     }
   }
 
-  // Fallback: window.open with a File object preserves the filename
-  // (Blob URLs use UUID as name; File URLs use File.name)
+  // Fallback (Firefox / Safari): anchor download — browser saves to Downloads
   const url = URL.createObjectURL(file)
-  window.open(url, '_blank')
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 /** Read ALL data rows of an Excel file and map them back to field names.
