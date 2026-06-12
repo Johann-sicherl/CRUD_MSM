@@ -28,6 +28,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   const lFields       = lookupFields(schema)
   const lFieldNames   = new Set(lFields.map(f => f.name))
   const uniqueFields  = schema.fields.filter(f => f.unique && !f.isPk)
+  const dFields       = schema.fields.filter(f => f.dynamicOptions)
 
   // rows: values to submit — lookup fields hold the resolved KEY (ID)
   const [rows,     setRows]     = useState<Record<string, string>[]>(initialRows)
@@ -42,10 +43,12 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
 
   const cacheRef          = useRef<LookupCache>({})
   const uniqueExistingRef = useRef<Record<string, Set<string>>>({})
+  // field name → Map<lowercase option, canonical option> from field-options.json
+  const dynamicAllowedRef = useRef<Record<string, Map<string, string>>>({})
 
   // On mount: fetch lookup tables, build cache, pre-validate unique fields against DB
   useEffect(() => {
-    if (lFields.length === 0 && uniqueFields.length === 0) { setPhase('review'); return }
+    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
       const cache: LookupCache = {}
@@ -91,6 +94,21 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             }
           } catch { /* skip */ }
         })()] : []),
+        // Fetch standardized options (field-options.json) for dynamicOptions fields
+        ...(dFields.length > 0 ? [(async () => {
+          try {
+            const res = await fetch('/api/field-options')
+            if (!res.ok) return
+            const all: Record<string, string[]> = await res.json()
+            for (const f of dFields) {
+              const map = new Map<string, string>()
+              for (const opt of (all[f.dynamicOptions!] || [])) {
+                map.set(opt.toLowerCase(), opt)
+              }
+              dynamicAllowedRef.current[f.name] = map
+            }
+          } catch { /* skip */ }
+        })()] : []),
       ])
 
       cacheRef.current = cache
@@ -128,6 +146,22 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           if (uniqueExistingRef.current[f.name]?.has(val.toLowerCase())) {
             if (!newWarnings[ri]) newWarnings[ri] = {}
             newWarnings[ri][f.name] = `"${val}" já existe no banco de dados`
+          }
+        }
+
+        // Standardization: dynamicOptions fields must match an option in field-options.json.
+        // Case-insensitive matches are normalized to the canonical (uppercase) value.
+        for (const f of dFields) {
+          const allowed = dynamicAllowedRef.current[f.name]
+          if (!allowed || allowed.size === 0) continue
+          const val = (newRows[ri][f.name] ?? '').trim()
+          if (!val || val === 'null') continue
+          const canonical = allowed.get(val.toLowerCase())
+          if (canonical) {
+            newRows[ri][f.name] = canonical
+          } else {
+            if (!newWarnings[ri]) newWarnings[ri] = {}
+            newWarnings[ri][f.name] = `"${val}" fora do padrão — opções: ${[...allowed.values()].join(', ')}`
           }
         }
       }
@@ -168,22 +202,46 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
       // Regular field
       setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: val } : r))
 
+      const setWarn = (msg: string) => setWarnings(prev => ({
+        ...prev,
+        [ri]: { ...prev[ri], [fieldName]: msg },
+      }))
+      const clearWarn = () => setWarnings(prev => {
+        if (!prev[ri]?.[fieldName]) return prev
+        const next = { ...prev, [ri]: { ...prev[ri] } }
+        delete next[ri][fieldName]
+        if (!Object.keys(next[ri]).length) delete next[ri]
+        return next
+      })
+
+      const trimmed = val.trim()
+
       // Live DB-unique validation: check against existing records fetched on mount
       const existingSet = uniqueExistingRef.current[fieldName]
       if (existingSet) {
-        if (val.trim() && existingSet.has(val.trim().toLowerCase())) {
-          setWarnings(prev => ({
-            ...prev,
-            [ri]: { ...prev[ri], [fieldName]: `"${val.trim()}" já existe no banco de dados` },
-          }))
+        if (trimmed && existingSet.has(trimmed.toLowerCase())) {
+          setWarn(`"${trimmed}" já existe no banco de dados`)
         } else {
-          setWarnings(prev => {
-            if (!prev[ri]?.[fieldName]) return prev
-            const next = { ...prev, [ri]: { ...prev[ri] } }
-            delete next[ri][fieldName]
-            if (!Object.keys(next[ri]).length) delete next[ri]
-            return next
-          })
+          clearWarn()
+        }
+        return
+      }
+
+      // Live standardization check against field-options.json
+      const allowed = dynamicAllowedRef.current[fieldName]
+      if (allowed && allowed.size > 0) {
+        if (!trimmed) {
+          clearWarn()
+        } else {
+          const canonical = allowed.get(trimmed.toLowerCase())
+          if (canonical) {
+            if (canonical !== val) {
+              setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: canonical } : r))
+            }
+            clearWarn()
+          } else {
+            setWarn(`"${trimmed}" fora do padrão — opções: ${[...allowed.values()].join(', ')}`)
+          }
         }
       }
     }
