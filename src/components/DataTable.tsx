@@ -85,10 +85,12 @@ export default function DataTable({ tableName, schema }: Props) {
   const [importRows,    setImportRows]     = useState<Record<string, string>[] | null>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [newMenuOpen,   setNewMenuOpen]   = useState(false)
+  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
-  useEffect(() => { setColFilters({}); setFilterSearch({}) }, [tableName])
+  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()) }, [tableName])
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -242,6 +244,24 @@ export default function DataTable({ tableName, schema }: Props) {
     }
   }
 
+  const handleBulkDelete = async () => {
+    setBulkDeleteOpen(false)
+    const ids = Array.from(selectedIds)
+    let ok = 0, fail = 0
+    await Promise.all(ids.map(async id => {
+      const res = await fetch(`/api/${tableName}/${id}`, { method: 'DELETE' })
+      res.ok ? ok++ : fail++
+    }))
+    setSelectedIds(new Set())
+    showToast(
+      fail === 0
+        ? `${ok} registro${ok !== 1 ? 's' : ''} excluído${ok !== 1 ? 's' : ''} com sucesso`
+        : `${ok} excluído${ok !== 1 ? 's' : ''}, ${fail} com erro`,
+      fail > 0,
+    )
+    fetchData()
+  }
+
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
     setTimeout(() => setToast(null), 3500)
@@ -283,7 +303,16 @@ export default function DataTable({ tableName, schema }: Props) {
             </button>
           )}
         </div>
-        <div className="relative">
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => setBulkDeleteOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-error text-on-error rounded text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap"
+            >
+              🗑 Excluir {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+            </button>
+          )}
+          <div className="relative">
           {/* Backdrop to close dropdown on outside click */}
           {newMenuOpen && (
             <div className="fixed inset-0 z-10" onClick={() => setNewMenuOpen(false)} />
@@ -344,6 +373,7 @@ export default function DataTable({ tableName, schema }: Props) {
             className="hidden"
             onChange={handleImportFile}
           />
+          </div>
         </div>
       </div>
 
@@ -369,6 +399,17 @@ export default function DataTable({ tableName, schema }: Props) {
               <table className={`${schema.compactColumns ? 'min-w-full' : 'w-full'} text-sm`}>
                 <thead className="bg-surface-container-highest border-b border-outline-variant">
                   <tr>
+                    <th className={`px-3 py-3 w-8 ${schema.columnFilters ? 'align-top' : ''}`}>
+                      <input
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={filteredRows.length > 0 && filteredRows.every(r => selectedIds.has(String(r.id)))}
+                        onChange={e => {
+                          const ids = filteredRows.map(r => String(r.id))
+                          setSelectedIds(e.target.checked ? new Set(ids) : new Set())
+                        }}
+                      />
+                    </th>
                     {listFields.map(f => (
                       <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ` align-top${f.listKeepWidth ? ' min-w-[150px]' : ' min-w-[100px]'}` : ''}`}>
                         <div>{f.label}</div>
@@ -400,13 +441,28 @@ export default function DataTable({ tableName, schema }: Props) {
                 <tbody className="divide-y divide-outline-variant/30">
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={listFields.length + 1} className="px-4 py-12 text-center text-outline text-sm">
+                      <td colSpan={listFields.length + 2} className="px-4 py-12 text-center text-outline text-sm">
                         Nenhum registro encontrado
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row, i) => (
-                      <tr key={String(row.id) || i} className="hover:bg-surface-container-high transition-colors group">
+                    filteredRows.map((row, i) => {
+                      const rowId = String(row.id)
+                      const isSelected = selectedIds.has(rowId)
+                      return (
+                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : ''}`}>
+                        <td className="px-3 py-3 w-8">
+                          <input
+                            type="checkbox"
+                            className="accent-primary"
+                            checked={isSelected}
+                            onChange={e => setSelectedIds(prev => {
+                              const next = new Set(prev)
+                              e.target.checked ? next.add(rowId) : next.delete(rowId)
+                              return next
+                            })}
+                          />
+                        </td>
                         {listFields.map(f => {
                           let cell: React.ReactNode
                           if (f.lookupFrom && lookups[f.name]) {
@@ -423,7 +479,7 @@ export default function DataTable({ tableName, schema }: Props) {
                             </td>
                           )
                         })}
-                        <td className="px-4 py-3 text-right whitespace-nowrap sticky right-0 bg-surface-container group-hover:bg-surface-container-high transition-colors border-l border-outline-variant/40 z-10">
+                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary/5 group-hover:bg-primary/10' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
                             className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
@@ -438,7 +494,8 @@ export default function DataTable({ tableName, schema }: Props) {
                           </button>
                         </td>
                       </tr>
-                    ))
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -459,6 +516,32 @@ export default function DataTable({ tableName, schema }: Props) {
           </>
         )}
       </div>
+
+      {/* Bulk delete confirmation */}
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl p-6 w-full max-w-sm animate-fade-in">
+            <h3 className="text-base font-semibold text-on-surface mb-2">⚠ Confirmar exclusão em massa</h3>
+            <p className="text-on-surface-variant text-sm mb-6">
+              Você está prestes a excluir <span className="text-error font-semibold">{selectedIds.size} registro{selectedIds.size !== 1 ? 's' : ''}</span>. Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setBulkDeleteOpen(false)}
+                className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-4 py-2 text-sm bg-error text-on-error rounded font-semibold hover:opacity-90 transition-opacity"
+              >
+                Excluir {selectedIds.size} registro{selectedIds.size !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation */}
       {deleteId && (
