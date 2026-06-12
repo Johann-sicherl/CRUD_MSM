@@ -40,37 +40,58 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   const [total,    setTotal]    = useState(0)
   const [errLines, setErrLines] = useState<string[]>([])
 
-  const cacheRef = useRef<LookupCache>({})
+  const cacheRef          = useRef<LookupCache>({})
+  const uniqueExistingRef = useRef<Record<string, Set<string>>>({})
 
-  // On mount: fetch lookup tables, build cache, resolve all rows
+  // On mount: fetch lookup tables, build cache, pre-validate unique fields against DB
   useEffect(() => {
-    if (lFields.length === 0) { setPhase('review'); return }
+    if (lFields.length === 0 && uniqueFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
       const cache: LookupCache = {}
 
-      await Promise.all(lFields.map(async f => {
-        const fo = f.fetchOptions!
-        const vi = f.validateExistsIn!
-        try {
-          const res = await fetch(`/api/${fo.table}?limit=25000`)
-          if (!res.ok) return
-          const json = await res.json()
-          const byKeyOrName = new Map<string, string>()
-          const byKey       = new Map<string, string>()
-          for (const row of (json.data || [])) {
-            const key  = String(row[vi.field]        ?? '')
-            const name = String(row[vi.displayField!] ?? '')
-            if (!key) continue
-            byKeyOrName.set(key.toLowerCase(), key)
-            if (name) {
-              byKeyOrName.set(name.toLowerCase(), key)
-              byKey.set(key, name)
+      await Promise.all([
+        // Build lookup caches for FK reference fields
+        ...lFields.map(async f => {
+          const fo = f.fetchOptions!
+          const vi = f.validateExistsIn!
+          try {
+            const res = await fetch(`/api/${fo.table}?limit=25000`)
+            if (!res.ok) return
+            const json = await res.json()
+            const byKeyOrName = new Map<string, string>()
+            const byKey       = new Map<string, string>()
+            for (const row of (json.data || [])) {
+              const key  = String(row[vi.field]        ?? '')
+              const name = String(row[vi.displayField!] ?? '')
+              if (!key) continue
+              byKeyOrName.set(key.toLowerCase(), key)
+              if (name) {
+                byKeyOrName.set(name.toLowerCase(), key)
+                byKey.set(key, name)
+              }
             }
-          }
-          cache[f.name] = { byKeyOrName, byKey }
-        } catch { /* skip if API unreachable */ }
-      }))
+            cache[f.name] = { byKeyOrName, byKey }
+          } catch { /* skip if API unreachable */ }
+        }),
+        // Fetch existing records to pre-check unique fields
+        ...(uniqueFields.length > 0 ? [(async () => {
+          try {
+            const res = await fetch(`/api/${tableName}?limit=25000`)
+            if (!res.ok) return
+            const json = await res.json()
+            const data: Record<string, unknown>[] = json.data || []
+            for (const f of uniqueFields) {
+              const existing = new Set<string>()
+              for (const row of data) {
+                const v = String(row[f.name] ?? '').trim()
+                if (v) existing.add(v.toLowerCase())
+              }
+              uniqueExistingRef.current[f.name] = existing
+            }
+          } catch { /* skip */ }
+        })()] : []),
+      ])
 
       cacheRef.current = cache
 
@@ -98,6 +119,16 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           newDisplay[ri][f.name] = raw
           if (!newWarnings[ri]) newWarnings[ri] = {}
           newWarnings[ri][f.name] = `"${raw}" não encontrado`
+        }
+
+        // Check unique fields against existing DB records
+        for (const f of uniqueFields) {
+          const val = (newRows[ri][f.name] ?? '').trim()
+          if (!val) continue
+          if (uniqueExistingRef.current[f.name]?.has(val.toLowerCase())) {
+            if (!newWarnings[ri]) newWarnings[ri] = {}
+            newWarnings[ri][f.name] = `"${val}" já existe no banco de dados`
+          }
         }
       }
 
@@ -136,6 +167,25 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
     } else {
       // Regular field
       setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: val } : r))
+
+      // Live DB-unique validation: check against existing records fetched on mount
+      const existingSet = uniqueExistingRef.current[fieldName]
+      if (existingSet) {
+        if (val.trim() && existingSet.has(val.trim().toLowerCase())) {
+          setWarnings(prev => ({
+            ...prev,
+            [ri]: { ...prev[ri], [fieldName]: `"${val.trim()}" já existe no banco de dados` },
+          }))
+        } else {
+          setWarnings(prev => {
+            if (!prev[ri]?.[fieldName]) return prev
+            const next = { ...prev, [ri]: { ...prev[ri] } }
+            delete next[ri][fieldName]
+            if (!Object.keys(next[ri]).length) delete next[ri]
+            return next
+          })
+        }
+      }
     }
   }, [lFieldNames])
 
@@ -262,7 +312,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             <h2 className="text-sm font-semibold text-on-surface font-mono">Auditoria de Importação</h2>
             <p className="text-[11px] text-outline mt-0.5">
               {phase === 'validating'
-                ? 'Validando referências…'
+                ? 'Validando referências e duplicidades…'
                 : `${rows.length} registro${rows.length !== 1 ? 's' : ''} — revise e edite antes de confirmar`}
             </p>
           </div>
@@ -287,7 +337,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           {phase === 'validating' ? (
             <div className="flex items-center justify-center h-32 gap-3 text-outline text-sm">
               <span className="w-4 h-4 border-2 border-outline border-t-primary rounded-full animate-spin" />
-              Verificando referências…
+              Verificando referências e duplicidades no banco…
             </div>
           ) : (
             <table className="min-w-full text-xs">
