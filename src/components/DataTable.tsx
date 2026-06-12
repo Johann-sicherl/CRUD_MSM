@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields } from '@/lib/schema'
-import { exportMatrix, parseImportFile } from '@/lib/importExport'
+import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -216,6 +216,15 @@ export default function DataTable({ tableName, schema }: Props) {
     exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
   }
 
+  const handleExportVisible = () => {
+    const headers = listFields.map(f => f.label)
+    const rowData = filteredRows.map(row =>
+      listFields.map(f => getDisplayValue(row, f.name, f, lookups))
+    )
+    const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
+    exportVisibleData(headers, rowData, `${safeLabel}.xlsx`)
+  }
+
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -312,6 +321,15 @@ export default function DataTable({ tableName, schema }: Props) {
               🗑 Excluir {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
             </button>
           )}
+          <button
+            onClick={handleExportVisible}
+            disabled={filteredRows.length === 0}
+            title={`Exportar ${filteredRows.length} registro${filteredRows.length !== 1 ? 's' : ''} visíveis para Excel`}
+            className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ↓ Exportar dados
+          </button>
+
           <div className="relative">
           {/* Backdrop to close dropdown on outside click */}
           {newMenuOpen && (

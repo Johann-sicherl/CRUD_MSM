@@ -16,6 +16,30 @@ function normaliseDecimal(raw: string): string {
   return s.replace(',', '.')
 }
 
+/** Export the currently-visible grid rows to an XLSX file and save to Downloads. */
+export async function exportVisibleData(
+  headers: string[],
+  rows: string[][],
+  filename: string,
+) {
+  const XLSX = await import('xlsx')
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 14) }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Dados')
+  const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+  const blob = new Blob([buf], { type: xlsxMime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 /** Generate an Excel template with just the column headers and trigger save.
  *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog;
  *  falls back to a standard anchor download on other browsers. */
