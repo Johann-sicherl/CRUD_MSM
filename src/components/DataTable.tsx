@@ -307,7 +307,7 @@ export default function DataTable({ tableName, schema }: Props) {
           {selectedIds.size > 0 && (
             <button
               onClick={() => setBulkDeleteOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-error text-on-error rounded text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap"
+              className="flex items-center gap-1.5 px-4 py-2 bg-red-700 text-black rounded text-sm font-semibold hover:bg-red-600 transition-colors whitespace-nowrap"
             >
               🗑 Excluir {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
             </button>
