@@ -241,7 +241,6 @@ export const tables: Record<string, TableSchema> = {
     batchInsert: true,
     columnFilters: true,
     compactColumns: true,
-    importExport: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
@@ -283,7 +282,6 @@ export const tables: Record<string, TableSchema> = {
     doubleInsert: true,
     columnFilters: true,
     compactColumns: true,
-    importExport: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, formFullWidth: true, listExpand: true,
@@ -315,7 +313,6 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     columnFilters: true,
     compactColumns: true,
-    importExport: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listExpand: true,
