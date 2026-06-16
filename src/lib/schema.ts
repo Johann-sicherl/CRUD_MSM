@@ -57,6 +57,7 @@ export interface Field {
   unique?: boolean
   hideInForm?: boolean
   hideInImport?: boolean
+  noBulkEdit?: boolean       // exclude from the bulk-edit modal (identity/relational keys must not be mass-updated)
   formFullWidth?: boolean
   listExpand?: boolean       // truncate cell in list view and show expand/collapse button
   listKeepWidth?: boolean    // preserve min-w even when table uses compactColumns
@@ -161,11 +162,11 @@ export const tables: Record<string, TableSchema> = {
     bulkEdit: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text',
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text', noBulkEdit: true,
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         validateExistsIn: { table: 'equipments', field: 'legacy_id', displayField: 'name', errorMessage: 'Equipamento não encontrado — coluna "Equipamento" deve conter o ID numérico ou o nome exato do equipamento' } },
-      { name: 'protheus_code',   label: 'Cód. Protheus',       type: 'text',    nullable: false, unique: true, showInList: true, listFilterType: 'text' },
+      { name: 'protheus_code',   label: 'Cód. Protheus',       type: 'text',    nullable: false, unique: true, showInList: true, listFilterType: 'text', noBulkEdit: true },
       { name: 'processor',       label: 'Processador',         type: 'text',    nullable: true, dynamicOptions: 'processor' },
       { name: 'memory',          label: 'Memória',             type: 'text',    nullable: true, dynamicOptions: 'memory' },
       { name: 'storage',         label: 'Armazenamento',       type: 'text',    nullable: true, dynamicOptions: 'storage' },

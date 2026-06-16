@@ -21,7 +21,7 @@ function blockNonNumericKey(e: React.KeyboardEvent<HTMLInputElement>, allowDecim
 }
 
 export default function BulkEditModal({ schema, tableName, selectedIds, onClose, onSaved }: Props) {
-  const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
+  const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm && !f.noBulkEdit)
 
   const [form, setForm] = useState<Record<string, string>>(
     Object.fromEntries(editableFields.map(f => [f.name, '']))
