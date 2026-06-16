@@ -26,6 +26,9 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
   const [form, setForm] = useState<Record<string, string>>(
     Object.fromEntries(editableFields.map(f => [f.name, '']))
   )
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(
+    Object.fromEntries(editableFields.map(f => [f.name, false]))
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,7 +36,11 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
-  const changedFields = editableFields.filter(f => form[f.name] !== '')
+  const handleToggle = (name: string, on: boolean) => {
+    setEnabled(prev => ({ ...prev, [name]: on }))
+  }
+
+  const changedFields = editableFields.filter(f => enabled[f.name])
   const hasChanges = changedFields.length > 0
 
   const handleApply = async () => {
@@ -76,7 +83,7 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
 
         <div className="px-6 py-4 space-y-4">
           <div className="flex items-center gap-2 text-xs text-outline bg-surface-container-low rounded px-3 py-2 border border-outline-variant font-mono">
-            {selectedIds.length} registro{selectedIds.length !== 1 ? 's' : ''} selecionado{selectedIds.length !== 1 ? 's' : ''} — apenas os campos preenchidos abaixo serão sobrescritos nos registros selecionados
+            {selectedIds.length} registro{selectedIds.length !== 1 ? 's' : ''} selecionado{selectedIds.length !== 1 ? 's' : ''} — marque a caixa ao lado do campo para habilitá-lo; apenas os campos habilitados serão sobrescritos nos registros selecionados
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -85,6 +92,8 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
                 key={field.name}
                 field={field}
                 value={form[field.name] ?? ''}
+                enabled={!!enabled[field.name]}
+                onToggle={(on) => handleToggle(field.name, on)}
                 onChange={(v) => handleChange(field.name, v)}
               />
             ))}
@@ -108,7 +117,7 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
               type="button"
               onClick={handleApply}
               disabled={!hasChanges || loading}
-              title={!hasChanges ? 'Preencha pelo menos um campo para alterar' : undefined}
+              title={!hasChanges ? 'Marque pelo menos um campo para alterar' : undefined}
               className="flex items-center gap-2 px-5 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors"
             >
               {loading
@@ -123,34 +132,46 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
   )
 }
 
-function BulkFieldInput({ field, value, onChange }: { field: Field; value: string; onChange: (v: string) => void }) {
+function BulkFieldInput({
+  field,
+  value,
+  enabled,
+  onToggle,
+  onChange,
+}: {
+  field: Field
+  value: string
+  enabled: boolean
+  onToggle: (on: boolean) => void
+  onChange: (v: string) => void
+}) {
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
-  const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+  const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
   let input: React.ReactNode
 
   if (field.type === 'select' && field.options) {
     input = (
-      <select value={value} onChange={e => onChange(e.target.value)} className={inputClass}>
-        <option value="">— Não alterar —</option>
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} className={inputClass}>
+        <option value="">— Selecione —</option>
         {field.options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     )
   } else if (field.type === 'boolean') {
     input = (
-      <select value={value} onChange={e => onChange(e.target.value)} className={inputClass}>
-        <option value="">— Não alterar —</option>
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} className={inputClass}>
+        <option value="">— Selecione —</option>
         <option value="true">Sim</option>
         <option value="false">Não</option>
       </select>
     )
   } else if (field.type === 'textarea') {
     input = (
-      <textarea value={value} onChange={e => onChange(e.target.value)} placeholder="— Não alterar —" rows={3} className={`${inputClass} resize-y`} />
+      <textarea value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} rows={3} className={`${inputClass} resize-y`} />
     )
   } else if (field.type === 'jsonb') {
     input = (
-      <textarea value={value} onChange={e => onChange(e.target.value)} placeholder="— Não alterar —" rows={4} className={`${inputClass} font-mono resize-y`} />
+      <textarea value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} rows={4} className={`${inputClass} font-mono resize-y`} />
     )
   } else if (field.type === 'number') {
     input = (
@@ -160,7 +181,7 @@ function BulkFieldInput({ field, value, onChange }: { field: Field; value: strin
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={e => blockNonNumericKey(e, false)}
-        placeholder="— Não alterar —"
+        disabled={!enabled}
         className={inputClass}
       />
     )
@@ -172,19 +193,27 @@ function BulkFieldInput({ field, value, onChange }: { field: Field; value: strin
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={e => blockNonNumericKey(e, true)}
-        placeholder="— Não alterar —"
+        disabled={!enabled}
         className={inputClass}
       />
     )
   } else {
     input = (
-      <input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder="— Não alterar —" className={inputClass} />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} className={inputClass} />
     )
   }
 
   return (
     <div className={isWide ? 'sm:col-span-2' : ''}>
-      <label className="block text-xs font-medium text-on-surface-variant mb-1">{field.label}</label>
+      <label className="flex items-center gap-2 text-xs font-medium mb-1 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e => onToggle(e.target.checked)}
+          className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"
+        />
+        <span className={enabled ? 'text-on-surface' : 'text-on-surface-variant'}>{field.label}</span>
+      </label>
       {input}
     </div>
   )
