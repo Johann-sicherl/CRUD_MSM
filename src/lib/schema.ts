@@ -154,6 +154,7 @@ export const tables: Record<string, TableSchema> = {
     columnFilters: true,
     compactColumns: true,
     importExport: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text',
@@ -191,6 +192,7 @@ export const tables: Record<string, TableSchema> = {
     columnFilters: true,
     compactColumns: true,
     importExport: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, unique: true, showInList: true },
@@ -224,6 +226,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_id',
     columnFilters: true,
     importExport: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Legado', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true },
@@ -244,6 +247,7 @@ export const tables: Record<string, TableSchema> = {
     batchInsert: true,
     columnFilters: true,
     compactColumns: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
@@ -285,6 +289,7 @@ export const tables: Record<string, TableSchema> = {
     doubleInsert: true,
     columnFilters: true,
     compactColumns: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, formFullWidth: true, listExpand: true,
@@ -316,6 +321,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     columnFilters: true,
     compactColumns: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listExpand: true,
@@ -349,6 +355,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_equipment_id',
     columnFilters: true,
     importExport: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true,
