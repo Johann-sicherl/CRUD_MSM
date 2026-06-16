@@ -210,6 +210,8 @@ export default function DataTable({ tableName, schema }: Props) {
     setColFilters(prev => ({ ...prev, [name]: [] }))
   }, [])
 
+  const showSearchBar = tableName !== 'equipments'
+
   const handleSearch = () => setSearch(searchInput)
 
   const handleExportMatrix = () => {
@@ -279,43 +281,45 @@ export default function DataTable({ tableName, schema }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Header actions */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
-          {tableName !== 'equipments' && (
-            <>
-              <input
-                type="text"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                placeholder="Buscar registros..."
-                className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
-              />
-              <button
-                onClick={handleSearch}
-                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
-              >
-                Buscar
-              </button>
-              {search && (
+      <div className={`flex flex-col sm:flex-row gap-3 items-start sm:items-center ${showSearchBar || hasActiveColFilters ? 'justify-between' : ''}`}>
+        {(showSearchBar || hasActiveColFilters) && (
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+            {showSearchBar && (
+              <>
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  placeholder="Buscar registros..."
+                  className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
+                />
                 <button
-                  onClick={() => { setSearch(''); setSearchInput('') }}
-                  className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
+                  onClick={handleSearch}
+                  className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
                 >
-                  ✕ Limpar
+                  Buscar
                 </button>
-              )}
-            </>
-          )}
-          {hasActiveColFilters && (
-            <button
-              onClick={() => { setColFilters({}); setFilterSearch({}) }}
-              className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
-            >
-              ✕ Limpar filtros
-            </button>
-          )}
-        </div>
+                {search && (
+                  <button
+                    onClick={() => { setSearch(''); setSearchInput('') }}
+                    className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
+                  >
+                    ✕ Limpar
+                  </button>
+                )}
+              </>
+            )}
+            {hasActiveColFilters && (
+              <button
+                onClick={() => { setColFilters({}); setFilterSearch({}) }}
+                className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
+              >
+                ✕ Limpar filtros
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (
             <button
