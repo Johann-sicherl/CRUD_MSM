@@ -373,7 +373,7 @@ export default function DataTable({ tableName, schema }: Props) {
     <div className="flex flex-col gap-4">
       {/* Header actions */}
       {schema.compactHeader ? (
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end justify-between">
           <div>
             <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
               {DOMAIN_LABELS[schema.domain]} · {tableName}
