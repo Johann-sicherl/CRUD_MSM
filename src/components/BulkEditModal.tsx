@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Field, TableSchema } from '@/lib/schema'
 
 interface Props {
@@ -31,6 +31,59 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
+  const [fetchedDynamic, setFetchedDynamic] = useState<Record<string, string[]>>({})
+
+  useEffect(() => {
+    const fieldsWithFetch = editableFields.filter(f => f.fetchOptions)
+    fieldsWithFetch.forEach(async (field) => {
+      const fc = field.fetchOptions!
+
+      if (fc.filterVia) {
+        const fv = fc.filterVia
+        const [filterRes, mainRes] = await Promise.all([
+          fetch(`/api/${fv.table}?limit=25000`),
+          fetch(`/api/${fc.table}?limit=25000`),
+        ])
+        if (!filterRes.ok || !mainRes.ok) return
+        const [filterJson, mainJson] = await Promise.all([filterRes.json(), mainRes.json()])
+        const allowedIds = new Set(
+          (filterJson.data || [])
+            .filter((r: Record<string, unknown>) => String(r[fv.filterField]) === fv.filterValue)
+            .map((r: Record<string, unknown>) => String(r[fv.joinField]))
+        )
+        const opts = (mainJson.data || [])
+          .filter((r: Record<string, unknown>) => allowedIds.has(String(r[fc.keyField])))
+          .map((r: Record<string, unknown>) => ({ value: String(r[fc.keyField]), label: String(r[fc.displayField]) }))
+        setFetchedOptions(prev => ({ ...prev, [field.name]: opts }))
+        return
+      }
+
+      const res = await fetch(`/api/${fc.table}?limit=25000`)
+      if (!res.ok) return
+      const json = await res.json()
+      const opts = (json.data || []).map((row: Record<string, unknown>) => ({
+        value: String(row[fc.keyField]),
+        label: String(row[fc.displayField]),
+      }))
+      setFetchedOptions(prev => ({ ...prev, [field.name]: opts }))
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName])
+
+  useEffect(() => {
+    const dynamicFields = editableFields.filter(f => f.dynamicOptions)
+    if (dynamicFields.length === 0) return
+    fetch('/api/field-options')
+      .then(r => r.ok ? r.json() : {})
+      .then((all: Record<string, string[]>) => {
+        setFetchedDynamic(Object.fromEntries(
+          dynamicFields.map(f => [f.name, all[f.dynamicOptions!] || []])
+        ))
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName])
 
   const handleChange = (name: string, value: string) => {
     setForm(prev => ({ ...prev, [name]: value }))
@@ -95,6 +148,8 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
                 enabled={!!enabled[field.name]}
                 onToggle={(on) => handleToggle(field.name, on)}
                 onChange={(v) => handleChange(field.name, v)}
+                fetchedOptions={fetchedOptions[field.name]}
+                dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
               />
             ))}
           </div>
@@ -138,19 +193,37 @@ function BulkFieldInput({
   enabled,
   onToggle,
   onChange,
+  fetchedOptions,
+  dynamicOptionValues,
 }: {
   field: Field
   value: string
   enabled: boolean
   onToggle: (on: boolean) => void
   onChange: (v: string) => void
+  fetchedOptions?: Array<{ value: string; label: string }>
+  dynamicOptionValues?: string[]
 }) {
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
   const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
   let input: React.ReactNode
 
-  if (field.type === 'select' && field.options) {
+  if (fetchedOptions) {
+    input = (
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} className={inputClass}>
+        <option value="">— Selecione —</option>
+        {fetchedOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    )
+  } else if (dynamicOptionValues !== undefined) {
+    input = (
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} className={inputClass}>
+        <option value="">— Selecione —</option>
+        {dynamicOptionValues.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    )
+  } else if (field.type === 'select' && field.options) {
     input = (
       <select value={value} onChange={e => onChange(e.target.value)} disabled={!enabled} className={inputClass}>
         <option value="">— Selecione —</option>

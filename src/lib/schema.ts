@@ -158,6 +158,7 @@ export const tables: Record<string, TableSchema> = {
     compactColumns: true,
     importExport: true,
     compactHeader: true,
+    bulkEdit: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text',
