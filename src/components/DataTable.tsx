@@ -11,6 +11,7 @@ import DependentItemsModal from './DependentItemsModal'
 import RollerTableModal from './RollerTableModal'
 import ColumnFilter from './ColumnFilter'
 import ImportReviewModal from './ImportReviewModal'
+import BulkEditModal from './BulkEditModal'
 
 interface Props {
   tableName: string
@@ -87,6 +88,7 @@ export default function DataTable({ tableName, schema }: Props) {
   const [newMenuOpen,   setNewMenuOpen]   = useState(false)
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -287,6 +289,14 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const actionButtons = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
+      {schema.bulkEdit && selectedIds.size > 0 && (
+        <button
+          onClick={() => setBulkEditOpen(true)}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-500 transition-colors whitespace-nowrap"
+        >
+          ✎ Alterar {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+        </button>
+      )}
       {selectedIds.size > 0 && (
         <button
           onClick={() => setBulkDeleteOpen(true)}
@@ -581,6 +591,27 @@ export default function DataTable({ tableName, schema }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bulk edit modal */}
+      {bulkEditOpen && (
+        <BulkEditModal
+          schema={schema}
+          tableName={tableName}
+          selectedIds={Array.from(selectedIds)}
+          onClose={() => setBulkEditOpen(false)}
+          onSaved={(ok, fail) => {
+            setBulkEditOpen(false)
+            setSelectedIds(new Set())
+            fetchData()
+            showToast(
+              fail === 0
+                ? `${ok} registro${ok !== 1 ? 's' : ''} atualizado${ok !== 1 ? 's' : ''} com sucesso`
+                : `${ok} atualizado${ok !== 1 ? 's' : ''}, ${fail} com erro`,
+              fail > 0,
+            )
+          }}
+        />
       )}
 
       {/* Delete confirmation */}
