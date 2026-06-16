@@ -134,6 +134,7 @@ export const tables: Record<string, TableSchema> = {
     orderBy: 'legacy_id',
     columnFilters: true,
     importExport: true,
+    compactHeader: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Leg.', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
