@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { TableSchema, Field, getListFields } from '@/lib/schema'
+import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 
 type LookupMap = Record<string, Record<string, string>>
@@ -210,8 +210,6 @@ export default function DataTable({ tableName, schema }: Props) {
     setColFilters(prev => ({ ...prev, [name]: [] }))
   }, [])
 
-  const showSearchBar = tableName !== 'equipments'
-
   const handleSearch = () => setSearch(searchInput)
 
   const handleExportMatrix = () => {
@@ -278,130 +276,146 @@ export default function DataTable({ tableName, schema }: Props) {
     setTimeout(() => setToast(null), 3500)
   }
 
+  const clearFiltersButton = hasActiveColFilters && (
+    <button
+      onClick={() => { setColFilters({}); setFilterSearch({}) }}
+      className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
+    >
+      ✕ Limpar filtros
+    </button>
+  )
+
+  const actionButtons = (
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      {selectedIds.size > 0 && (
+        <button
+          onClick={() => setBulkDeleteOpen(true)}
+          className="flex items-center gap-1.5 px-4 py-2 bg-red-700 text-black rounded text-sm font-semibold hover:bg-red-600 transition-colors whitespace-nowrap"
+        >
+          🗑 Excluir {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+        </button>
+      )}
+      <button
+        onClick={handleExportVisible}
+        disabled={filteredRows.length === 0}
+        title={`Exportar ${filteredRows.length} registro${filteredRows.length !== 1 ? 's' : ''} visíveis para Excel`}
+        className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        ↓ Exportar dados
+      </button>
+
+      <div className="relative">
+      {/* Backdrop to close dropdown on outside click */}
+      {newMenuOpen && (
+        <div className="fixed inset-0 z-10" onClick={() => setNewMenuOpen(false)} />
+      )}
+
+      <button
+        onClick={() => {
+          if (schema.importExport) { setNewMenuOpen(o => !o); return }
+          if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
+          else if (tableName === 'dependant_items')  { setDepItemsModal(true) }
+          else if (tableName === 'roller_tables')    { setRollerModal(true) }
+          else { setEditRecord(null); setModalOpen(true) }
+        }}
+        className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
+      >
+        + Novo Registro
+        {schema.importExport && (
+          <span className={`text-xs transition-transform duration-150 ${newMenuOpen ? 'rotate-180' : ''}`}>▾</span>
+        )}
+      </button>
+
+      {/* Dropdown */}
+      {schema.importExport && newMenuOpen && (
+        <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] bg-surface-container-high border border-outline-variant rounded shadow-xl overflow-hidden">
+          <button
+            onClick={() => {
+              setNewMenuOpen(false)
+              if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
+              else if (tableName === 'dependant_items') { setDepItemsModal(true) }
+              else if (tableName === 'roller_tables')   { setRollerModal(true) }
+              else { setEditRecord(null); setModalOpen(true) }
+            }}
+            className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-highest hover:text-primary transition-colors"
+          >
+            + Novo registro manual
+          </button>
+          <div className="border-t border-outline-variant/40" />
+          <button
+            onClick={() => { setNewMenuOpen(false); handleExportMatrix() }}
+            className="w-full text-left px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-colors"
+          >
+            ↓ Exportar Matriz
+          </button>
+          <button
+            onClick={() => { setNewMenuOpen(false); fileInputRef.current?.click() }}
+            disabled={importLoading}
+            className="w-full text-left px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-colors disabled:opacity-50"
+          >
+            {importLoading ? '…' : '↑ Importar Excel'}
+          </button>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleImportFile}
+      />
+      </div>
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header actions */}
-      <div className={`flex flex-col sm:flex-row gap-3 items-start sm:items-center ${showSearchBar || hasActiveColFilters ? 'justify-between' : ''}`}>
-        {(showSearchBar || hasActiveColFilters) && (
-          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
-            {showSearchBar && (
-              <>
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                  placeholder="Buscar registros..."
-                  className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
-                />
-                <button
-                  onClick={handleSearch}
-                  className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
-                >
-                  Buscar
-                </button>
-                {search && (
-                  <button
-                    onClick={() => { setSearch(''); setSearchInput('') }}
-                    className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
-                  >
-                    ✕ Limpar
-                  </button>
-                )}
-              </>
-            )}
-            {hasActiveColFilters && (
-              <button
-                onClick={() => { setColFilters({}); setFilterSearch({}) }}
-                className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
-              >
-                ✕ Limpar filtros
-              </button>
-            )}
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          {selectedIds.size > 0 && (
-            <button
-              onClick={() => setBulkDeleteOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-red-700 text-black rounded text-sm font-semibold hover:bg-red-600 transition-colors whitespace-nowrap"
-            >
-              🗑 Excluir {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
-            </button>
-          )}
-          <button
-            onClick={handleExportVisible}
-            disabled={filteredRows.length === 0}
-            title={`Exportar ${filteredRows.length} registro${filteredRows.length !== 1 ? 's' : ''} visíveis para Excel`}
-            className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            ↓ Exportar dados
-          </button>
-
-          <div className="relative">
-          {/* Backdrop to close dropdown on outside click */}
-          {newMenuOpen && (
-            <div className="fixed inset-0 z-10" onClick={() => setNewMenuOpen(false)} />
-          )}
-
-          <button
-            onClick={() => {
-              if (schema.importExport) { setNewMenuOpen(o => !o); return }
-              if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
-              else if (tableName === 'dependant_items')  { setDepItemsModal(true) }
-              else if (tableName === 'roller_tables')    { setRollerModal(true) }
-              else { setEditRecord(null); setModalOpen(true) }
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow whitespace-nowrap"
-          >
-            + Novo Registro
-            {schema.importExport && (
-              <span className={`text-xs transition-transform duration-150 ${newMenuOpen ? 'rotate-180' : ''}`}>▾</span>
-            )}
-          </button>
-
-          {/* Dropdown */}
-          {schema.importExport && newMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] bg-surface-container-high border border-outline-variant rounded shadow-xl overflow-hidden">
-              <button
-                onClick={() => {
-                  setNewMenuOpen(false)
-                  if (tableName === 'non_combinable_comps') { setNonCombModal(true) }
-                  else if (tableName === 'dependant_items') { setDepItemsModal(true) }
-                  else if (tableName === 'roller_tables')   { setRollerModal(true) }
-                  else { setEditRecord(null); setModalOpen(true) }
-                }}
-                className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-highest hover:text-primary transition-colors"
-              >
-                + Novo registro manual
-              </button>
-              <div className="border-t border-outline-variant/40" />
-              <button
-                onClick={() => { setNewMenuOpen(false); handleExportMatrix() }}
-                className="w-full text-left px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-colors"
-              >
-                ↓ Exportar Matriz
-              </button>
-              <button
-                onClick={() => { setNewMenuOpen(false); fileInputRef.current?.click() }}
-                disabled={importLoading}
-                className="w-full text-left px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-colors disabled:opacity-50"
-              >
-                {importLoading ? '…' : '↑ Importar Excel'}
-              </button>
+      {schema.compactHeader ? (
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div>
+            <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
+              {DOMAIN_LABELS[schema.domain]} · {tableName}
             </div>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleImportFile}
-          />
+            <h1 className="text-2xl font-bold text-on-surface">{schema.label}</h1>
+            <p className="text-on-surface-variant text-sm mt-1">{schema.description}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {clearFiltersButton}
+            {actionButtons}
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="Buscar registros..."
+              className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
+            />
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+            >
+              Buscar
+            </button>
+            {search && (
+              <button
+                onClick={() => { setSearch(''); setSearchInput('') }}
+                className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
+              >
+                ✕ Limpar
+              </button>
+            )}
+            {clearFiltersButton}
+          </div>
+          {actionButtons}
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-surface-container rounded border border-outline-variant overflow-hidden min-h-[70vh]">

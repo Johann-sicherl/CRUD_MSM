@@ -76,6 +76,7 @@ export interface TableSchema {
   columnFilters?: boolean   // show per-column filter inputs in the list header
   compactColumns?: boolean  // auto-fit column widths to content instead of fixed min-w
   importExport?: boolean    // show "Exportar Matriz" + "Importar" buttons in the list header
+  compactHeader?: boolean   // merge page title + action buttons into a single row (used when there's no search bar)
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
@@ -105,6 +106,7 @@ export const tables: Record<string, TableSchema> = {
     columnFilters: true,
     compactColumns: true,
     importExport: true,
+    compactHeader: true,
     fields: [
       { name: 'id',              label: 'ID',                  type: 'uuid',    nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id',       label: 'ID Leg.',             type: 'number',  nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
