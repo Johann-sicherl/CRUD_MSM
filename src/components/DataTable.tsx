@@ -281,27 +281,31 @@ export default function DataTable({ tableName, schema }: Props) {
       {/* Header actions */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex gap-2 w-full sm:w-auto flex-wrap">
-          <input
-            type="text"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Buscar registros..."
-            className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
-          />
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
-          >
-            Buscar
-          </button>
-          {search && (
-            <button
-              onClick={() => { setSearch(''); setSearchInput('') }}
-              className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
-            >
-              ✕ Limpar
-            </button>
+          {tableName !== 'equipments' && (
+            <>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                placeholder="Buscar registros..."
+                className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
+              />
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+              >
+                Buscar
+              </button>
+              {search && (
+                <button
+                  onClick={() => { setSearch(''); setSearchInput('') }}
+                  className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
+                >
+                  ✕ Limpar
+                </button>
+              )}
+            </>
           )}
           {hasActiveColFilters && (
             <button
