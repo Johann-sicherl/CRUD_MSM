@@ -51,7 +51,7 @@ export default function ThemeZoomBar() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-1.5 bg-surface-container-high border-b border-outline-variant/40 font-mono shrink-0 select-none">
+    <div className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 h-9 bg-surface-container-high border-b border-outline-variant/40 font-mono shrink-0 select-none">
 
       {/* Theme selector */}
       <div className="flex items-center gap-1">

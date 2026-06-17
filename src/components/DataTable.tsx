@@ -381,51 +381,62 @@ export default function DataTable({ tableName, schema }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header actions */}
-      {schema.compactHeader ? (
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end justify-between">
-          <div>
-            <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
-              {DOMAIN_LABELS[schema.domain]} · {tableName}
+      {/* Frozen header zone — stays pinned below the theme/zoom bar while only the table rows scroll */}
+      <div className="sticky top-9 z-20 bg-background pt-2 -mt-2">
+        {schema.compactHeader ? (
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end justify-between">
+            <div>
+              <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
+                {DOMAIN_LABELS[schema.domain]} · {tableName}
+              </div>
+              <h1 className="text-2xl font-bold text-on-surface">{schema.label}</h1>
+              <p className="text-on-surface-variant text-sm mt-1">{schema.description}</p>
             </div>
-            <h1 className="text-2xl font-bold text-on-surface">{schema.label}</h1>
-            <p className="text-on-surface-variant text-sm mt-1">{schema.description}</p>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {clearFiltersButton}
+              {actionButtons}
+            </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {clearFiltersButton}
-            {actionButtons}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="Buscar registros..."
-              className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
-            />
-            <button
-              onClick={handleSearch}
-              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
-            >
-              Buscar
-            </button>
-            {search && (
-              <button
-                onClick={() => { setSearch(''); setSearchInput('') }}
-                className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
-              >
-                ✕ Limpar
-              </button>
-            )}
-            {clearFiltersButton}
-          </div>
-          {actionButtons}
-        </div>
-      )}
+        ) : (
+          <>
+            <div className="mb-4">
+              <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">
+                {DOMAIN_LABELS[schema.domain]} · {tableName}
+              </div>
+              <h1 className="text-2xl font-bold text-on-surface">{schema.label}</h1>
+              <p className="text-on-surface-variant text-sm mt-1">{schema.description}</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+              <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  placeholder="Buscar registros..."
+                  className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-64 transition-colors"
+                />
+                <button
+                  onClick={handleSearch}
+                  className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                >
+                  Buscar
+                </button>
+                {search && (
+                  <button
+                    onClick={() => { setSearch(''); setSearchInput('') }}
+                    className="px-3 py-2 text-sm text-outline hover:text-primary transition-colors"
+                  >
+                    ✕ Limpar
+                  </button>
+                )}
+                {clearFiltersButton}
+              </div>
+              {actionButtons}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Table */}
       <div className="bg-surface-container rounded border border-outline-variant overflow-hidden min-h-[70vh]">

@@ -45,7 +45,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <>
       <Sidebar pinned={pinned} onPinChange={handlePinChange} />
       <main
-        className={`relative z-10 min-h-screen flex flex-col overflow-auto transition-[margin-left] duration-200 ${
+        className={`relative z-10 min-h-screen flex flex-col transition-[margin-left] duration-200 ${
           pinned ? 'ml-64' : 'ml-0'
         }`}
       >
