@@ -774,7 +774,7 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
   if (type === 'select') {
     const colors: Record<string, string> = {
       active:   'bg-green-900/40 text-green-400 border-green-800/40',
-      inactive: 'bg-surface-container-highest text-outline border-outline-variant',
+      deactive: 'bg-surface-container-highest text-outline border-outline-variant',
       draft:    'bg-primary/10 text-primary border-primary/20',
       sent:     'bg-blue-900/40 text-blue-400 border-blue-800/40',
       approved: 'bg-green-900/40 text-green-400 border-green-800/40',
