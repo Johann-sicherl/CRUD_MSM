@@ -350,7 +350,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
     setQueueSelected(new Set())
   }
 
-  const overlayInputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+  const overlayInputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
@@ -358,16 +358,16 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
-          <h2 className="text-base font-semibold text-on-surface">
+          <h2 className="text-[19.2px] font-semibold text-on-surface">
             {isEdit ? 'Editar' : 'Novo'} — <span className="text-primary">{schema.label}</span>
           </h2>
-          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none transition-colors">✕</button>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-2xl leading-none transition-colors">✕</button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           {isEdit && (
-            <div className="flex items-center gap-2 text-xs text-outline bg-surface-container-low rounded px-3 py-2 border border-outline-variant font-mono">
+            <div className="flex items-center gap-2 text-[14.4px] text-outline bg-surface-container-low rounded px-3 py-2 border border-outline-variant font-mono">
               <span>ID:</span>
               <span className="text-on-surface-variant">{String(record!.id)}</span>
             </div>
@@ -375,7 +375,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
 
           {/* Editing queue item banner */}
           {isBatch && editingQid && (
-            <div className="flex items-center gap-2 text-xs bg-primary/10 border border-primary/30 rounded px-3 py-2 text-primary font-mono">
+            <div className="flex items-center gap-2 text-[14.4px] bg-primary/10 border border-primary/30 rounded px-3 py-2 text-primary font-mono">
               ✎ Editando item da lista — clique em &quot;Atualizar na Lista&quot; para salvar a alteração
             </div>
           )}
@@ -396,7 +396,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 bg-error-container/30 text-error text-sm px-4 py-3 rounded border border-error/20">
+            <div className="flex items-center gap-2 bg-error-container/30 text-error text-[16.8px] px-4 py-3 rounded border border-error/20">
               ⚠ {error}
             </div>
           )}
@@ -405,7 +405,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+              className="px-4 py-2 text-[16.8px] border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
             >
               Cancelar
             </button>
@@ -413,7 +413,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
               <button
                 type="button"
                 onClick={() => { setEditingQid(null); setForm(buildInitial()) }}
-                className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+                className="px-4 py-2 text-[16.8px] border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
               >
                 Descartar Edição
               </button>
@@ -421,7 +421,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-5 py-2 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
+              className="flex items-center gap-2 px-5 py-2 text-[16.8px] bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
             >
               {!isBatch && loading
                 ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
@@ -438,14 +438,14 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
           <div className="border-t border-outline-variant px-6 py-4 space-y-3">
             {/* Queue header */}
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-mono text-outline uppercase tracking-wider">
+              <span className="text-[12px] font-mono text-outline uppercase tracking-wider">
                 Fila de inserção — {queue.length} item{queue.length !== 1 ? 's' : ''}
               </span>
               {queueSelected.size > 0 && (
                 <button
                   type="button"
                   onClick={deleteSelectedQueue}
-                  className="px-3 py-1.5 text-xs border border-error/40 text-error hover:bg-error-container/20 rounded transition-colors"
+                  className="px-3 py-1.5 text-[14.4px] border border-error/40 text-error hover:bg-error-container/20 rounded transition-colors"
                 >
                   Excluir {queueSelected.size} selecionado{queueSelected.size !== 1 ? 's' : ''}
                 </button>
@@ -453,7 +453,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
             </div>
 
             {batchError && (
-              <div className="flex items-center gap-2 bg-error-container/30 text-error text-sm px-4 py-3 rounded border border-error/20">
+              <div className="flex items-center gap-2 bg-error-container/30 text-error text-[16.8px] px-4 py-3 rounded border border-error/20">
                 ⚠ {batchError}
               </div>
             )}
@@ -461,7 +461,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
             {/* Queue table */}
             <div className="border border-outline-variant rounded overflow-hidden">
               <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-                <table className="w-full text-xs border-collapse">
+                <table className="w-full text-[14.4px] border-collapse">
                   <thead className="bg-surface-container-highest">
                     <tr className="border-b border-outline-variant">
                       <th className="px-3 py-2.5 w-8 sticky top-0 bg-surface-container-highest">
@@ -473,18 +473,18 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                           title="Selecionar todos"
                         />
                       </th>
-                      <th className="px-2 py-2.5 w-7 sticky top-0 bg-surface-container-highest text-[10px] font-mono text-outline uppercase tracking-[0.1em]">
+                      <th className="px-2 py-2.5 w-7 sticky top-0 bg-surface-container-highest text-[12px] font-mono text-outline uppercase tracking-[0.1em]">
                         #
                       </th>
                       {editableFields.map(f => (
                         <th
                           key={f.name}
-                          className="px-3 py-2.5 text-left text-[10px] font-mono text-outline uppercase tracking-[0.1em] whitespace-nowrap sticky top-0 bg-surface-container-highest"
+                          className="px-3 py-2.5 text-left text-[12px] font-mono text-outline uppercase tracking-[0.1em] whitespace-nowrap sticky top-0 bg-surface-container-highest"
                         >
                           {f.label}
                         </th>
                       ))}
-                      <th className="px-3 py-2.5 text-right text-[10px] font-mono text-outline uppercase tracking-[0.1em] whitespace-nowrap sticky top-0 bg-surface-container-highest">
+                      <th className="px-3 py-2.5 text-right text-[12px] font-mono text-outline uppercase tracking-[0.1em] whitespace-nowrap sticky top-0 bg-surface-container-highest">
                         Ações
                       </th>
                     </tr>
@@ -515,7 +515,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                 type="button"
                 onClick={handleCreateAll}
                 disabled={batchLoading}
-                className="flex items-center gap-2 px-6 py-2.5 text-sm bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
+                className="flex items-center gap-2 px-6 py-2.5 text-[16.8px] bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
               >
                 {batchLoading
                   ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
@@ -539,18 +539,18 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant shrink-0">
-              <span className="text-sm font-semibold text-on-surface">Buscar Acessório por Grupo</span>
+              <span className="text-[16.8px] font-semibold text-on-surface">Buscar Acessório por Grupo</span>
               <button
                 type="button"
                 onClick={() => setCascade(EMPTY_CASCADE)}
-                className="text-outline hover:text-on-surface transition-colors text-xl leading-none"
+                className="text-outline hover:text-on-surface transition-colors text-2xl leading-none"
               >
                 ✕
               </button>
             </div>
 
             {cascade.loading ? (
-              <div className="flex items-center justify-center gap-3 py-16 text-outline text-sm">
+              <div className="flex items-center justify-center gap-3 py-16 text-outline text-[16.8px]">
                 <span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 Carregando componentes...
               </div>
@@ -558,7 +558,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
               <div className="p-5 flex flex-col gap-4 overflow-hidden flex-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
                   <div>
-                    <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Grupo</label>
+                    <label className="block text-[12px] font-mono text-outline uppercase tracking-wider mb-1">Grupo</label>
                     <select
                       value={cascade.groupId}
                       onChange={e => setCascade(prev => ({ ...prev, groupId: e.target.value }))}
@@ -572,7 +572,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono text-outline uppercase tracking-wider mb-1">Buscar por código ou nome</label>
+                    <label className="block text-[12px] font-mono text-outline uppercase tracking-wider mb-1">Buscar por código ou nome</label>
                     <input
                       type="text"
                       value={cascade.search}
@@ -585,7 +585,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
 
                 <div className="flex flex-col min-h-0 flex-1">
                   <div className="flex items-center justify-between mb-1 shrink-0">
-                    <label className="text-[10px] font-mono text-outline uppercase tracking-wider">
+                    <label className="text-[12px] font-mono text-outline uppercase tracking-wider">
                       Acessórios
                       {(cascade.groupId || cascade.search) && (
                         <span className="ml-1 text-primary">{filteredCascadeItems.length} resultado{filteredCascadeItems.length !== 1 ? 's' : ''}</span>
@@ -598,7 +598,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                       <button
                         type="button"
                         onClick={toggleAllFilteredCascade}
-                        className="flex items-center gap-1.5 text-xs text-outline hover:text-on-surface transition-colors"
+                        className="flex items-center gap-1.5 text-[14.4px] text-outline hover:text-on-surface transition-colors"
                       >
                         <input
                           type="checkbox"
@@ -612,11 +612,11 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   </div>
                   <div className="border border-outline-variant rounded overflow-y-auto flex-1">
                     {!cascade.groupId && !cascade.search ? (
-                      <div className="px-3 py-10 text-center text-outline text-xs font-mono">
+                      <div className="px-3 py-10 text-center text-outline text-[14.4px] font-mono">
                         Selecione um grupo ou busque pelo código / nome
                       </div>
                     ) : filteredCascadeItems.length === 0 ? (
-                      <div className="px-3 py-10 text-center text-outline text-xs font-mono">
+                      <div className="px-3 py-10 text-center text-outline text-[14.4px] font-mono">
                         Nenhum resultado encontrado
                       </div>
                     ) : (
@@ -625,7 +625,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                           <div
                             key={item.value}
                             onClick={() => toggleCascadeItem(item.value)}
-                            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors border-b border-outline-variant/20 last:border-0 ${
+                            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-[16.8px] transition-colors border-b border-outline-variant/20 last:border-0 ${
                               cascade.selected.has(item.value)
                                 ? 'bg-primary/10 text-on-surface'
                                 : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
@@ -638,17 +638,17 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                               className="pointer-events-none shrink-0 accent-yellow-400"
                             />
                             <span className="flex-1 truncate text-left">{item.label}</span>
-                            <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
+                            <span className="text-[14.4px] font-mono text-outline shrink-0">{item.value}</span>
                           </div>
                         ) : (
                           <button
                             key={item.value}
                             type="button"
                             onClick={() => selectCascadeItem(item.value)}
-                            className="w-full flex items-center justify-between gap-4 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
+                            className="w-full flex items-center justify-between gap-4 px-4 py-2.5 text-[16.8px] text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border-b border-outline-variant/20 last:border-0"
                           >
                             <span className="truncate text-left">{item.label}</span>
-                            <span className="text-xs font-mono text-outline shrink-0">{item.value}</span>
+                            <span className="text-[14.4px] font-mono text-outline shrink-0">{item.value}</span>
                           </button>
                         )
                       ))
@@ -661,7 +661,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                     <button
                       type="button"
                       onClick={addCascadeSelectionsToQueue}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-on-primary rounded text-[16.8px] font-semibold hover:shadow-neon transition-shadow"
                     >
                       + Adicionar {cascade.selected.size} item{cascade.selected.size !== 1 ? 's' : ''} à Lista
                     </button>
@@ -735,14 +735,14 @@ function QueueRow({
         <button
           type="button"
           onClick={onEdit}
-          className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"
+          className="text-outline hover:text-primary text-[14.4px] font-medium mr-3 transition-colors"
         >
           Editar
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="text-outline hover:text-error text-xs font-medium transition-colors"
+          className="text-outline hover:text-error text-[14.4px] font-medium transition-colors"
         >
           ✕
         </button>
@@ -783,7 +783,7 @@ function FieldInput({
   }
 
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
-  const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+  const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
 
   let input: React.ReactNode
 
@@ -808,7 +808,7 @@ function FieldInput({
             type="button"
             onClick={() => { setAddingOpt(o => !o); setNewOptInput('') }}
             title="Adicionar nova opção à lista"
-            className={`shrink-0 px-2.5 border rounded text-sm transition-colors ${
+            className={`shrink-0 px-2.5 border rounded text-[16.8px] transition-colors ${
               addingOpt
                 ? 'border-primary text-primary bg-primary/10'
                 : 'border-outline-variant text-outline hover:border-primary hover:text-primary bg-surface-container-low'
@@ -829,20 +829,20 @@ function FieldInput({
               }}
               placeholder="NOVA OPÇÃO..."
               autoFocus
-              className="flex-1 bg-surface-container-low border border-primary/50 rounded px-2 py-1.5 text-xs font-mono text-on-surface uppercase placeholder:text-outline/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+              className="flex-1 bg-surface-container-low border border-primary/50 rounded px-2 py-1.5 text-[14.4px] font-mono text-on-surface uppercase placeholder:text-outline/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             />
             <button
               type="button"
               disabled={addingLoading || !newOptInput.trim()}
               onClick={commitNewOpt}
-              className="px-2.5 py-1.5 bg-primary text-on-primary rounded text-xs font-semibold disabled:opacity-40 hover:shadow-neon transition-all"
+              className="px-2.5 py-1.5 bg-primary text-on-primary rounded text-[14.4px] font-semibold disabled:opacity-40 hover:shadow-neon transition-all"
             >
               {addingLoading ? '…' : '✓'}
             </button>
             <button
               type="button"
               onClick={() => { setAddingOpt(false); setNewOptInput('') }}
-              className="px-2.5 py-1.5 border border-outline-variant rounded text-xs text-outline hover:border-error hover:text-error transition-colors"
+              className="px-2.5 py-1.5 border border-outline-variant rounded text-[14.4px] text-outline hover:border-error hover:text-error transition-colors"
             >
               ✕
             </button>
@@ -917,7 +917,7 @@ function FieldInput({
 
   return (
     <div className={isWide ? 'sm:col-span-2' : ''}>
-      <label className="block text-xs font-medium text-on-surface-variant mb-1">
+      <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
         {field.label}
         {!field.nullable && <span className="text-primary ml-1">*</span>}
       </label>
