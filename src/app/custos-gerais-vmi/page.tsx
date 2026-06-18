@@ -157,6 +157,7 @@ export default function CustosGeraisVmiPage() {
     try {
       const parsed = await parseImportFile(file, VIRTUAL_FIELDS)
       setImportRows(parsed)
+      window.dispatchEvent(new CustomEvent('import-review:open'))
     } catch (err) {
       showToast((err as Error).message || 'Erro ao importar arquivo', true)
     } finally {
@@ -337,9 +338,13 @@ export default function CustosGeraisVmiPage() {
         <CostImportReviewModal
           sourceRows={rows}
           parsedRows={importRows}
-          onClose={() => setImportRows(null)}
+          onClose={() => {
+            setImportRows(null)
+            window.dispatchEvent(new CustomEvent('import-review:close'))
+          }}
           onDone={(ok, errors) => {
             setImportRows(null)
+            window.dispatchEvent(new CustomEvent('import-review:close'))
             fetchData()
             showToast(
               errors.length === 0
