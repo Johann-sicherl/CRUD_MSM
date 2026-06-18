@@ -5,7 +5,6 @@ import { useMemo, useState } from 'react'
 interface SourceRow {
   id: string
   table: string
-  source: string
   code: string
   cost: number
 }
@@ -27,23 +26,22 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
   const [skipped, setSkipped] = useState(0)
   const [errLines, setErrLines] = useState<string[]>([])
 
-  // Each row must match exactly one Origem + Código Protheus pair, and that pair
-  // must appear only once in the file — anything else is an irreconcilable
-  // mismatch and must block the import entirely.
+  // Each row must match exactly one Código Protheus, and that code must appear
+  // only once in the file — anything else is an irreconcilable mismatch and
+  // must block the import entirely.
   const duplicateKeys = useMemo(() => {
     const counts = new Map<string, number>()
     for (const row of rows) {
-      const key = `${row.source} ${row.code}`
-      counts.set(key, (counts.get(key) ?? 0) + 1)
+      counts.set(row.code, (counts.get(row.code) ?? 0) + 1)
     }
     return counts
   }, [rows])
 
   const rowInfos = useMemo(() => rows.map(row => {
-    const matches = sourceRows.filter(r => r.source === row.source && r.code === row.code)
+    const matches = sourceRows.filter(r => r.code === row.code)
     const newCost = parseFloat(row.cost)
     const toUpdate = matches.filter(m => Math.abs(m.cost - newCost) > 0.005)
-    const duplicate = (duplicateKeys.get(`${row.source} ${row.code}`) ?? 0) > 1
+    const duplicate = (duplicateKeys.get(row.code) ?? 0) > 1
     return {
       row,
       matches,
@@ -78,9 +76,9 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
           })
         ))
         if (results.every(r => r.ok)) ok++
-        else errors.push(`Linha ${i + 1}: "${row.code}" (${row.source}) — erro ao salvar`)
+        else errors.push(`Linha ${i + 1}: "${row.code}" — erro ao salvar`)
       } catch {
-        errors.push(`Linha ${i + 1}: "${row.code}" (${row.source}) — falha de rede`)
+        errors.push(`Linha ${i + 1}: "${row.code}" — falha de rede`)
       }
       setDone(i + 1)
     }
@@ -156,7 +154,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
               <span className="flex items-start gap-2">
                 <span className="shrink-0 mt-px">✕</span>
                 <span>
-                  {notFoundCount} linha{notFoundCount !== 1 ? 's' : ''} sem correspondência exata de Origem + Código Protheus (em vermelho) — corrija ou remova essas linhas no arquivo para habilitar a importação.
+                  {notFoundCount} linha{notFoundCount !== 1 ? 's' : ''} sem correspondência exata de Código Protheus (em vermelho) — corrija ou remova essas linhas no arquivo para habilitar a importação.
                 </span>
               </span>
             )}
@@ -164,7 +162,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
               <span className="flex items-start gap-2">
                 <span className="shrink-0 mt-px">✕</span>
                 <span>
-                  {duplicateCount} linha{duplicateCount !== 1 ? 's' : ''} com Origem + Código Protheus repetido no arquivo (em vermelho) — cada combinação só pode aparecer uma vez. Corrija o arquivo para habilitar a importação.
+                  {duplicateCount} linha{duplicateCount !== 1 ? 's' : ''} com Código Protheus repetido no arquivo (em vermelho) — cada código só pode aparecer uma vez. Corrija o arquivo para habilitar a importação.
                 </span>
               </span>
             )}
@@ -177,7 +175,6 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
             <thead className="bg-surface-container-highest border-b border-outline-variant sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider w-8">#</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider whitespace-nowrap min-w-[160px]">Origem</th>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider whitespace-nowrap min-w-[120px]">Código Protheus</th>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider whitespace-nowrap min-w-[100px]">Custo (R$)</th>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold text-outline uppercase tracking-wider whitespace-nowrap min-w-[120px]">Status</th>
@@ -186,7 +183,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
             <tbody className="divide-y divide-outline-variant/30">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-outline text-sm">
+                  <td colSpan={4} className="px-4 py-10 text-center text-outline text-sm">
                     Nenhuma linha. Remova o arquivo e importe novamente com dados.
                   </td>
                 </tr>
@@ -195,7 +192,6 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
                 return (
                   <tr key={ri} className={`hover:bg-surface-container-high/50 ${flagged ? 'bg-error/5' : ''}`}>
                     <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${flagged ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
-                    <td className="px-3 py-1.5 text-on-surface-variant">{row.source || '—'}</td>
                     <td className="px-3 py-1.5 font-mono text-on-surface-variant">{row.code || '—'}</td>
                     <td className="px-3 py-1.5 font-mono text-on-surface-variant">{row.cost || '—'}</td>
                     <td className="px-3 py-1.5">
@@ -248,9 +244,9 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
               disabled={!canImport}
               title={
                 notFoundCount > 0
-                  ? 'Corrija as linhas sem correspondência exata de Origem + Código Protheus antes de importar'
+                  ? 'Corrija as linhas sem correspondência exata de Código Protheus antes de importar'
                   : duplicateCount > 0
-                  ? 'Remova as linhas com Origem + Código Protheus repetido antes de importar'
+                  ? 'Remova as linhas com Código Protheus repetido antes de importar'
                   : updateCount === 0
                   ? 'Nenhum registro com custo diferente do atual'
                   : undefined

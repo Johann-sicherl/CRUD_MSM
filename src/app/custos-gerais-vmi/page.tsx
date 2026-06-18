@@ -11,20 +11,19 @@ import CostImportReviewModal from '@/components/CostImportReviewModal'
 interface PhysicalRow {
   id: string
   table: string
-  source: string
   code: string
   cost: number
 }
 
-// One row per distinct Origem + Código Protheus pair — several PhysicalRow
-// entries (even across tables) can collapse into a single CostRow here.
+// One row per distinct Código Protheus — several PhysicalRow entries (even
+// across different tables) collapse into a single CostRow here, since the
+// same code always carries the same standard cost catalog-wide.
 interface CostRow {
-  source: string
   code: string
   cost: number
 }
 
-type ColumnKey = 'source' | 'code' | 'cost'
+type ColumnKey = 'code' | 'cost'
 
 const SOURCES: { table: string; codeField: string; label: string }[] = [
   { table: 'standard_equipment_items', codeField: 'protheus_code',      label: 'Cadastro de Equipamentos' },
@@ -33,13 +32,11 @@ const SOURCES: { table: string; codeField: string; label: string }[] = [
 ]
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
-  { key: 'source', label: 'Origem' },
   { key: 'code',   label: 'Código Protheus' },
   { key: 'cost',   label: 'Custo (R$)' },
 ]
 
 const VIRTUAL_FIELDS: Field[] = [
-  { name: 'source', label: 'Origem',          type: 'text',    nullable: false },
   { name: 'code',   label: 'Código Protheus', type: 'text',    nullable: false },
   { name: 'cost',   label: 'Custo (R$)',      type: 'decimal', nullable: false },
 ]
@@ -63,7 +60,7 @@ function applyFilters(rows: CostRow[], filters: Record<string, string[]>): CostR
 }
 
 function rowKey(row: CostRow): string {
-  return `${row.source}::${row.code}`
+  return row.code
 }
 
 export default function CustosGeraisVmiPage() {
@@ -99,20 +96,19 @@ export default function CustosGeraisVmiPage() {
         return data.map(row => ({
           id: String(row.id ?? ''),
           table: src.table,
-          source: src.label,
           code: String(row[src.codeField] ?? ''),
           cost: Number(row.cost_std ?? 0),
         }))
       })
       setAllPhysical(physical)
 
-      // SELECT DISTINCT por Origem + Código Protheus: vários registros físicos
-      // (até em tabelas diferentes) podem compartilhar o mesmo código — a grade
-      // mostra um único item consolidado por código; o update atinge todos eles.
+      // SELECT DISTINCT por Código Protheus: o mesmo código carrega o mesmo
+      // custo padrão em todo o catálogo, mesmo aparecendo em tabelas diferentes
+      // — a grade mostra um único item consolidado por código; o update
+      // atinge todos os registros físicos com esse código.
       const distinct = new Map<string, CostRow>()
       for (const p of physical) {
-        const key = `${p.source}::${p.code}`
-        if (!distinct.has(key)) distinct.set(key, { source: p.source, code: p.code, cost: p.cost })
+        if (!distinct.has(p.code)) distinct.set(p.code, { code: p.code, cost: p.cost })
       }
       setRows(Array.from(distinct.values()))
     } catch {
@@ -316,7 +312,6 @@ export default function CustosGeraisVmiPage() {
                             })}
                           />
                         </td>
-                        <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap min-w-[150px]">{row.source}</td>
                         <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap font-mono min-w-[150px]">{row.code}</td>
                         <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap min-w-[150px]">{formatCost(row.cost)}</td>
                       </tr>
@@ -340,7 +335,7 @@ export default function CustosGeraisVmiPage() {
         <CostBulkEditModal
           rows={selectedRows.flatMap(r =>
             allPhysical
-              .filter(p => p.source === r.source && p.code === r.code)
+              .filter(p => p.code === r.code)
               .map(p => ({ id: p.id, table: p.table }))
           )}
           onClose={() => setBulkEditOpen(false)}
