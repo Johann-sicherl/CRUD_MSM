@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 interface SourceRow {
   id: string
@@ -27,8 +27,21 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
   const [skipped, setSkipped] = useState(0)
   const [errLines, setErrLines] = useState<string[]>([])
 
-  const matchesFor = (row: Record<string, string>) =>
-    sourceRows.filter(r => r.source === row.source && r.code === row.code)
+  // Each row must match exactly one Origem + Código Protheus pair; anything else
+  // is an irreconcilable mismatch and must block the import entirely.
+  const rowInfos = useMemo(() => rows.map(row => {
+    const matches = sourceRows.filter(r => r.source === row.source && r.code === row.code)
+    const newCost = parseFloat(row.cost)
+    const toUpdate = matches.filter(m => Math.abs(m.cost - newCost) > 0.005)
+    return {
+      row,
+      matches,
+      notFound: matches.length === 0,
+      multi: matches.length > 1,
+      toUpdate,
+      unchanged: matches.length > 0 && toUpdate.length === 0,
+    }
+  }), [rows, sourceRows])
 
   const handleImport = async () => {
     setPhase('importing')
@@ -37,16 +50,8 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
     let skip = 0
     const errors: string[] = []
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      const matches = matchesFor(row)
-      if (matches.length === 0) {
-        errors.push(`Linha ${i + 1}: "${row.code}" não encontrado em "${row.source || '—'}"`)
-        setDone(i + 1)
-        continue
-      }
-      const newCost = parseFloat(row.cost)
-      const toUpdate = matches.filter(m => Math.abs(m.cost - newCost) > 0.005)
+    for (let i = 0; i < rowInfos.length; i++) {
+      const { row, toUpdate } = rowInfos[i]
       if (toUpdate.length === 0) {
         skip++
         setDone(i + 1)
@@ -76,7 +81,9 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
 
   const total = rows.length
   const pct   = total ? Math.round((done / total) * 100) : 0
-  const notFoundCount = rows.filter(r => matchesFor(r).length === 0).length
+  const notFoundCount = rowInfos.filter(r => r.notFound).length
+  const updateCount   = rowInfos.filter(r => r.toUpdate.length > 0).length
+  const canImport     = phase === 'review' && rows.length > 0 && notFoundCount === 0 && updateCount > 0
 
   if (phase === 'done') {
     return (
@@ -133,7 +140,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
           <div className="px-5 py-2.5 bg-error/10 border-b border-error/30 text-error text-xs flex items-start gap-2">
             <span className="shrink-0 mt-px">✕</span>
             <span>
-              {notFoundCount} linha{notFoundCount !== 1 ? 's' : ''} sem correspondência (em vermelho) — serão ignoradas e reportadas como erro; as demais linhas válidas serão importadas normalmente.
+              {notFoundCount} linha{notFoundCount !== 1 ? 's' : ''} sem correspondência exata de Origem + Código Protheus (em vermelho) — corrija ou remova essas linhas no arquivo para habilitar a importação.
             </span>
           </div>
         )}
@@ -157,12 +164,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
                     Nenhuma linha. Remova o arquivo e importe novamente com dados.
                   </td>
                 </tr>
-              ) : rows.map((row, ri) => {
-                const matches  = matchesFor(row)
-                const notFound = matches.length === 0
-                const multi    = matches.length > 1
-                const newCost  = parseFloat(row.cost)
-                const unchanged = !notFound && matches.every(m => Math.abs(m.cost - newCost) <= 0.005)
+              ) : rowInfos.map(({ row, matches, notFound, multi, unchanged }, ri) => {
                 return (
                   <tr key={ri} className={`hover:bg-surface-container-high/50 ${notFound ? 'bg-error/5' : ''}`}>
                     <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${notFound ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
@@ -213,10 +215,17 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
             </button>
             <button
               onClick={handleImport}
-              disabled={phase !== 'review' || rows.length === 0}
+              disabled={!canImport}
+              title={
+                notFoundCount > 0
+                  ? 'Corrija as linhas sem correspondência exata de Origem + Código Protheus antes de importar'
+                  : updateCount === 0
+                  ? 'Nenhum registro com custo diferente do atual'
+                  : undefined
+              }
               className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {phase === 'importing' ? 'Importando…' : `Importar ${rows.length} registro${rows.length !== 1 ? 's' : ''}`}
+              {phase === 'importing' ? 'Importando…' : `Importar ${updateCount} registro${updateCount !== 1 ? 's' : ''}`}
             </button>
           </div>
         </div>
