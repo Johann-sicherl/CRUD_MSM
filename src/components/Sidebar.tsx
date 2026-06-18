@@ -101,6 +101,18 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   </Link>
                 )
               })}
+              {domain === 'catalogo' && (
+                <Link
+                  href="/custos-gerais-vmi"
+                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    pathname === '/custos-gerais-vmi'
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  }`}
+                >
+                  <span className="truncate">Custos Gerais VMI</span>
+                </Link>
+              )}
             </div>
           ))}
         </nav>
