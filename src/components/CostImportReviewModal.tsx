@@ -7,6 +7,7 @@ interface SourceRow {
   table: string
   source: string
   code: string
+  cost: number
 }
 
 interface Props {
@@ -23,6 +24,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
   const [phase, setPhase]  = useState<Phase>('review')
   const [done,  setDone]   = useState(0)
   const [saved, setSaved]  = useState(0)
+  const [skipped, setSkipped] = useState(0)
   const [errLines, setErrLines] = useState<string[]>([])
 
   const matchesFor = (row: Record<string, string>) =>
@@ -32,6 +34,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
     setPhase('importing')
     setDone(0)
     let ok = 0
+    let skip = 0
     const errors: string[] = []
 
     for (let i = 0; i < rows.length; i++) {
@@ -42,8 +45,15 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
         setDone(i + 1)
         continue
       }
+      const newCost = parseFloat(row.cost)
+      const toUpdate = matches.filter(m => Math.abs(m.cost - newCost) > 0.005)
+      if (toUpdate.length === 0) {
+        skip++
+        setDone(i + 1)
+        continue
+      }
       try {
-        const results = await Promise.all(matches.map(m =>
+        const results = await Promise.all(toUpdate.map(m =>
           fetch(`/api/${m.table}/${m.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -59,6 +69,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
     }
 
     setSaved(ok)
+    setSkipped(skip)
     setErrLines(errors)
     setPhase('done')
   }
@@ -76,6 +87,11 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
             <span className="text-primary font-medium">
               ✓ {saved} registro{saved !== 1 ? 's' : ''} atualizado{saved !== 1 ? 's' : ''} com sucesso
             </span>
+            {skipped > 0 && (
+              <span className="text-outline font-medium">
+                — {skipped} sem alteração (já estava{skipped !== 1 ? 'm' : ''} com o mesmo custo)
+              </span>
+            )}
             {errLines.length > 0 && (
               <>
                 <span className="text-error font-medium mt-1">✕ {errLines.length} erro{errLines.length !== 1 ? 's' : ''}:</span>
@@ -145,6 +161,8 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
                 const matches  = matchesFor(row)
                 const notFound = matches.length === 0
                 const multi    = matches.length > 1
+                const newCost  = parseFloat(row.cost)
+                const unchanged = !notFound && matches.every(m => Math.abs(m.cost - newCost) <= 0.005)
                 return (
                   <tr key={ri} className={`hover:bg-surface-container-high/50 ${notFound ? 'bg-error/5' : ''}`}>
                     <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${notFound ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
@@ -154,10 +172,12 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
                     <td className="px-3 py-1.5">
                       {notFound ? (
                         <span className="text-error text-[10px]">não encontrado</span>
+                      ) : unchanged ? (
+                        <span className="text-outline text-[10px]">sem alteração</span>
                       ) : multi ? (
                         <span className="text-primary text-[10px]">{matches.length} correspondências</span>
                       ) : (
-                        <span className="text-green-500 text-[10px]">✓ encontrado</span>
+                        <span className="text-green-500 text-[10px]">✓ será atualizado</span>
                       )}
                     </td>
                   </tr>
