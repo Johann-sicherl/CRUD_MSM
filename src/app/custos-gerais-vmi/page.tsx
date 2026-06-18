@@ -7,9 +7,18 @@ import ColumnFilter from '@/components/ColumnFilter'
 import CostBulkEditModal from '@/components/CostBulkEditModal'
 import CostImportReviewModal from '@/components/CostImportReviewModal'
 
-interface CostRow {
+// One row per physical record in the underlying tables.
+interface PhysicalRow {
   id: string
   table: string
+  source: string
+  code: string
+  cost: number
+}
+
+// One row per distinct Origem + Código Protheus pair — several PhysicalRow
+// entries (even across tables) can collapse into a single CostRow here.
+interface CostRow {
   source: string
   code: string
   cost: number
@@ -54,11 +63,12 @@ function applyFilters(rows: CostRow[], filters: Record<string, string[]>): CostR
 }
 
 function rowKey(row: CostRow): string {
-  return `${row.table}:${row.id}`
+  return `${row.source}::${row.code}`
 }
 
 export default function CustosGeraisVmiPage() {
   const [rows, setRows] = useState<CostRow[]>([])
+  const [allPhysical, setAllPhysical] = useState<PhysicalRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [colFilters, setColFilters] = useState<Record<string, string[]>>({})
@@ -83,7 +93,7 @@ export default function CustosGeraisVmiPage() {
         return
       }
       const jsons = await Promise.all(responses.map(r => r.json()))
-      const combined: CostRow[] = jsons.flatMap((json, i) => {
+      const physical: PhysicalRow[] = jsons.flatMap((json, i) => {
         const src = SOURCES[i]
         const data: Record<string, unknown>[] = json.data || []
         return data.map(row => ({
@@ -94,7 +104,17 @@ export default function CustosGeraisVmiPage() {
           cost: Number(row.cost_std ?? 0),
         }))
       })
-      setRows(combined)
+      setAllPhysical(physical)
+
+      // SELECT DISTINCT por Origem + Código Protheus: vários registros físicos
+      // (até em tabelas diferentes) podem compartilhar o mesmo código — a grade
+      // mostra um único item consolidado por código; o update atinge todos eles.
+      const distinct = new Map<string, CostRow>()
+      for (const p of physical) {
+        const key = `${p.source}::${p.code}`
+        if (!distinct.has(key)) distinct.set(key, { source: p.source, code: p.code, cost: p.cost })
+      }
+      setRows(Array.from(distinct.values()))
     } catch {
       setError('Erro ao carregar dados')
     }
@@ -318,7 +338,11 @@ export default function CustosGeraisVmiPage() {
 
       {bulkEditOpen && (
         <CostBulkEditModal
-          rows={selectedRows.map(r => ({ id: r.id, table: r.table }))}
+          rows={selectedRows.flatMap(r =>
+            allPhysical
+              .filter(p => p.source === r.source && p.code === r.code)
+              .map(p => ({ id: p.id, table: p.table }))
+          )}
           onClose={() => setBulkEditOpen(false)}
           onSaved={(ok, fail) => {
             setBulkEditOpen(false)
@@ -336,7 +360,7 @@ export default function CustosGeraisVmiPage() {
 
       {importRows && (
         <CostImportReviewModal
-          sourceRows={rows}
+          sourceRows={allPhysical}
           parsedRows={importRows}
           onClose={() => {
             setImportRows(null)
