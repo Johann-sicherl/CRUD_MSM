@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Field } from '@/lib/schema'
-import { exportMatrix, exportVisibleData, parseImportFile } from '@/lib/importExport'
+import { exportVisibleData, parseImportFile } from '@/lib/importExport'
 import ColumnFilter from '@/components/ColumnFilter'
 import CostBulkEditModal from '@/components/CostBulkEditModal'
 import CostImportReviewModal from '@/components/CostImportReviewModal'
@@ -149,10 +149,6 @@ export default function CustosGeraisVmiPage() {
     exportVisibleData(headers, rowData, 'custos_gerais_vmi.xlsx')
   }
 
-  const handleExportMatrix = () => {
-    exportMatrix(VIRTUAL_FIELDS, 'matriz_custos_gerais_vmi.xlsx')
-  }
-
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -208,12 +204,6 @@ export default function CustosGeraisVmiPage() {
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             >
               ↓ Exportar dados
-            </button>
-            <button
-              onClick={handleExportMatrix}
-              className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
-            >
-              ↓ Exportar Matriz
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
