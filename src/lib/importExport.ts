@@ -40,9 +40,7 @@ export async function exportVisibleData(
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
-/** Generate an Excel template with just the column headers and trigger save.
- *  Uses the native File System Access API (Chrome/Edge) for a real Save-As dialog;
- *  falls back to a standard anchor download on other browsers. */
+/** Generate an Excel template with just the column headers and save directly to Downloads. */
 export async function exportMatrix(fields: Field[], filename = 'matriz_equipamentos.xlsx') {
   const XLSX = await import('xlsx')
   const cols = editableFields(fields)
@@ -58,24 +56,6 @@ export async function exportMatrix(fields: Field[], filename = 'matriz_equipamen
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
   const blob = new Blob([buf], { type: xlsxMime })
 
-  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-    try {
-      const handle = await (window as Window & { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> })
-        .showSaveFilePicker({
-          id: 'export-matrix',
-          suggestedName: filename,
-          types: [{ description: 'Planilha Excel', accept: { [xlsxMime]: ['.xlsx'] } }],
-        })
-      const writable = await handle.createWritable()
-      await writable.write(blob)
-      await writable.close()
-      return
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return
-    }
-  }
-
-  // Fallback: anchor download
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
