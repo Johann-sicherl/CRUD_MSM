@@ -27,12 +27,23 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
   const [skipped, setSkipped] = useState(0)
   const [errLines, setErrLines] = useState<string[]>([])
 
-  // Each row must match exactly one Origem + Código Protheus pair; anything else
-  // is an irreconcilable mismatch and must block the import entirely.
+  // Each row must match exactly one Origem + Código Protheus pair, and that pair
+  // must appear only once in the file — anything else is an irreconcilable
+  // mismatch and must block the import entirely.
+  const duplicateKeys = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of rows) {
+      const key = `${row.source} ${row.code}`
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [rows])
+
   const rowInfos = useMemo(() => rows.map(row => {
     const matches = sourceRows.filter(r => r.source === row.source && r.code === row.code)
     const newCost = parseFloat(row.cost)
     const toUpdate = matches.filter(m => Math.abs(m.cost - newCost) > 0.005)
+    const duplicate = (duplicateKeys.get(`${row.source} ${row.code}`) ?? 0) > 1
     return {
       row,
       matches,
@@ -40,8 +51,9 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
       multi: matches.length > 1,
       toUpdate,
       unchanged: matches.length > 0 && toUpdate.length === 0,
+      duplicate,
     }
-  }), [rows, sourceRows])
+  }), [rows, sourceRows, duplicateKeys])
 
   const handleImport = async () => {
     setPhase('importing')
@@ -81,9 +93,11 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
 
   const total = rows.length
   const pct   = total ? Math.round((done / total) * 100) : 0
-  const notFoundCount = rowInfos.filter(r => r.notFound).length
-  const updateCount   = rowInfos.filter(r => r.toUpdate.length > 0).length
-  const canImport     = phase === 'review' && rows.length > 0 && notFoundCount === 0 && updateCount > 0
+  const notFoundCount  = rowInfos.filter(r => r.notFound).length
+  const duplicateCount = rowInfos.filter(r => r.duplicate).length
+  const updateCount    = rowInfos.filter(r => r.toUpdate.length > 0 && !r.duplicate).length
+  const canImport      = phase === 'review' && rows.length > 0
+    && notFoundCount === 0 && duplicateCount === 0 && updateCount > 0
 
   if (phase === 'done') {
     return (
@@ -136,12 +150,24 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
         </div>
 
         {/* Info banner */}
-        {phase === 'review' && notFoundCount > 0 && (
-          <div className="px-5 py-2.5 bg-error/10 border-b border-error/30 text-error text-xs flex items-start gap-2">
-            <span className="shrink-0 mt-px">✕</span>
-            <span>
-              {notFoundCount} linha{notFoundCount !== 1 ? 's' : ''} sem correspondência exata de Origem + Código Protheus (em vermelho) — corrija ou remova essas linhas no arquivo para habilitar a importação.
-            </span>
+        {phase === 'review' && (notFoundCount > 0 || duplicateCount > 0) && (
+          <div className="px-5 py-2.5 bg-error/10 border-b border-error/30 text-error text-xs flex flex-col gap-1.5">
+            {notFoundCount > 0 && (
+              <span className="flex items-start gap-2">
+                <span className="shrink-0 mt-px">✕</span>
+                <span>
+                  {notFoundCount} linha{notFoundCount !== 1 ? 's' : ''} sem correspondência exata de Origem + Código Protheus (em vermelho) — corrija ou remova essas linhas no arquivo para habilitar a importação.
+                </span>
+              </span>
+            )}
+            {duplicateCount > 0 && (
+              <span className="flex items-start gap-2">
+                <span className="shrink-0 mt-px">✕</span>
+                <span>
+                  {duplicateCount} linha{duplicateCount !== 1 ? 's' : ''} com Origem + Código Protheus repetido no arquivo (em vermelho) — cada combinação só pode aparecer uma vez. Corrija o arquivo para habilitar a importação.
+                </span>
+              </span>
+            )}
           </div>
         )}
 
@@ -164,15 +190,18 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
                     Nenhuma linha. Remova o arquivo e importe novamente com dados.
                   </td>
                 </tr>
-              ) : rowInfos.map(({ row, matches, notFound, multi, unchanged }, ri) => {
+              ) : rowInfos.map(({ row, matches, notFound, multi, unchanged, duplicate }, ri) => {
+                const flagged = notFound || duplicate
                 return (
-                  <tr key={ri} className={`hover:bg-surface-container-high/50 ${notFound ? 'bg-error/5' : ''}`}>
-                    <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${notFound ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
+                  <tr key={ri} className={`hover:bg-surface-container-high/50 ${flagged ? 'bg-error/5' : ''}`}>
+                    <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${flagged ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
                     <td className="px-3 py-1.5 text-on-surface-variant">{row.source || '—'}</td>
                     <td className="px-3 py-1.5 font-mono text-on-surface-variant">{row.code || '—'}</td>
                     <td className="px-3 py-1.5 font-mono text-on-surface-variant">{row.cost || '—'}</td>
                     <td className="px-3 py-1.5">
-                      {notFound ? (
+                      {duplicate ? (
+                        <span className="text-error text-[10px]">duplicado no arquivo</span>
+                      ) : notFound ? (
                         <span className="text-error text-[10px]">não encontrado</span>
                       ) : unchanged ? (
                         <span className="text-outline text-[10px]">sem alteração</span>
@@ -202,6 +231,7 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
             <span className="text-xs text-outline flex-1">
               {rows.length} registro{rows.length !== 1 ? 's' : ''} no arquivo
               {notFoundCount > 0 && <span className="text-error ml-2">· {notFoundCount} sem correspondência</span>}
+              {duplicateCount > 0 && <span className="text-error ml-2">· {duplicateCount} duplicado{duplicateCount !== 1 ? 's' : ''}</span>}
             </span>
           )}
 
@@ -219,6 +249,8 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
               title={
                 notFoundCount > 0
                   ? 'Corrija as linhas sem correspondência exata de Origem + Código Protheus antes de importar'
+                  : duplicateCount > 0
+                  ? 'Remova as linhas com Origem + Código Protheus repetido antes de importar'
                   : updateCount === 0
                   ? 'Nenhum registro com custo diferente do atual'
                   : undefined
