@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
-import { buildUpdateSQL, buildDeleteSQL, getAuditKeyField, recordAudit } from '@/lib/sqlAudit'
+import { buildUpdateSQL, buildDeleteSQL, diffChangedFields, getAuditKeyField, recordAudit } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -31,15 +31,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   if (schema.hasTimestamps) updateBody.updated_at = new Date().toISOString()
 
+  let beforeRow: Record<string, unknown> | null = null
+  if (schema.auditQueries) {
+    const { data: before } = await supabaseAdmin.from(table).select('*').eq('id', id).maybeSingle()
+    beforeRow = before as Record<string, unknown> | null
+  }
+
   const { data, error } = await supabaseAdmin.from(table).update(updateBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   if (schema.auditQueries) {
     try {
-      const keyField = getAuditKeyField(schema)
-      const keyValue = (data as Record<string, unknown>)[keyField.name]
-      const sql = buildUpdateSQL(table, schema, updateBody, keyField, keyValue)
-      await recordAudit(supabaseAdmin, table, schema, 'update', data as Record<string, unknown>, sql)
+      const changed = beforeRow ? diffChangedFields(beforeRow, updateBody) : updateBody
+      if (Object.keys(changed).some(name => name !== 'updated_at')) {
+        const keyField = getAuditKeyField(schema)
+        const keyValue = (data as Record<string, unknown>)[keyField.name]
+        const sql = buildUpdateSQL(table, schema, changed, keyField, keyValue)
+        await recordAudit(supabaseAdmin, table, schema, 'update', data as Record<string, unknown>, sql)
+      }
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 

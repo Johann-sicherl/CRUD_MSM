@@ -68,6 +68,29 @@ export function buildUpdateSQL(
   return `UPDATE ${table} SET ${sets.join(', ')} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
 }
 
+/** The form always resubmits every editable field, so `updateBody` alone can't
+ *  tell which ones the user actually touched. Compare against the row's state
+ *  right before the save so the generated UPDATE only SETs real changes. */
+export function diffChangedFields(
+  before: Record<string, unknown>,
+  updateBody: Record<string, unknown>,
+): Record<string, unknown> {
+  const changed: Record<string, unknown> = {}
+  for (const [name, val] of Object.entries(updateBody)) {
+    if (name === 'updated_at') continue
+    const prev = before[name] ?? null
+    const next = val ?? null
+    const equal = typeof prev === 'object' || typeof next === 'object'
+      ? JSON.stringify(prev) === JSON.stringify(next)
+      : prev === next
+    if (!equal) changed[name] = val
+  }
+  if (Object.keys(changed).length > 0 && 'updated_at' in updateBody) {
+    changed.updated_at = updateBody.updated_at
+  }
+  return changed
+}
+
 export function buildDeleteSQL(table: string, keyField: Field, keyValue: unknown): string {
   return `DELETE FROM ${table} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
 }
