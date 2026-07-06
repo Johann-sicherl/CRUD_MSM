@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
+import { buildUpdateSQL, buildDeleteSQL, getAuditKeyField, recordAudit } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -32,15 +33,36 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   const { data, error } = await supabaseAdmin.from(table).update(updateBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  if (schema.auditQueries) {
+    try {
+      const keyField = getAuditKeyField(schema)
+      const keyValue = (data as Record<string, unknown>)[keyField.name]
+      const sql = buildUpdateSQL(table, schema, updateBody, keyField, keyValue)
+      await recordAudit(supabaseAdmin, table, schema, 'update', data as Record<string, unknown>, sql)
+    } catch { /* audit log is best-effort — never block the real operation */ }
+  }
+
   return NextResponse.json(data)
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   const { table, id } = params
   if (!tables[table]) return NextResponse.json({ error: 'Tabela não encontrada' }, { status: 404 })
+  const schema = tables[table]
 
-  const { error } = await supabaseAdmin.from(table).delete().eq('id', id)
+  const { data, error } = await supabaseAdmin.from(table).delete().eq('id', id).select().maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  if (schema.auditQueries && data) {
+    try {
+      const keyField = getAuditKeyField(schema)
+      const keyValue = (data as Record<string, unknown>)[keyField.name]
+      const sql = buildDeleteSQL(table, keyField, keyValue)
+      await recordAudit(supabaseAdmin, table, schema, 'delete', data as Record<string, unknown>, sql)
+    } catch { /* audit log is best-effort — never block the real operation */ }
+  }
+
   return NextResponse.json({ deleted: true, id })
 }
 
