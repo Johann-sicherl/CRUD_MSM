@@ -69,7 +69,12 @@ export default function AuditoriaPage() {
     if (tableFilter) params.set('table', tableFilter)
     if (statusFilter) params.set('status', statusFilter)
     const res = await fetch(`/api/audit-log?${params}`)
-    if (!res.ok) { setError('Erro ao carregar auditoria'); setLoading(false); return }
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      setError(err?.error || 'Erro ao carregar auditoria')
+      setLoading(false)
+      return
+    }
     const json = await res.json()
     setRows(json.data || [])
     setSelectedIds(new Set())
