@@ -165,7 +165,8 @@ export async function recordUpdateAudit(
     return
   }
 
-  const baseline = existing?.operation === 'update' ? (existing.baseline ?? {}) : (beforeRow ?? {})
+  const hasStoredBaseline = existing?.operation === 'update' && existing.baseline && Object.keys(existing.baseline).length > 0
+  const baseline = hasStoredBaseline ? existing!.baseline! : (beforeRow ?? {})
   const changed = diffChangedFields(baseline, updateBody)
 
   if (Object.keys(changed).length === 0) {
