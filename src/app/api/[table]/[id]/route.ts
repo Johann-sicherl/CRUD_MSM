@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
-import { buildUpdateSQL, buildDeleteSQL, diffChangedFields, getAuditKeyField, recordAudit } from '@/lib/sqlAudit'
+import { recordUpdateAudit, recordDeleteAudit } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -42,13 +42,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   if (schema.auditQueries) {
     try {
-      const changed = beforeRow ? diffChangedFields(beforeRow, updateBody) : updateBody
-      if (Object.keys(changed).length > 0) {
-        const keyField = getAuditKeyField(schema)
-        const keyValue = (data as Record<string, unknown>)[keyField.name]
-        const sql = buildUpdateSQL(table, schema, changed, keyField, keyValue)
-        await recordAudit(supabaseAdmin, table, schema, 'update', data as Record<string, unknown>, sql)
-      }
+      await recordUpdateAudit(supabaseAdmin, table, schema, beforeRow, updateBody)
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 
@@ -65,10 +59,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
 
   if (schema.auditQueries && data) {
     try {
-      const keyField = getAuditKeyField(schema)
-      const keyValue = (data as Record<string, unknown>)[keyField.name]
-      const sql = buildDeleteSQL(table, keyField, keyValue)
-      await recordAudit(supabaseAdmin, table, schema, 'delete', data as Record<string, unknown>, sql)
+      await recordDeleteAudit(supabaseAdmin, table, schema, data as Record<string, unknown>)
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 

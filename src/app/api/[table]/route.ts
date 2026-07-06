@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables, getSearchableFields } from '@/lib/schema'
-import { buildInsertSQL, recordAudit } from '@/lib/sqlAudit'
+import { recordInsertAudit } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string } }
 
@@ -164,8 +164,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (schema.auditQueries) {
     try {
-      const sql = buildInsertSQL(table, schema, insertBody)
-      await recordAudit(supabaseAdmin, table, schema, 'insert', data as Record<string, unknown>, sql)
+      await recordInsertAudit(supabaseAdmin, table, schema, insertBody)
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 

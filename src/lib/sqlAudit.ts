@@ -37,14 +37,14 @@ export function getAuditKeyField(schema: TableSchema): Field {
 /** INSERT statement. Uses the literal value computed in this test DB for every
  *  field, including autoIncrement ones — if the production DB already has a
  *  higher legacy_id, adjust the number by hand before sending it to IT. */
-export function buildInsertSQL(table: string, schema: TableSchema, insertBody: Record<string, unknown>): string {
+export function buildInsertSQL(table: string, schema: TableSchema, row: Record<string, unknown>): string {
   const cols: string[] = []
   const vals: string[] = []
   for (const field of schema.fields) {
     if (field.isPk) continue
-    if (!(field.name in insertBody)) continue
+    if (!(field.name in row)) continue
     cols.push(field.name)
-    vals.push(sqlLiteral(field, insertBody[field.name]))
+    vals.push(sqlLiteral(field, row[field.name]))
   }
   return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${vals.join(', ')});`
 }
@@ -53,14 +53,13 @@ export function buildInsertSQL(table: string, schema: TableSchema, insertBody: R
 export function buildUpdateSQL(
   table: string,
   schema: TableSchema,
-  updateBody: Record<string, unknown>,
+  changedFields: Record<string, unknown>,
   keyField: Field,
   keyValue: unknown,
 ): string {
   const sets: string[] = []
-  for (const [name, val] of Object.entries(updateBody)) {
+  for (const [name, val] of Object.entries(changedFields)) {
     if (name === keyField.name) continue
-    if (name === 'updated_at') { sets.push('updated_at = NOW()'); continue }
     const field = schema.fields.find(f => f.name === name)
     if (!field) continue
     sets.push(`${name} = ${sqlLiteral(field, val)}`)
@@ -68,17 +67,21 @@ export function buildUpdateSQL(
   return `UPDATE ${table} SET ${sets.join(', ')} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
 }
 
-/** The form always resubmits every editable field, so `updateBody` alone can't
- *  tell which ones the user actually touched. Compare against the row's state
- *  right before the save so the generated UPDATE only SETs real changes. */
+export function buildDeleteSQL(table: string, keyField: Field, keyValue: unknown): string {
+  return `DELETE FROM ${table} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
+}
+
+/** The form always resubmits every editable field, so a raw update payload alone
+ *  can't tell which ones actually changed vs. some baseline. `updated_at` is
+ *  bookkeeping, not a real edit, so it never counts on its own. */
 export function diffChangedFields(
-  before: Record<string, unknown>,
-  updateBody: Record<string, unknown>,
+  baseline: Record<string, unknown>,
+  current: Record<string, unknown>,
 ): Record<string, unknown> {
   const changed: Record<string, unknown> = {}
-  for (const [name, val] of Object.entries(updateBody)) {
+  for (const [name, val] of Object.entries(current)) {
     if (name === 'updated_at') continue
-    const prev = before[name] ?? null
+    const prev = baseline[name] ?? null
     const next = val ?? null
     const equal = typeof prev === 'object' || typeof next === 'object'
       ? JSON.stringify(prev) === JSON.stringify(next)
@@ -88,51 +91,132 @@ export function diffChangedFields(
   return changed
 }
 
-export function buildDeleteSQL(table: string, keyField: Field, keyValue: unknown): string {
-  return `DELETE FROM ${table} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
+type PendingRow = {
+  id: string
+  operation: 'insert' | 'update' | 'delete'
+  baseline: Record<string, unknown> | null
 }
 
-/** Keeps a single "pending" audit_log row per record — repeated edits before
- *  export overwrite the same draft instead of piling up one entry per click.
- *  If a record is created and deleted again before ever being exported, the
- *  draft is simply discarded: nothing needs to reach production for it. */
-export async function recordAudit(
-  admin: SupabaseClient,
-  table: string,
-  schema: TableSchema,
-  operation: 'insert' | 'update' | 'delete',
-  fullRow: Record<string, unknown>,
-  sqlQuery: string,
-): Promise<void> {
-  const keyField = getAuditKeyField(schema)
-  const keyValue = String(fullRow[keyField.name] ?? '')
-
-  const { data: existing } = await admin
+async function findPending(admin: SupabaseClient, table: string, keyValue: string): Promise<PendingRow | null> {
+  const { data } = await admin
     .from('audit_log')
-    .select('id, operation')
+    .select('id, operation, baseline')
     .eq('table_name', table)
     .eq('record_key_value', keyValue)
     .eq('status', 'pending')
     .maybeSingle()
+  return data as PendingRow | null
+}
 
-  if (operation === 'delete' && existing?.operation === 'insert') {
+/** Record a freshly-inserted row as a pending draft. If this same record
+ *  somehow already had a pending draft (shouldn't normally happen — it was
+ *  just created), the new insert simply replaces it. */
+export async function recordInsertAudit(
+  admin: SupabaseClient,
+  table: string,
+  schema: TableSchema,
+  insertedRow: Record<string, unknown>,
+): Promise<void> {
+  const keyField = getAuditKeyField(schema)
+  const keyValue = String(insertedRow[keyField.name] ?? '')
+  const existing = await findPending(admin, table, keyValue)
+
+  const row = {
+    table_name: table,
+    operation: 'insert' as const,
+    record_key_field: keyField.name,
+    record_key_value: keyValue,
+    sql_query: buildInsertSQL(table, schema, insertedRow),
+    payload: insertedRow,
+    baseline: null,
+    status: 'pending' as const,
+  }
+
+  if (existing) await admin.from('audit_log').update(row).eq('id', existing.id)
+  else await admin.from('audit_log').insert(row)
+}
+
+/** Record an edit as a pending draft.
+ *  - If a pending INSERT draft already exists for this record (created and
+ *    edited before ever being exported), the draft stays an INSERT — just
+ *    regenerated with the latest field values.
+ *  - Otherwise it's a real UPDATE against production. The first edit since
+ *    the last export captures `beforeRow` as the baseline; further edits
+ *    reuse that same baseline (not the live, already-edited test-DB row) so
+ *    the comparison is always against the true starting point. If the
+ *    current values end up matching the baseline again, the draft is
+ *    discarded — nothing to send. */
+export async function recordUpdateAudit(
+  admin: SupabaseClient,
+  table: string,
+  schema: TableSchema,
+  beforeRow: Record<string, unknown> | null,
+  updateBody: Record<string, unknown>,
+): Promise<void> {
+  const keyField = getAuditKeyField(schema)
+  const keyValue = String((beforeRow?.[keyField.name] ?? updateBody[keyField.name]) ?? '')
+  const existing = await findPending(admin, table, keyValue)
+
+  if (existing?.operation === 'insert') {
+    await admin.from('audit_log').update({
+      sql_query: buildInsertSQL(table, schema, updateBody),
+      payload: updateBody,
+    }).eq('id', existing.id)
+    return
+  }
+
+  const baseline = existing?.operation === 'update' ? (existing.baseline ?? {}) : (beforeRow ?? {})
+  const changed = diffChangedFields(baseline, updateBody)
+
+  if (Object.keys(changed).length === 0) {
+    if (existing) await admin.from('audit_log').delete().eq('id', existing.id)
+    return
+  }
+
+  const row = {
+    table_name: table,
+    operation: 'update' as const,
+    record_key_field: keyField.name,
+    record_key_value: keyValue,
+    sql_query: buildUpdateSQL(table, schema, changed, keyField, keyValue),
+    payload: updateBody,
+    baseline,
+    status: 'pending' as const,
+  }
+
+  if (existing) await admin.from('audit_log').update(row).eq('id', existing.id)
+  else await admin.from('audit_log').insert(row)
+}
+
+/** Record a delete as a pending draft. If the record was created and never
+ *  exported, the delete just cancels the pending INSERT — production never
+ *  had the row, so there's nothing to send. */
+export async function recordDeleteAudit(
+  admin: SupabaseClient,
+  table: string,
+  schema: TableSchema,
+  deletedRow: Record<string, unknown>,
+): Promise<void> {
+  const keyField = getAuditKeyField(schema)
+  const keyValue = String(deletedRow[keyField.name] ?? '')
+  const existing = await findPending(admin, table, keyValue)
+
+  if (existing?.operation === 'insert') {
     await admin.from('audit_log').delete().eq('id', existing.id)
     return
   }
 
   const row = {
     table_name: table,
-    operation,
+    operation: 'delete' as const,
     record_key_field: keyField.name,
     record_key_value: keyValue,
-    sql_query: sqlQuery,
-    payload: fullRow,
-    status: 'pending',
+    sql_query: buildDeleteSQL(table, keyField, keyValue),
+    payload: deletedRow,
+    baseline: null,
+    status: 'pending' as const,
   }
 
-  if (existing) {
-    await admin.from('audit_log').update(row).eq('id', existing.id)
-  } else {
-    await admin.from('audit_log').insert(row)
-  }
+  if (existing) await admin.from('audit_log').update(row).eq('id', existing.id)
+  else await admin.from('audit_log').insert(row)
 }
