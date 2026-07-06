@@ -33,9 +33,7 @@ const STATUS_LABELS: Record<AuditRow['status'], string> = {
 }
 
 function buildSqlText(rows: AuditRow[]): string {
-  return rows
-    .map(r => `-- ${r.table_name} · ${OPERATION_LABELS[r.operation]} · ${r.record_key_field}=${r.record_key_value}\n${r.sql_query}`)
-    .join('\n\n')
+  return rows.map(r => r.sql_query).join('\n')
 }
 
 function downloadSql(rows: AuditRow[], filename: string) {
