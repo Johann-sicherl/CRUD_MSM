@@ -142,6 +142,7 @@ export const tables: Record<string, TableSchema> = {
     importExport: true,
     compactHeader: true,
     bulkEdit: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Leg.', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
