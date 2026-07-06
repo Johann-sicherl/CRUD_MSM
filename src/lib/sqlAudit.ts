@@ -85,9 +85,6 @@ export function diffChangedFields(
       : prev === next
     if (!equal) changed[name] = val
   }
-  if (Object.keys(changed).length > 0 && 'updated_at' in updateBody) {
-    changed.updated_at = updateBody.updated_at
-  }
   return changed
 }
 

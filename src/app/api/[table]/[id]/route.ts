@@ -43,7 +43,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (schema.auditQueries) {
     try {
       const changed = beforeRow ? diffChangedFields(beforeRow, updateBody) : updateBody
-      if (Object.keys(changed).some(name => name !== 'updated_at')) {
+      if (Object.keys(changed).length > 0) {
         const keyField = getAuditKeyField(schema)
         const keyValue = (data as Record<string, unknown>)[keyField.name]
         const sql = buildUpdateSQL(table, schema, changed, keyField, keyValue)
