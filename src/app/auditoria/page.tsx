@@ -32,11 +32,14 @@ const STATUS_LABELS: Record<AuditRow['status'], string> = {
   applied: 'Aplicado',
 }
 
-function downloadSql(rows: AuditRow[], filename: string) {
-  const body = rows
+function buildSqlText(rows: AuditRow[]): string {
+  return rows
     .map(r => `-- ${r.table_name} · ${OPERATION_LABELS[r.operation]} · ${r.record_key_field}=${r.record_key_value}\n${r.sql_query}`)
     .join('\n\n')
-  const blob = new Blob([body], { type: 'application/sql' })
+}
+
+function downloadSql(rows: AuditRow[], filename: string) {
+  const blob = new Blob([buildSqlText(rows)], { type: 'application/sql' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -54,7 +57,6 @@ export default function AuditoriaPage() {
   const [tableFilter, setTableFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
 
   const showToast = (msg: string, isError = false) => {
@@ -129,6 +131,11 @@ export default function AuditoriaPage() {
     fetchData()
   }
 
+  const handleCopyAll = () => {
+    if (rows.length === 0) return
+    navigator.clipboard.writeText(buildSqlText(rows)).then(() => showToast(`${rows.length} quer${rows.length !== 1 ? 'ies' : 'y'} copiada${rows.length !== 1 ? 's' : ''}`))
+  }
+
   return (
     <div className="p-8 flex flex-col gap-4">
       <div className="sticky top-9 z-20 bg-background pt-2 -mt-2">
@@ -163,6 +170,13 @@ export default function AuditoriaPage() {
               <option value="exported">Exportado</option>
               <option value="applied">Aplicado</option>
             </select>
+            <button
+              onClick={handleCopyAll}
+              disabled={rows.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ⧉ Copiar todas ({rows.length})
+            </button>
             {selectedIds.size > 0 && (
               <button
                 onClick={handleExportSelected}
@@ -227,9 +241,6 @@ export default function AuditoriaPage() {
                       <td className="px-4 py-3 text-on-surface-variant">{STATUS_LABELS[row.status]}</td>
                       <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap">{new Date(row.created_at).toLocaleString('pt-BR')}</td>
                       <td className="px-4 py-3 whitespace-nowrap flex gap-2">
-                        <button onClick={() => setExpandedId(expandedId === row.id ? null : row.id)} className="text-primary hover:underline text-xs">
-                          {expandedId === row.id ? 'Ocultar SQL' : 'Ver SQL'}
-                        </button>
                         <button
                           onClick={() => navigator.clipboard.writeText(row.sql_query).then(() => showToast('SQL copiado'))}
                           className="text-primary hover:underline text-xs"
@@ -248,15 +259,13 @@ export default function AuditoriaPage() {
                         )}
                       </td>
                     </tr>
-                    {expandedId === row.id && (
-                      <tr>
-                        <td colSpan={7} className="px-4 pb-4 bg-surface-container-high">
-                          <pre className="p-3 bg-surface-container-highest border border-outline-variant rounded text-xs font-mono whitespace-pre-wrap overflow-x-auto">
-                            {row.sql_query}
-                          </pre>
-                        </td>
-                      </tr>
-                    )}
+                    <tr>
+                      <td colSpan={7} className="px-4 pb-4 bg-surface-container-high">
+                        <pre className="p-3 bg-surface-container-highest border border-outline-variant rounded text-xs font-mono whitespace-pre-wrap overflow-x-auto">
+                          {row.sql_query}
+                        </pre>
+                      </td>
+                    </tr>
                   </Fragment>
                 ))
               )}
