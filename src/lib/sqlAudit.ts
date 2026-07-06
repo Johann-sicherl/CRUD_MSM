@@ -34,9 +34,9 @@ export function getAuditKeyField(schema: TableSchema): Field {
   return schema.fields.find(f => f.isPk)!
 }
 
-/** INSERT statement. autoIncrement fields are rebuilt as a MAX()+1 subquery so the
- *  value is computed fresh against whichever database it actually runs on — the
- *  literal value in this test DB may not match production's current max. */
+/** INSERT statement. Uses the literal value computed in this test DB for every
+ *  field, including autoIncrement ones — if the production DB already has a
+ *  higher legacy_id, adjust the number by hand before sending it to IT. */
 export function buildInsertSQL(table: string, schema: TableSchema, insertBody: Record<string, unknown>): string {
   const cols: string[] = []
   const vals: string[] = []
@@ -44,11 +44,7 @@ export function buildInsertSQL(table: string, schema: TableSchema, insertBody: R
     if (field.isPk) continue
     if (!(field.name in insertBody)) continue
     cols.push(field.name)
-    vals.push(
-      field.autoIncrement
-        ? `(SELECT COALESCE(MAX(${field.name}), 0) + 1 FROM ${table})`
-        : sqlLiteral(field, insertBody[field.name])
-    )
+    vals.push(sqlLiteral(field, insertBody[field.name]))
   }
   return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${vals.join(', ')});`
 }
