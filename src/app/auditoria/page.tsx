@@ -129,6 +129,13 @@ export default function AuditoriaPage() {
     fetchData()
   }
 
+  const handleDeleteSelected = async () => {
+    if (selectedRows.length === 0) return
+    await Promise.all(selectedRows.map(r => fetch(`/api/audit-log/${r.id}`, { method: 'DELETE' })))
+    showToast(`${selectedRows.length} quer${selectedRows.length !== 1 ? 'ies' : 'y'} exclu${selectedRows.length !== 1 ? 'ídas' : 'ída'}`)
+    fetchData()
+  }
+
   const handleCopyAll = () => {
     if (rows.length === 0) return
     navigator.clipboard.writeText(buildSqlText(rows)).then(() => showToast(`${rows.length} quer${rows.length !== 1 ? 'ies' : 'y'} copiada${rows.length !== 1 ? 's' : ''}`))
@@ -176,12 +183,20 @@ export default function AuditoriaPage() {
               ⧉ Copiar todas ({rows.length})
             </button>
             {selectedIds.size > 0 && (
-              <button
-                onClick={handleExportSelected}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-500 transition-colors whitespace-nowrap"
-              >
-                ↓ Exportar {selectedIds.size} selecionada{selectedIds.size !== 1 ? 's' : ''}
-              </button>
+              <>
+                <button
+                  onClick={handleExportSelected}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-500 transition-colors whitespace-nowrap"
+                >
+                  ↓ Exportar {selectedIds.size} selecionada{selectedIds.size !== 1 ? 's' : ''}
+                </button>
+                <button
+                  onClick={handleDeleteSelected}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-error text-on-error rounded text-sm font-semibold hover:opacity-90 transition-colors whitespace-nowrap"
+                >
+                  ✕ Excluir {selectedIds.size} selecionada{selectedIds.size !== 1 ? 's' : ''}
+                </button>
+              </>
             )}
           </div>
         </div>
