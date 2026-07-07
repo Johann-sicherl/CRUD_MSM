@@ -102,6 +102,37 @@ function Property({ label, value }: { label: string; value: unknown }) {
   )
 }
 
+/** Full-property card for the searched Cadastro de Equipamentos item — every
+ *  BOM field, not just the processor/memory summary shown for the other items. */
+function EquipmentItemDetailCard({ r }: { r: Row }) {
+  return (
+    <div className="rounded-xl border-2 border-primary bg-primary/10 p-5 mb-4">
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div className="font-bold text-on-surface text-lg">{r.processor || '—'} · {r.memory || '—'}</div>
+        <StatusBadge status={r.status} />
+      </div>
+      <div className="mb-4 inline-block font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">
+        {r.protheus_code}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1.5 text-sm">
+        <Property label="Processador" value={r.processor} />
+        <Property label="Memória" value={r.memory} />
+        <Property label="Armazenamento" value={r.storage} />
+        <Property label="Placa Gráfica" value={r.graphics_card} />
+        <Property label="Cap. Correia (kg)" value={r.conveyor_belt_load_capacity_kg} />
+        <Property label="Potência Tubo (kV)" value={r.tube_power_kv} />
+        <Property label="Certificado" value={r.certificate} />
+        <Property label="Tipo Correia" value={r.conveyor_belt_type} />
+        <Property label="Tipo Motopolia" value={r.motopolia_type} />
+        <Property label="Idioma" value={r.language} />
+        <Property label="Cor" value={r.color} />
+        <Property label="Alerta" value={r.alertDescription} />
+        <Property label="Custo (R$)" value={Number(r.cost_std ?? 0).toFixed(2)} />
+      </div>
+    </div>
+  )
+}
+
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
@@ -307,19 +338,30 @@ export default function ExploradorRelacoesPage() {
             <div className="text-sm text-outline mt-2 font-mono">ID Leg. {result.equipment?.legacy_id} · código buscado: {result.code}</div>
           </div>
 
-          <SectionPanel title="Cadastro de Equipamentos (BOM)" tint="blue" count={result.bom.length}>
-            {result.bom.map(r => (
-              <InfoCard
-                key={r.id}
-                highlight={r.isSearched}
-                name={`${r.processor || '—'} · ${r.memory || '—'}`}
-                code={r.protheus_code}
-                footer={<>
-                  <StatusBadge status={r.status} />
-                  <span className="text-sm font-semibold text-on-surface-variant font-mono">R$ {Number(r.cost_std ?? 0).toFixed(2)}</span>
-                </>}
-              />
-            ))}
+          <SectionPanel title="Cadastro de Equipamentos (BOM)" tint="blue" count={result.bom.length} plain>
+            {result.bom.filter(r => r.isSearched).map(r => <EquipmentItemDetailCard key={r.id} r={r} />)}
+
+            {result.bom.filter(r => !r.isSearched).length > 0 && (
+              <>
+                <div className="text-sm font-bold text-on-surface mt-2 mb-3">
+                  Outros equipamentos deste grupo
+                  <span className="text-outline font-normal"> ({result.bom.filter(r => !r.isSearched).length})</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {result.bom.filter(r => !r.isSearched).map(r => (
+                    <InfoCard
+                      key={r.id}
+                      name={`${r.processor || '—'} · ${r.memory || '—'}`}
+                      code={r.protheus_code}
+                      footer={<>
+                        <StatusBadge status={r.status} />
+                        <span className="text-sm font-semibold text-on-surface-variant font-mono">R$ {Number(r.cost_std ?? 0).toFixed(2)}</span>
+                      </>}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </SectionPanel>
 
           <SectionPanel title="Acessórios Compatíveis" tint="amber" count={result.compatibleAccessories.length} plain>

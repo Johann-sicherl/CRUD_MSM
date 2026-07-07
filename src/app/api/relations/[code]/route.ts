@@ -29,6 +29,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       supabaseAdmin.from('roller_tables').select('*').eq('legacy_equipment_id', legacyEquipmentId),
     ])
 
+    const bomRows:   Row[] = bomRes.data       || []
     const compat:    Row[] = compatRes.data    || []
     const nonComb:   Row[] = nonCombRes.data   || []
     const dependants: Row[] = depRes.data      || []
@@ -56,8 +57,9 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     const groupNameMap: Record<number, string> = {}
     for (const g of (groupRows || [])) groupNameMap[g.legacy_id] = g.name
 
-    // Resolve each accessory's own alert id to its description, for the detail view
+    // Resolve alert ids (from BOM items and from accessories) to their description
     const alertIds = new Set<number>()
+    for (const r of bomRows) if (r.legacy_general_alert_id) alertIds.add(r.legacy_general_alert_id)
     for (const a of Object.values(accessoryMap)) if (a.legacy_general_alert_id) alertIds.add(a.legacy_general_alert_id)
     const { data: alertRows } = alertIds.size > 0
       ? await supabaseAdmin.from('general_alerts').select('legacy_id, description').in('legacy_id', Array.from(alertIds))
@@ -69,7 +71,11 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       type: 'equipment',
       code,
       equipment: equipRes.data,
-      bom: (bomRes.data || []).map((r: Row) => ({ ...r, isSearched: r.protheus_code === item.protheus_code })),
+      bom: bomRows.map((r: Row) => ({
+        ...r,
+        isSearched: r.protheus_code === item.protheus_code,
+        alertDescription: r.legacy_general_alert_id ? (alertMap[r.legacy_general_alert_id] ?? null) : null,
+      })),
       compatibleAccessories: compat.map(r => {
         const acc = accessoryMap[r.protheus_code] ?? null
         return {
