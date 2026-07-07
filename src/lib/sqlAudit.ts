@@ -34,15 +34,17 @@ export function getAuditKeyField(schema: TableSchema): Field {
   return schema.fields.find(f => f.isPk)!
 }
 
-/** INSERT statement. Uses the literal value computed in this test DB for every
- *  field, including autoIncrement ones — if the production DB already has a
- *  higher legacy_id, adjust the number by hand before sending it to IT. */
+/** INSERT statement. Lists every editable column explicitly — including empty
+ *  ones as NULL — so whoever reviews it sees the full row shape at a glance.
+ *  created_at/updated_at are skipped so the production DB fills them with its
+ *  own NOW() default; legacy_id-style autoIncrement fields are still included
+ *  since the route always computes and provides a value for those. */
 export function buildInsertSQL(table: string, schema: TableSchema, row: Record<string, unknown>): string {
   const cols: string[] = []
   const vals: string[] = []
   for (const field of schema.fields) {
     if (field.isPk) continue
-    if (!(field.name in row)) continue
+    if (field.isReadonly && !(field.name in row)) continue
     cols.push(field.name)
     vals.push(sqlLiteral(field, row[field.name]))
   }
@@ -95,12 +97,13 @@ type PendingRow = {
   id: string
   operation: 'insert' | 'update' | 'delete'
   baseline: Record<string, unknown> | null
+  payload: Record<string, unknown> | null
 }
 
 async function findPending(admin: SupabaseClient, table: string, keyValue: string): Promise<PendingRow | null> {
   const { data } = await admin
     .from('audit_log')
-    .select('id, operation, baseline')
+    .select('id, operation, baseline, payload')
     .eq('table_name', table)
     .eq('record_key_value', keyValue)
     .eq('status', 'pending')
@@ -158,9 +161,13 @@ export async function recordUpdateAudit(
   const existing = await findPending(admin, table, keyValue)
 
   if (existing?.operation === 'insert') {
+    // updateBody only carries editable fields (never autoIncrement ones like
+    // legacy_id, which the PUT route never touches) — merge over the
+    // original insert payload so those columns survive the regeneration.
+    const mergedRow = { ...(existing.payload ?? {}), ...updateBody }
     await admin.from('audit_log').update({
-      sql_query: buildInsertSQL(table, schema, updateBody),
-      payload: updateBody,
+      sql_query: buildInsertSQL(table, schema, mergedRow),
+      payload: mergedRow,
     }).eq('id', existing.id)
     return
   }
