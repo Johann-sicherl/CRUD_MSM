@@ -41,21 +41,29 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     for (const r of roller)     accessoryCodes.add(r.protheus_code)
 
     const { data: accessoryRows } = accessoryCodes.size > 0
-      ? await supabaseAdmin.from('accessories').select('protheus_code, name, status, legacy_group_id').in('protheus_code', Array.from(accessoryCodes))
+      ? await supabaseAdmin.from('accessories').select('*').in('protheus_code', Array.from(accessoryCodes))
       : { data: [] as Row[] }
 
-    const accessoryMap: Record<string, { name: string; status: string; groupId: number | null }> = {}
-    for (const a of (accessoryRows || [])) {
-      accessoryMap[a.protheus_code] = { name: a.name, status: a.status, groupId: a.legacy_group_id ?? null }
-    }
+    // Full accessory row per code (used to show every property when a group is expanded)
+    const accessoryMap: Record<string, Row> = {}
+    for (const a of (accessoryRows || [])) accessoryMap[a.protheus_code] = a
 
     const groupIds = new Set<number>()
-    for (const a of Object.values(accessoryMap)) if (a.groupId != null) groupIds.add(a.groupId)
+    for (const a of Object.values(accessoryMap)) if (a.legacy_group_id != null) groupIds.add(a.legacy_group_id)
     const { data: groupRows } = groupIds.size > 0
       ? await supabaseAdmin.from('accessory_groups').select('legacy_id, name').in('legacy_id', Array.from(groupIds))
       : { data: [] as Row[] }
     const groupNameMap: Record<number, string> = {}
     for (const g of (groupRows || [])) groupNameMap[g.legacy_id] = g.name
+
+    // Resolve each accessory's own alert id to its description, for the detail view
+    const alertIds = new Set<number>()
+    for (const a of Object.values(accessoryMap)) if (a.legacy_general_alert_id) alertIds.add(a.legacy_general_alert_id)
+    const { data: alertRows } = alertIds.size > 0
+      ? await supabaseAdmin.from('general_alerts').select('legacy_id, description').in('legacy_id', Array.from(alertIds))
+      : { data: [] as Row[] }
+    const alertMap: Record<number, string> = {}
+    for (const al of (alertRows || [])) alertMap[al.legacy_id] = al.description
 
     return NextResponse.json({
       type: 'equipment',
@@ -63,12 +71,14 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       equipment: equipRes.data,
       bom: (bomRes.data || []).map((r: Row) => ({ ...r, isSearched: r.protheus_code === item.protheus_code })),
       compatibleAccessories: compat.map(r => {
-        const acc = accessoryMap[r.protheus_code]
+        const acc = accessoryMap[r.protheus_code] ?? null
         return {
           ...r,
           accessoryName: acc?.name ?? null,
-          groupId: acc?.groupId ?? null,
-          groupName: acc?.groupId != null ? (groupNameMap[acc.groupId] ?? null) : null,
+          groupId: acc?.legacy_group_id ?? null,
+          groupName: acc?.legacy_group_id != null ? (groupNameMap[acc.legacy_group_id] ?? null) : null,
+          accessory: acc,
+          alertDescription: acc?.legacy_general_alert_id ? (alertMap[acc.legacy_general_alert_id] ?? null) : null,
         }
       }),
       nonCombinable: nonComb.map(r => ({
