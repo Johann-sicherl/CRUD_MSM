@@ -44,7 +44,10 @@ export function buildInsertSQL(table: string, schema: TableSchema, row: Record<s
   const vals: string[] = []
   for (const field of schema.fields) {
     if (field.isPk) continue
-    if (field.isReadonly && !(field.name in row)) continue
+    // Readonly fields are only ever legacy_id-style autoIncrement columns
+    // (which the route computes a real value for) or created_at/updated_at
+    // (which must always come from the production DB's own NOW() default).
+    if (field.isReadonly && !field.autoIncrement) continue
     cols.push(field.name)
     vals.push(sqlLiteral(field, row[field.name]))
   }
