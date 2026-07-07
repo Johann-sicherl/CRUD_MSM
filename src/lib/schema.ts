@@ -204,6 +204,7 @@ export const tables: Record<string, TableSchema> = {
     importExport: true,
     compactHeader: true,
     bulkEdit: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, unique: true, showInList: true, noBulkEdit: true },
