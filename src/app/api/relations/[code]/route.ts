@@ -1,0 +1,143 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
+
+type RouteParams = { params: { code: string } }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = Record<string, any>
+
+export async function GET(_req: NextRequest, { params }: RouteParams) {
+  const code = decodeURIComponent(params.code).trim()
+  if (!code) return NextResponse.json({ error: 'Informe um código' }, { status: 400 })
+
+  // ── 1. Try as a Cadastro de Equipamentos code (standard_equipment_items.protheus_code) ──
+  const { data: item } = await supabaseAdmin
+    .from('standard_equipment_items')
+    .select('*')
+    .ilike('protheus_code', code)
+    .maybeSingle()
+
+  if (item) {
+    const legacyEquipmentId = item.legacy_equipment_id
+
+    const [equipRes, bomRes, compatRes, nonCombRes, depRes, rollerRes] = await Promise.all([
+      supabaseAdmin.from('equipments').select('*').eq('legacy_id', legacyEquipmentId).maybeSingle(),
+      supabaseAdmin.from('standard_equipment_items').select('*').eq('legacy_equipment_id', legacyEquipmentId).order('protheus_code'),
+      supabaseAdmin.from('relationship_equip_accessory').select('*').eq('legacy_equipment_id', legacyEquipmentId),
+      supabaseAdmin.from('non_combinable_comps').select('*').eq('legacy_equipment_id', legacyEquipmentId),
+      supabaseAdmin.from('dependant_items').select('*').eq('legacy_equipment_id', legacyEquipmentId),
+      supabaseAdmin.from('roller_tables').select('*').eq('legacy_equipment_id', legacyEquipmentId),
+    ])
+
+    const compat:    Row[] = compatRes.data    || []
+    const nonComb:   Row[] = nonCombRes.data   || []
+    const dependants: Row[] = depRes.data      || []
+    const roller:    Row[] = rollerRes.data    || []
+
+    const accessoryCodes = new Set<string>()
+    for (const r of compat)     accessoryCodes.add(r.protheus_code)
+    for (const r of nonComb)    { accessoryCodes.add(r.protheus_code); accessoryCodes.add(r.remove_list_code) }
+    for (const r of dependants) { accessoryCodes.add(r.protheus_code); accessoryCodes.add(r.protheus_item_code) }
+    for (const r of roller)     accessoryCodes.add(r.protheus_code)
+
+    const { data: accessoryRows } = accessoryCodes.size > 0
+      ? await supabaseAdmin.from('accessories').select('protheus_code, name, status').in('protheus_code', Array.from(accessoryCodes))
+      : { data: [] as Row[] }
+
+    const accessoryMap: Record<string, { name: string; status: string }> = {}
+    for (const a of (accessoryRows || [])) accessoryMap[a.protheus_code] = { name: a.name, status: a.status }
+
+    return NextResponse.json({
+      type: 'equipment',
+      code,
+      equipment: equipRes.data,
+      bom: (bomRes.data || []).map((r: Row) => ({ ...r, isSearched: r.protheus_code === item.protheus_code })),
+      compatibleAccessories: compat.map(r => ({ ...r, accessoryName: accessoryMap[r.protheus_code]?.name ?? null })),
+      nonCombinable: nonComb.map(r => ({
+        ...r,
+        name1: accessoryMap[r.protheus_code]?.name ?? null,
+        name2: accessoryMap[r.remove_list_code]?.name ?? null,
+      })),
+      dependants: dependants.map(r => ({
+        ...r,
+        itemName: accessoryMap[r.protheus_code]?.name ?? null,
+        dependentName: accessoryMap[r.protheus_item_code]?.name ?? null,
+      })),
+      rollerTables: roller.map(r => ({ ...r, accessoryName: accessoryMap[r.protheus_code]?.name ?? null })),
+    })
+  }
+
+  // ── 2. Try as a Cadastro de Componentes code (accessories.protheus_code) ──
+  const { data: accessory } = await supabaseAdmin
+    .from('accessories')
+    .select('*')
+    .ilike('protheus_code', code)
+    .maybeSingle()
+
+  if (accessory) {
+    const [groupRes, compatRes, nonCombRes, depRes, rollerRes] = await Promise.all([
+      accessory.legacy_group_id != null
+        ? supabaseAdmin.from('accessory_groups').select('name').eq('legacy_id', accessory.legacy_group_id).maybeSingle()
+        : Promise.resolve({ data: null as Row | null }),
+      supabaseAdmin.from('relationship_equip_accessory').select('*').eq('protheus_code', accessory.protheus_code),
+      supabaseAdmin.from('non_combinable_comps').select('*').or(`protheus_code.eq.${accessory.protheus_code},remove_list_code.eq.${accessory.protheus_code}`),
+      supabaseAdmin.from('dependant_items').select('*').or(`protheus_code.eq.${accessory.protheus_code},protheus_item_code.eq.${accessory.protheus_code}`),
+      supabaseAdmin.from('roller_tables').select('*').eq('protheus_code', accessory.protheus_code),
+    ])
+
+    const compat:    Row[] = compatRes.data  || []
+    const nonComb:   Row[] = nonCombRes.data || []
+    const dependants: Row[] = depRes.data    || []
+    const roller:    Row[] = rollerRes.data  || []
+
+    const equipmentIds = new Set<number>()
+    for (const r of compat)     equipmentIds.add(r.legacy_equipment_id)
+    for (const r of nonComb)    equipmentIds.add(r.legacy_equipment_id)
+    for (const r of dependants) equipmentIds.add(r.legacy_equipment_id)
+    for (const r of roller)     equipmentIds.add(r.legacy_equipment_id)
+
+    const { data: equipRows } = equipmentIds.size > 0
+      ? await supabaseAdmin.from('equipments').select('legacy_id, name').in('legacy_id', Array.from(equipmentIds))
+      : { data: [] as Row[] }
+    const equipMap: Record<number, string> = {}
+    for (const e of (equipRows || [])) equipMap[e.legacy_id] = e.name
+
+    const otherCodes = new Set<string>()
+    for (const r of nonComb)    otherCodes.add(r.protheus_code === accessory.protheus_code ? r.remove_list_code : r.protheus_code)
+    for (const r of dependants) otherCodes.add(r.protheus_code === accessory.protheus_code ? r.protheus_item_code : r.protheus_code)
+    const { data: otherRows } = otherCodes.size > 0
+      ? await supabaseAdmin.from('accessories').select('protheus_code, name').in('protheus_code', Array.from(otherCodes))
+      : { data: [] as Row[] }
+    const otherMap: Record<string, string> = {}
+    for (const a of (otherRows || [])) otherMap[a.protheus_code] = a.name
+
+    return NextResponse.json({
+      type: 'accessory',
+      code,
+      accessory,
+      groupName: groupRes.data?.name ?? null,
+      usedInEquipments: compat.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null })),
+      nonCombinable: nonComb.map(r => {
+        const isFirst = r.protheus_code === accessory.protheus_code
+        const otherCode = isFirst ? r.remove_list_code : r.protheus_code
+        return { ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null, otherCode, otherName: otherMap[otherCode] ?? null }
+      }),
+      dependants: dependants.map(r => {
+        const isFirst = r.protheus_code === accessory.protheus_code
+        const otherCode = isFirst ? r.protheus_item_code : r.protheus_code
+        return {
+          ...r,
+          equipmentName: equipMap[r.legacy_equipment_id] ?? null,
+          role: isFirst ? 'item' : 'dependente',
+          otherCode,
+          otherName: otherMap[otherCode] ?? null,
+        }
+      }),
+      rollerTables: roller.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null })),
+    })
+  }
+
+  return NextResponse.json({
+    error: `Código "${code}" não encontrado em Cadastro de Equipamentos nem em Cadastro de Componentes`,
+  }, { status: 404 })
+}
