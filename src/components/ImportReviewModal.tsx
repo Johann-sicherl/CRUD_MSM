@@ -32,6 +32,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   // Fixed-choice select fields (e.g. status: active/deactive) — options come straight
   // from the schema, no fetch needed, so the allowed-values map is built once here.
   const sFields       = schema.fields.filter(f => f.type === 'select' && f.options && f.options.length > 0)
+  const rangeFields   = schema.fields.filter(f => f.exclusiveMin !== undefined)
   const selectAllowed = useMemo(() => {
     const map: Record<string, Map<string, string>> = {}
     for (const f of sFields) {
@@ -59,7 +60,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
 
   // On mount: fetch lookup tables, build cache, pre-validate unique fields against DB
   useEffect(() => {
-    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0) { setPhase('review'); return }
+    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0 && rangeFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
       const cache: LookupCache = {}
@@ -193,6 +194,17 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             newWarnings[ri][f.name] = `"${val}" inválido — opções: ${f.options!.join(', ')}`
           }
         }
+
+        // Numeric lower-bound fields (e.g. cost_std must be > 0)
+        for (const f of rangeFields) {
+          const val = (newRows[ri][f.name] ?? '').trim()
+          if (!val || val === 'null') continue
+          const num = parseFloat(val)
+          if (Number.isNaN(num) || num <= f.exclusiveMin!) {
+            if (!newWarnings[ri]) newWarnings[ri] = {}
+            newWarnings[ri][f.name] = `deve ser maior que ${f.exclusiveMin}`
+          }
+        }
       }
 
       setRows(newRows)
@@ -309,9 +321,28 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             setWarn(`"${trimmed}" inválido — opções: ${[...selectOpts.values()].join(', ')}`)
           }
         }
+        return
+      }
+
+      // Live numeric lower-bound check (e.g. cost_std must be > 0). An emptied
+      // cell falls back to the field's default (same as the server does), so
+      // clearing a cost field back to blank doesn't quietly dodge the check.
+      const rangeField = rangeFields.find(f => f.name === fieldName)
+      if (rangeField) {
+        const effective = trimmed || (rangeField.defaultValue !== undefined ? String(rangeField.defaultValue) : '')
+        if (!effective) {
+          clearWarn()
+        } else {
+          const num = parseFloat(effective)
+          if (Number.isNaN(num) || num <= rangeField.exclusiveMin!) {
+            setWarn(`deve ser maior que ${rangeField.exclusiveMin}`)
+          } else {
+            clearWarn()
+          }
+        }
       }
     }
-  }, [lFieldNames, lFields, selectAllowed])
+  }, [lFieldNames, lFields, selectAllowed, rangeFields])
 
   const handleRemove = (ri: number) => {
     setRows(prev => prev.filter((_, i) => i !== ri))

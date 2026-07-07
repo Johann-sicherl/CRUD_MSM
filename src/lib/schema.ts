@@ -55,6 +55,7 @@ export interface Field {
   validateExistsIn?: { table: string; field: string; displayField?: string; errorMessage?: string }
   autoIncrement?: boolean
   unique?: boolean
+  exclusiveMin?: number      // numeric/decimal fields: value must be strictly greater than this on import (e.g. 0 to require a positive cost)
   hideInForm?: boolean
   hideInImport?: boolean
   noBulkEdit?: boolean       // exclude from the bulk-edit modal (identity/relational keys must not be mass-updated)
@@ -189,7 +190,7 @@ export const tables: Record<string, TableSchema> = {
         validateExistsIn: { table: 'general_alerts', field: 'legacy_id', displayField: 'description',
           errorMessage: 'Alerta não encontrado — coluna "Alerta" deve conter o ID numérico ou o texto exato do alerta (ou ficar vazio/0 para nenhum)' } },
       { name: 'status',   label: 'Status',    type: 'select',  nullable: false, defaultValue: 'active', options: ['active', 'deactive'], showInList: true },
-      { name: 'cost_std', label: 'Custo (R$)',type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
+      { name: 'cost_std', label: 'Custo (R$)',type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
       { name: 'created_at', label: 'Criado em',     type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -221,7 +222,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'dimensional_mm',          label: 'Dimensão (mm)',        type: 'number',  nullable: true },
       { name: 'monitor_size',            label: 'Tam. Monitor (pol)',   type: 'decimal', nullable: true },
       { name: 'quantity_monitor_totem',  label: 'Qtd. Monitor Totem',  type: 'number',  nullable: true },
-      { name: 'cost_std',                label: 'Custo (R$)',           type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
+      { name: 'cost_std',                label: 'Custo (R$)',           type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
       { name: 'description',             label: 'Descrição',            type: 'textarea',nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },
@@ -365,7 +366,7 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_item_code',
           through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } } },
       { name: 'quantity', label: 'Qtd.', type: 'number', nullable: false, defaultValue: 1, showInList: true },
-      { name: 'cost_std', label: 'Custo (R$)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true },
+      { name: 'cost_std', label: 'Custo (R$)', type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
       { name: 'proportional_factor', label: 'Fat. Prop.', type: 'decimal', nullable: true, showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
