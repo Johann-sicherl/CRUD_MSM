@@ -32,7 +32,11 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   // Fixed-choice select fields (e.g. status: active/deactive) — options come straight
   // from the schema, no fetch needed, so the allowed-values map is built once here.
   const sFields       = schema.fields.filter(f => f.type === 'select' && f.options && f.options.length > 0)
-  const rangeFields   = schema.fields.filter(f => f.exclusiveMin !== undefined)
+  // Plain numeric fields (excluding lookup fields, which resolve names -> IDs separately)
+  // must parse as a real number, and additionally respect exclusiveMin when set.
+  const numericFields = schema.fields.filter(f =>
+    (f.type === 'number' || f.type === 'decimal') && !f.isPk && !f.isReadonly && !lFieldNames.has(f.name)
+  )
   const selectAllowed = useMemo(() => {
     const map: Record<string, Map<string, string>> = {}
     for (const f of sFields) {
@@ -60,7 +64,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
 
   // On mount: fetch lookup tables, build cache, pre-validate unique fields against DB
   useEffect(() => {
-    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0 && rangeFields.length === 0) { setPhase('review'); return }
+    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0 && numericFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
       const cache: LookupCache = {}
@@ -195,12 +199,15 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           }
         }
 
-        // Numeric lower-bound fields (e.g. cost_std must be > 0)
-        for (const f of rangeFields) {
+        // Numeric fields must actually parse as a number, and respect exclusiveMin when set
+        for (const f of numericFields) {
           const val = (newRows[ri][f.name] ?? '').trim()
           if (!val || val === 'null') continue
-          const num = parseFloat(val)
-          if (Number.isNaN(num) || num <= f.exclusiveMin!) {
+          const num = f.type === 'number' ? parseInt(val) : parseFloat(val)
+          if (Number.isNaN(num)) {
+            if (!newWarnings[ri]) newWarnings[ri] = {}
+            newWarnings[ri][f.name] = `"${val}" não é um número válido`
+          } else if (f.exclusiveMin !== undefined && num <= f.exclusiveMin) {
             if (!newWarnings[ri]) newWarnings[ri] = {}
             newWarnings[ri][f.name] = `deve ser maior que ${f.exclusiveMin}`
           }
@@ -324,25 +331,27 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
         return
       }
 
-      // Live numeric lower-bound check (e.g. cost_std must be > 0). An emptied
-      // cell falls back to the field's default (same as the server does), so
-      // clearing a cost field back to blank doesn't quietly dodge the check.
-      const rangeField = rangeFields.find(f => f.name === fieldName)
-      if (rangeField) {
-        const effective = trimmed || (rangeField.defaultValue !== undefined ? String(rangeField.defaultValue) : '')
+      // Live numeric validation: must parse as a real number, and (e.g. cost_std)
+      // respect exclusiveMin when set. An emptied cell falls back to the field's
+      // default (same as the server does), so clearing it doesn't dodge the check.
+      const numericField = numericFields.find(f => f.name === fieldName)
+      if (numericField) {
+        const effective = trimmed || (numericField.defaultValue !== undefined ? String(numericField.defaultValue) : '')
         if (!effective) {
           clearWarn()
         } else {
-          const num = parseFloat(effective)
-          if (Number.isNaN(num) || num <= rangeField.exclusiveMin!) {
-            setWarn(`deve ser maior que ${rangeField.exclusiveMin}`)
+          const num = numericField.type === 'number' ? parseInt(effective) : parseFloat(effective)
+          if (Number.isNaN(num)) {
+            setWarn(`"${trimmed}" não é um número válido`)
+          } else if (numericField.exclusiveMin !== undefined && num <= numericField.exclusiveMin) {
+            setWarn(`deve ser maior que ${numericField.exclusiveMin}`)
           } else {
             clearWarn()
           }
         }
       }
     }
-  }, [lFieldNames, lFields, selectAllowed, rangeFields])
+  }, [lFieldNames, lFields, selectAllowed, numericFields])
 
   const handleRemove = (ri: number) => {
     setRows(prev => prev.filter((_, i) => i !== ri))
