@@ -33,32 +33,20 @@ function StatusBadge({ status }: { status?: string | null }) {
   if (!status) return null
   const active = status === 'active'
   return (
-    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-      active ? 'text-green-500 border-green-500/30 bg-green-500/10' : 'text-outline border-outline-variant bg-surface-container'
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+      active ? 'text-green-400 border-green-500/40 bg-green-500/10' : 'text-outline border-outline-variant bg-surface-container'
     }`}>
       {status}
     </span>
   )
 }
 
-function Section({ title, color, count, children }: { title: string; color: string; count: number; children: React.ReactNode }) {
-  return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className={`text-sm font-semibold uppercase tracking-[0.1em] font-mono ${color}`}>{title}</h2>
-        <span className="text-xs text-outline font-mono">({count})</span>
-        <div className="flex-1 h-px bg-outline-variant ml-1" />
-      </div>
-      {count === 0 ? (
-        <div className="text-xs text-outline italic px-1">Nenhum registro</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">{children}</div>
-      )}
-    </div>
-  )
+const TINTS = {
+  blue:  { border: 'border-blue-500/30',  bg: 'bg-blue-500/[0.06]',  title: 'text-blue-400'  },
+  amber: { border: 'border-amber-500/30', bg: 'bg-amber-500/[0.06]', title: 'text-amber-400' },
 }
 
-// Groups rows that carry a groupName/groupId (accessory_groups) — "Sem grupo" always sorts last.
+// Groups rows that carry a groupName (accessory_groups) — "Sem grupo" always sorts last.
 function groupByAccessoryGroup(rows: Row[]): { groupName: string; items: Row[] }[] {
   const map = new Map<string, Row[]>()
   for (const r of rows) {
@@ -75,44 +63,96 @@ function groupByAccessoryGroup(rows: Row[]): { groupName: string; items: Row[] }
     })
 }
 
-function GroupedSection({ title, color, rows, renderCard }: {
+/** Section wrapper: a tinted, bordered panel with a bold header + count pill.
+ *  `grouped` renders sub-headers per accessory_group; otherwise a plain grid. */
+function SectionPanel({ title, tint, count, grouped, children }: {
   title: string
-  color: string
-  rows: Row[]
-  renderCard: (r: Row) => React.ReactNode
+  tint: keyof typeof TINTS
+  count: number
+  grouped?: { groupName: string; items: React.ReactNode[] }[]
+  children?: React.ReactNode
 }) {
-  const groups = groupByAccessoryGroup(rows)
+  const t = TINTS[tint]
   return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className={`text-sm font-semibold uppercase tracking-[0.1em] font-mono ${color}`}>{title}</h2>
-        <span className="text-xs text-outline font-mono">({rows.length})</span>
-        <div className="flex-1 h-px bg-outline-variant ml-1" />
+    <div className={`rounded-xl border ${t.border} ${t.bg} p-5 mb-5`}>
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className={`text-lg font-bold ${t.title}`}>{title}</h2>
+        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant">
+          {count}
+        </span>
       </div>
-      {rows.length === 0 ? (
-        <div className="text-xs text-outline italic px-1">Nenhum registro</div>
+      {count === 0 ? (
+        <div className="text-sm text-outline italic">Nenhum registro</div>
+      ) : grouped ? (
+        <div className="flex flex-col gap-4">
+          {grouped.map(g => (
+            <div key={g.groupName}>
+              <div className="text-sm font-bold text-on-surface mb-2">
+                {g.groupName} <span className="text-outline font-normal">({g.items.length})</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{g.items}</div>
+            </div>
+          ))}
+        </div>
       ) : (
-        groups.map(g => (
-          <div key={g.groupName} className="mb-4">
-            <div className="text-xs font-semibold text-on-surface-variant mb-2 pl-1">
-              {g.groupName} <span className="text-outline font-normal">({g.items.length})</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {g.items.map(renderCard)}
-            </div>
-          </div>
-        ))
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{children}</div>
       )}
     </div>
   )
 }
 
-function Card({ children, highlight }: { children: React.ReactNode; highlight?: boolean }) {
+/** Simple entity card: name is the primary, prominent line; code is a small chip below it. */
+function InfoCard({ name, code, highlight, footer }: {
+  name: string
+  code?: string
+  highlight?: boolean
+  footer?: React.ReactNode
+}) {
   return (
-    <div className={`rounded-lg border p-3 text-sm ${
-      highlight ? 'border-primary bg-primary/5' : 'border-outline-variant bg-surface-container'
-    }`}>
-      {children}
+    <div className={`rounded-lg border-2 p-4 ${highlight ? 'border-primary bg-primary/10' : 'border-outline-variant bg-surface-container-high'}`}>
+      <div className="font-bold text-on-surface text-base leading-snug">{name}</div>
+      {code && (
+        <div className="mt-1.5 inline-block font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">
+          {code}
+        </div>
+      )}
+      {footer && <div className="mt-3 flex items-center justify-between gap-2">{footer}</div>}
+    </div>
+  )
+}
+
+/** Relational pair card: two sides joined by a connector badge — used for
+ *  "não combina com" and "requer" links, where two codes/names relate to
+ *  each other under a given equipment context. */
+function PairCard({ context, leftName, leftCode, rightName, rightCode, connector, tone }: {
+  context?: string | null
+  leftName: string
+  leftCode: string
+  rightName: string
+  rightCode: string
+  connector: string
+  tone: 'error' | 'primary'
+}) {
+  return (
+    <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
+      {context && <div className="text-xs font-semibold text-on-surface-variant mb-3 truncate">{context}</div>}
+      <div className="flex items-stretch gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="font-bold text-on-surface text-sm leading-snug break-words">{leftName}</div>
+          <div className="mt-1 font-mono text-xs text-primary truncate">{leftCode}</div>
+        </div>
+        <div className="shrink-0 flex items-center">
+          <span className={`text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${
+            tone === 'error' ? 'bg-error/15 text-error' : 'bg-primary/15 text-primary'
+          }`}>
+            {connector}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0 text-right">
+          <div className="font-bold text-on-surface text-sm leading-snug break-words">{rightName}</div>
+          <div className="mt-1 font-mono text-xs text-primary truncate">{rightCode}</div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -182,135 +222,148 @@ export default function ExploradorRelacoesPage() {
 
       {result?.type === 'equipment' && (
         <div className="mt-2">
-          <div className="bg-surface-container border border-outline-variant rounded-lg p-5 mb-6">
-            <div className="text-[10px] font-mono text-outline uppercase tracking-[0.12em] mb-1">Equipamento</div>
-            <div className="text-xl font-bold text-on-surface">
-              {result.equipment?.name ?? '—'} <span className="text-on-surface-variant font-normal">/ {result.equipment?.commercial_name}</span>
+          <div className="bg-surface-container border-2 border-primary/30 rounded-xl p-5 mb-6">
+            <div className="text-xs font-mono text-outline uppercase tracking-[0.12em] mb-1">Equipamento</div>
+            <div className="text-2xl font-bold text-on-surface">
+              {result.equipment?.name ?? '—'} <span className="text-on-surface-variant font-normal text-lg">/ {result.equipment?.commercial_name}</span>
             </div>
-            <div className="text-xs text-outline mt-1 font-mono">ID Leg. {result.equipment?.legacy_id} · código buscado: {result.code}</div>
+            <div className="text-sm text-outline mt-2 font-mono">ID Leg. {result.equipment?.legacy_id} · código buscado: {result.code}</div>
           </div>
 
-          <Section title="Cadastro de Equipamentos (BOM)" color="text-blue-400" count={result.bom.length}>
+          <SectionPanel title="Cadastro de Equipamentos (BOM)" tint="blue" count={result.bom.length}>
             {result.bom.map(r => (
-              <Card key={r.id} highlight={r.isSearched}>
-                <div className="font-mono text-xs text-primary">{r.protheus_code}</div>
-                <div className="text-on-surface-variant text-xs mt-1">{r.processor || '—'} · {r.memory || '—'}</div>
-                <div className="flex items-center justify-between mt-2">
+              <InfoCard
+                key={r.id}
+                highlight={r.isSearched}
+                name={`${r.processor || '—'} · ${r.memory || '—'}`}
+                code={r.protheus_code}
+                footer={<>
                   <StatusBadge status={r.status} />
-                  <span className="text-xs text-outline font-mono">R$ {Number(r.cost_std ?? 0).toFixed(2)}</span>
-                </div>
-              </Card>
+                  <span className="text-sm font-semibold text-on-surface-variant font-mono">R$ {Number(r.cost_std ?? 0).toFixed(2)}</span>
+                </>}
+              />
             ))}
-          </Section>
+          </SectionPanel>
 
-          <GroupedSection
+          <SectionPanel
             title="Acessórios Compatíveis"
-            color="text-amber-400"
-            rows={result.compatibleAccessories}
-            renderCard={r => (
-              <Card key={r.id}>
-                <div className="font-mono text-xs text-primary">{r.protheus_code}</div>
-                <div className="text-on-surface-variant text-xs mt-1">{r.accessoryName || 'N/A'}</div>
-                <div className="flex items-center justify-between mt-2">
-                  <StatusBadge status={r.status} />
-                  {r.maximum_quantity != null && <span className="text-xs text-outline font-mono">máx. {r.maximum_quantity}</span>}
-                </div>
-              </Card>
-            )}
+            tint="amber"
+            count={result.compatibleAccessories.length}
+            grouped={groupByAccessoryGroup(result.compatibleAccessories).map(g => ({
+              groupName: g.groupName,
+              items: g.items.map(r => (
+                <InfoCard
+                  key={r.id}
+                  name={r.accessoryName || 'N/A'}
+                  code={r.protheus_code}
+                  footer={<>
+                    <StatusBadge status={r.status} />
+                    {r.maximum_quantity != null && <span className="text-xs font-semibold text-outline">máx. {r.maximum_quantity}</span>}
+                  </>}
+                />
+              )),
+            }))}
           />
 
-          <Section title="Produtos Não Combináveis" color="text-amber-400" count={result.nonCombinable.length}>
+          <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length}>
             {result.nonCombinable.map(r => (
-              <Card key={r.id}>
-                <div className="font-mono text-xs text-primary">{r.protheus_code}</div>
-                <div className="text-on-surface-variant text-xs">{r.name1 || 'N/A'}</div>
-                <div className="text-outline text-xs my-1">✕ não combina com</div>
-                <div className="font-mono text-xs text-primary">{r.remove_list_code}</div>
-                <div className="text-on-surface-variant text-xs">{r.name2 || 'N/A'}</div>
-              </Card>
+              <PairCard
+                key={r.id}
+                leftName={r.name1 || 'N/A'} leftCode={r.protheus_code}
+                rightName={r.name2 || 'N/A'} rightCode={r.remove_list_code}
+                connector="✕ não combina"
+                tone="error"
+              />
             ))}
-          </Section>
+          </SectionPanel>
 
-          <Section title="Produtos Dependentes" color="text-amber-400" count={result.dependants.length}>
+          <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
             {result.dependants.map(r => (
-              <Card key={r.id}>
-                <div className="font-mono text-xs text-primary">{r.protheus_code}</div>
-                <div className="text-on-surface-variant text-xs">{r.itemName || 'N/A'}</div>
-                <div className="text-outline text-xs my-1">→ requer (x{r.quantity})</div>
-                <div className="font-mono text-xs text-primary">{r.protheus_item_code}</div>
-                <div className="text-on-surface-variant text-xs">{r.dependentName || 'N/A'}</div>
-              </Card>
+              <PairCard
+                key={r.id}
+                leftName={r.itemName || 'N/A'} leftCode={r.protheus_code}
+                rightName={r.dependentName || 'N/A'} rightCode={r.protheus_item_code}
+                connector={`→ requer x${r.quantity}`}
+                tone="primary"
+              />
             ))}
-          </Section>
+          </SectionPanel>
 
-          <Section title="Mesas de Roletes" color="text-amber-400" count={result.rollerTables.length}>
+          <SectionPanel title="Mesas de Roletes" tint="amber" count={result.rollerTables.length}>
             {result.rollerTables.map(r => (
-              <Card key={r.id}>
-                <div className="font-mono text-xs text-primary">{r.protheus_code}</div>
-                <div className="text-on-surface-variant text-xs mt-1">{r.accessoryName || 'N/A'}</div>
-                <div className="text-xs text-outline mt-2 font-mono uppercase">{r.type}</div>
-              </Card>
+              <InfoCard
+                key={r.id}
+                name={r.accessoryName || 'N/A'}
+                code={r.protheus_code}
+                footer={<span className="text-xs font-bold text-outline uppercase font-mono">{r.type}</span>}
+              />
             ))}
-          </Section>
+          </SectionPanel>
         </div>
       )}
 
       {result?.type === 'accessory' && (
         <div className="mt-2">
-          <div className="bg-surface-container border border-outline-variant rounded-lg p-5 mb-6">
-            <div className="text-[10px] font-mono text-outline uppercase tracking-[0.12em] mb-1">Componente</div>
-            <div className="text-xl font-bold text-on-surface">
-              {result.accessory.name} <span className="text-on-surface-variant font-normal font-mono text-sm">/ {result.accessory.protheus_code}</span>
+          <div className="bg-surface-container border-2 border-primary/30 rounded-xl p-5 mb-6">
+            <div className="text-xs font-mono text-outline uppercase tracking-[0.12em] mb-1">Componente</div>
+            <div className="text-2xl font-bold text-on-surface">
+              {result.accessory.name} <span className="text-on-surface-variant font-normal font-mono text-base">/ {result.accessory.protheus_code}</span>
             </div>
-            <div className="text-xs text-outline mt-1 font-mono flex items-center gap-3">
-              <span>Grupo: {result.groupName || 'N/A'}</span>
-              <span>Custo: R$ {Number(result.accessory.cost_std ?? 0).toFixed(2)}</span>
+            <div className="text-sm text-outline mt-2 flex items-center gap-3 flex-wrap">
+              <span className="font-mono">Grupo: {result.groupName || 'N/A'}</span>
+              <span className="font-mono">Custo: R$ {Number(result.accessory.cost_std ?? 0).toFixed(2)}</span>
               <StatusBadge status={result.accessory.status} />
             </div>
           </div>
 
-          <Section title="Usado nestes Equipamentos" color="text-blue-400" count={result.usedInEquipments.length}>
+          <SectionPanel title="Usado nestes Equipamentos" tint="blue" count={result.usedInEquipments.length}>
             {result.usedInEquipments.map(r => (
-              <Card key={r.id}>
-                <div className="text-on-surface-variant text-xs font-semibold">{r.equipmentName || 'N/A'}</div>
-                <div className="flex items-center justify-between mt-2">
+              <InfoCard
+                key={r.id}
+                name={r.equipmentName || 'N/A'}
+                footer={<>
                   <StatusBadge status={r.status} />
-                  {r.maximum_quantity != null && <span className="text-xs text-outline font-mono">máx. {r.maximum_quantity}</span>}
-                </div>
-              </Card>
+                  {r.maximum_quantity != null && <span className="text-xs font-semibold text-outline">máx. {r.maximum_quantity}</span>}
+                </>}
+              />
             ))}
-          </Section>
+          </SectionPanel>
 
-          <Section title="Produtos Não Combináveis" color="text-amber-400" count={result.nonCombinable.length}>
+          <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length}>
             {result.nonCombinable.map(r => (
-              <Card key={r.id}>
-                <div className="text-on-surface-variant text-xs font-semibold">{r.equipmentName || 'N/A'}</div>
-                <div className="text-outline text-xs my-1">✕ não combina com</div>
-                <div className="font-mono text-xs text-primary">{r.otherCode}</div>
-                <div className="text-on-surface-variant text-xs">{r.otherName || 'N/A'}</div>
-              </Card>
+              <PairCard
+                key={r.id}
+                context={r.equipmentName}
+                leftName={result.accessory.name} leftCode={result.accessory.protheus_code}
+                rightName={r.otherName || 'N/A'} rightCode={r.otherCode}
+                connector="✕ não combina"
+                tone="error"
+              />
             ))}
-          </Section>
+          </SectionPanel>
 
-          <Section title="Produtos Dependentes" color="text-amber-400" count={result.dependants.length}>
+          <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
             {result.dependants.map(r => (
-              <Card key={r.id}>
-                <div className="text-on-surface-variant text-xs font-semibold">{r.equipmentName || 'N/A'}</div>
-                <div className="text-outline text-xs my-1">{r.role === 'item' ? '→ requer' : '← requerido por'} (x{r.quantity})</div>
-                <div className="font-mono text-xs text-primary">{r.otherCode}</div>
-                <div className="text-on-surface-variant text-xs">{r.otherName || 'N/A'}</div>
-              </Card>
+              <PairCard
+                key={r.id}
+                context={r.equipmentName}
+                leftName={result.accessory.name} leftCode={result.accessory.protheus_code}
+                rightName={r.otherName || 'N/A'} rightCode={r.otherCode}
+                connector={r.role === 'item' ? `→ requer x${r.quantity}` : `← requerido por`}
+                tone="primary"
+              />
             ))}
-          </Section>
+          </SectionPanel>
 
-          <Section title="Mesas de Roletes" color="text-amber-400" count={result.rollerTables.length}>
+          <SectionPanel title="Mesas de Roletes" tint="amber" count={result.rollerTables.length}>
             {result.rollerTables.map(r => (
-              <Card key={r.id}>
-                <div className="text-on-surface-variant text-xs font-semibold">{r.equipmentName || 'N/A'}</div>
-                <div className="text-xs text-outline mt-2 font-mono uppercase">{r.type}</div>
-              </Card>
+              <InfoCard
+                key={r.id}
+                name={r.equipmentName || 'N/A'}
+                footer={<span className="text-xs font-bold text-outline uppercase font-mono">{r.type}</span>}
+              />
             ))}
-          </Section>
+          </SectionPanel>
         </div>
       )}
     </div>
