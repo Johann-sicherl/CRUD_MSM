@@ -64,6 +64,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   for (const field of schema.fields.filter(f => f.validateExistsIn)) {
     const val = insertBody[field.name]
     if (val === null || val === undefined || val === '') continue
+    // A field left at its default (e.g. 0 for "sem alerta") means "none selected" — nothing to validate
+    if (field.defaultValue !== undefined && val === field.defaultValue) continue
     const vi = field.validateExistsIn!
 
     // Try exact match on the key field first
@@ -204,7 +206,7 @@ function parseValue(type: string, value: unknown): unknown {
     return value
   }
   if (type === 'boolean') return value === true || value === 'true'
-  if (type === 'number')  return parseInt(String(value))
-  if (type === 'decimal') return parseFloat(String(value))
+  if (type === 'number')  { const n = parseInt(String(value));   return Number.isNaN(n) ? null : n }
+  if (type === 'decimal') { const n = parseFloat(String(value)); return Number.isNaN(n) ? null : n }
   return value
 }

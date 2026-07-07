@@ -122,6 +122,8 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           const entry = cache[f.name]
           const raw   = (newRows[ri][f.name] ?? '').trim()
           if (!raw) continue
+          // Left at the field's default (e.g. 0 for "sem alerta") — nothing to resolve
+          if (f.defaultValue !== undefined && raw === String(f.defaultValue)) continue
 
           if (entry) {
             const resolvedKey = entry.byKeyOrName.get(raw.toLowerCase())
@@ -179,8 +181,26 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
       // Lookup field: update display, resolve live against cache
       setDisplay(prev => ({ ...prev, [ri]: { ...prev[ri], [fieldName]: val } }))
 
+      const trimmed = val.trim()
+      const field = lFields.find(f => f.name === fieldName)
+      // Left empty (when optional) or at the field's default (e.g. 0 for "sem alerta") — nothing to resolve
+      const isDefault = field?.defaultValue !== undefined && trimmed === String(field.defaultValue)
+      const isOptionalEmpty = !trimmed && field?.nullable
+
+      if (isDefault || isOptionalEmpty) {
+        setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: val } : r))
+        setWarnings(prev => {
+          if (!prev[ri]?.[fieldName]) return prev
+          const next = { ...prev, [ri]: { ...prev[ri] } }
+          delete next[ri][fieldName]
+          if (!Object.keys(next[ri]).length) delete next[ri]
+          return next
+        })
+        return
+      }
+
       const entry = cacheRef.current[fieldName]
-      const resolvedKey = entry?.byKeyOrName.get(val.trim().toLowerCase())
+      const resolvedKey = entry?.byKeyOrName.get(trimmed.toLowerCase())
 
       if (resolvedKey) {
         setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: resolvedKey } : r))
@@ -195,7 +215,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
         setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: val } : r))
         setWarnings(prev => ({
           ...prev,
-          [ri]: { ...prev[ri], [fieldName]: val.trim() ? `"${val.trim()}" não encontrado` : 'Campo obrigatório' },
+          [ri]: { ...prev[ri], [fieldName]: trimmed ? `"${trimmed}" não encontrado` : 'Campo obrigatório' },
         }))
       }
     } else {

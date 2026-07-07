@@ -7,10 +7,14 @@ export function sqlLiteral(field: Field, value: unknown): string {
   switch (field.type) {
     case 'boolean':
       return value === true || value === 'true' ? 'TRUE' : 'FALSE'
-    case 'number':
-      return String(parseInt(String(value)))
-    case 'decimal':
-      return String(parseFloat(String(value)))
+    case 'number': {
+      const n = parseInt(String(value))
+      return Number.isNaN(n) ? 'NULL' : String(n)
+    }
+    case 'decimal': {
+      const n = parseFloat(String(value))
+      return Number.isNaN(n) ? 'NULL' : String(n)
+    }
     case 'jsonb': {
       const json = typeof value === 'string' ? value : JSON.stringify(value)
       return `'${json.replace(/'/g, "''")}'::jsonb`

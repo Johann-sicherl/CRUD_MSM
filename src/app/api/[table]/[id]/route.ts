@@ -73,7 +73,7 @@ function parseValue(type: string, value: unknown): unknown {
     return value
   }
   if (type === 'boolean') return value === true || value === 'true'
-  if (type === 'number')  return parseInt(String(value))
-  if (type === 'decimal') return parseFloat(String(value))
+  if (type === 'number')  { const n = parseInt(String(value));   return Number.isNaN(n) ? null : n }
+  if (type === 'decimal') { const n = parseFloat(String(value)); return Number.isNaN(n) ? null : n }
   return value
 }
