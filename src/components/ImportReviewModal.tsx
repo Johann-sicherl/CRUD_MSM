@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { TableSchema, Field } from '@/lib/schema'
 
 interface Props {
@@ -29,6 +29,17 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   const lFieldNames   = new Set(lFields.map(f => f.name))
   const uniqueFields  = schema.fields.filter(f => f.unique && !f.isPk)
   const dFields       = schema.fields.filter(f => f.dynamicOptions)
+  // Fixed-choice select fields (e.g. status: active/deactive) — options come straight
+  // from the schema, no fetch needed, so the allowed-values map is built once here.
+  const sFields       = schema.fields.filter(f => f.type === 'select' && f.options && f.options.length > 0)
+  const selectAllowed = useMemo(() => {
+    const map: Record<string, Map<string, string>> = {}
+    for (const f of sFields) {
+      map[f.name] = new Map(f.options!.map(o => [o.toLowerCase(), o]))
+    }
+    return map
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // rows: values to submit — lookup fields hold the resolved KEY (ID)
   const [rows,     setRows]     = useState<Record<string, string>[]>(initialRows)
@@ -48,7 +59,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
 
   // On mount: fetch lookup tables, build cache, pre-validate unique fields against DB
   useEffect(() => {
-    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0) { setPhase('review'); return }
+    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
       const cache: LookupCache = {}
@@ -166,6 +177,22 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             newWarnings[ri][f.name] = `"${val}" fora do padrão — opções: ${[...allowed.values()].join(', ')}`
           }
         }
+
+        // Fixed-choice select fields (status, type, etc.) must match one of the
+        // schema's options — case-insensitively, normalized to the canonical value.
+        for (const f of sFields) {
+          const allowed = selectAllowed[f.name]
+          if (!allowed || allowed.size === 0) continue
+          const val = (newRows[ri][f.name] ?? '').trim()
+          if (!val || val === 'null') continue
+          const canonical = allowed.get(val.toLowerCase())
+          if (canonical) {
+            newRows[ri][f.name] = canonical
+          } else {
+            if (!newWarnings[ri]) newWarnings[ri] = {}
+            newWarnings[ri][f.name] = `"${val}" inválido — opções: ${f.options!.join(', ')}`
+          }
+        }
       }
 
       setRows(newRows)
@@ -263,9 +290,28 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
             setWarn(`"${trimmed}" fora do padrão — opções: ${[...allowed.values()].join(', ')}`)
           }
         }
+        return
+      }
+
+      // Live validation against a fixed-choice select field's schema options
+      const selectOpts = selectAllowed[fieldName]
+      if (selectOpts && selectOpts.size > 0) {
+        if (!trimmed) {
+          clearWarn()
+        } else {
+          const canonical = selectOpts.get(trimmed.toLowerCase())
+          if (canonical) {
+            if (canonical !== val) {
+              setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: canonical } : r))
+            }
+            clearWarn()
+          } else {
+            setWarn(`"${trimmed}" inválido — opções: ${[...selectOpts.values()].join(', ')}`)
+          }
+        }
       }
     }
-  }, [lFieldNames])
+  }, [lFieldNames, lFields, selectAllowed])
 
   const handleRemove = (ri: number) => {
     setRows(prev => prev.filter((_, i) => i !== ri))
