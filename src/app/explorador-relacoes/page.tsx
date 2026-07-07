@@ -58,6 +58,55 @@ function Section({ title, color, count, children }: { title: string; color: stri
   )
 }
 
+// Groups rows that carry a groupName/groupId (accessory_groups) — "Sem grupo" always sorts last.
+function groupByAccessoryGroup(rows: Row[]): { groupName: string; items: Row[] }[] {
+  const map = new Map<string, Row[]>()
+  for (const r of rows) {
+    const key = r.groupName || 'Sem grupo'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(r)
+  }
+  return Array.from(map.entries())
+    .map(([groupName, items]) => ({ groupName, items }))
+    .sort((a, b) => {
+      if (a.groupName === 'Sem grupo') return 1
+      if (b.groupName === 'Sem grupo') return -1
+      return a.groupName.localeCompare(b.groupName, 'pt-BR')
+    })
+}
+
+function GroupedSection({ title, color, rows, renderCard }: {
+  title: string
+  color: string
+  rows: Row[]
+  renderCard: (r: Row) => React.ReactNode
+}) {
+  const groups = groupByAccessoryGroup(rows)
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className={`text-sm font-semibold uppercase tracking-[0.1em] font-mono ${color}`}>{title}</h2>
+        <span className="text-xs text-outline font-mono">({rows.length})</span>
+        <div className="flex-1 h-px bg-outline-variant ml-1" />
+      </div>
+      {rows.length === 0 ? (
+        <div className="text-xs text-outline italic px-1">Nenhum registro</div>
+      ) : (
+        groups.map(g => (
+          <div key={g.groupName} className="mb-4">
+            <div className="text-xs font-semibold text-on-surface-variant mb-2 pl-1">
+              {g.groupName} <span className="text-outline font-normal">({g.items.length})</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {g.items.map(renderCard)}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 function Card({ children, highlight }: { children: React.ReactNode; highlight?: boolean }) {
   return (
     <div className={`rounded-lg border p-3 text-sm ${
@@ -154,8 +203,11 @@ export default function ExploradorRelacoesPage() {
             ))}
           </Section>
 
-          <Section title="Acessórios Compatíveis" color="text-amber-400" count={result.compatibleAccessories.length}>
-            {result.compatibleAccessories.map(r => (
+          <GroupedSection
+            title="Acessórios Compatíveis"
+            color="text-amber-400"
+            rows={result.compatibleAccessories}
+            renderCard={r => (
               <Card key={r.id}>
                 <div className="font-mono text-xs text-primary">{r.protheus_code}</div>
                 <div className="text-on-surface-variant text-xs mt-1">{r.accessoryName || 'N/A'}</div>
@@ -164,8 +216,8 @@ export default function ExploradorRelacoesPage() {
                   {r.maximum_quantity != null && <span className="text-xs text-outline font-mono">máx. {r.maximum_quantity}</span>}
                 </div>
               </Card>
-            ))}
-          </Section>
+            )}
+          />
 
           <Section title="Produtos Não Combináveis" color="text-amber-400" count={result.nonCombinable.length}>
             {result.nonCombinable.map(r => (

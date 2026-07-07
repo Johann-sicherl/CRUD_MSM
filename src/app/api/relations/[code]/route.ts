@@ -41,18 +41,36 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     for (const r of roller)     accessoryCodes.add(r.protheus_code)
 
     const { data: accessoryRows } = accessoryCodes.size > 0
-      ? await supabaseAdmin.from('accessories').select('protheus_code, name, status').in('protheus_code', Array.from(accessoryCodes))
+      ? await supabaseAdmin.from('accessories').select('protheus_code, name, status, legacy_group_id').in('protheus_code', Array.from(accessoryCodes))
       : { data: [] as Row[] }
 
-    const accessoryMap: Record<string, { name: string; status: string }> = {}
-    for (const a of (accessoryRows || [])) accessoryMap[a.protheus_code] = { name: a.name, status: a.status }
+    const accessoryMap: Record<string, { name: string; status: string; groupId: number | null }> = {}
+    for (const a of (accessoryRows || [])) {
+      accessoryMap[a.protheus_code] = { name: a.name, status: a.status, groupId: a.legacy_group_id ?? null }
+    }
+
+    const groupIds = new Set<number>()
+    for (const a of Object.values(accessoryMap)) if (a.groupId != null) groupIds.add(a.groupId)
+    const { data: groupRows } = groupIds.size > 0
+      ? await supabaseAdmin.from('accessory_groups').select('legacy_id, name').in('legacy_id', Array.from(groupIds))
+      : { data: [] as Row[] }
+    const groupNameMap: Record<number, string> = {}
+    for (const g of (groupRows || [])) groupNameMap[g.legacy_id] = g.name
 
     return NextResponse.json({
       type: 'equipment',
       code,
       equipment: equipRes.data,
       bom: (bomRes.data || []).map((r: Row) => ({ ...r, isSearched: r.protheus_code === item.protheus_code })),
-      compatibleAccessories: compat.map(r => ({ ...r, accessoryName: accessoryMap[r.protheus_code]?.name ?? null })),
+      compatibleAccessories: compat.map(r => {
+        const acc = accessoryMap[r.protheus_code]
+        return {
+          ...r,
+          accessoryName: acc?.name ?? null,
+          groupId: acc?.groupId ?? null,
+          groupName: acc?.groupId != null ? (groupNameMap[acc.groupId] ?? null) : null,
+        }
+      }),
       nonCombinable: nonComb.map(r => ({
         ...r,
         name1: accessoryMap[r.protheus_code]?.name ?? null,
