@@ -20,18 +20,34 @@ export function sqlLiteral(field: Field, value: unknown): string {
   }
 }
 
-/** The field used to identify a row across environments (test DB vs. production).
- *  Never the internal uuid PK — that's generated independently in each database. */
-export function getAuditKeyField(schema: TableSchema): Field {
+/** The field(s) used to identify a row across environments (test DB vs.
+ *  production) — never the internal uuid PK, which is generated independently
+ *  in each database. Tables with a single unique/autoIncrement column use
+ *  that; tables without one (pure relationship/rule tables) fall back to
+ *  every field marked `noBulkEdit` — those are exactly the identity/relational
+ *  columns the schema already says shouldn't be mass-edited, so together they
+ *  form a natural composite key. Last resort is the internal id. */
+export function getAuditKeyFields(schema: TableSchema): Field[] {
   if (schema.auditKeyField) {
-    const explicit = schema.fields.find(f => f.name === schema.auditKeyField)
-    if (explicit) return explicit
+    const names = Array.isArray(schema.auditKeyField) ? schema.auditKeyField : [schema.auditKeyField]
+    const explicit = names.map(n => schema.fields.find(f => f.name === n)).filter((f): f is Field => !!f)
+    if (explicit.length > 0) return explicit
   }
   const unique = schema.fields.find(f => f.unique && !f.isPk)
-  if (unique) return unique
+  if (unique) return [unique]
   const autoIncr = schema.fields.find(f => f.autoIncrement)
-  if (autoIncr) return autoIncr
-  return schema.fields.find(f => f.isPk)!
+  if (autoIncr) return [autoIncr]
+  const composite = schema.fields.filter(f => f.noBulkEdit && !f.isPk)
+  if (composite.length > 0) return composite
+  return [schema.fields.find(f => f.isPk)!]
+}
+
+function keyValueString(keyFields: Field[], row: Record<string, unknown>): string {
+  return keyFields.map(f => String(row[f.name] ?? '')).join('|')
+}
+
+function whereClause(keyFields: Field[], row: Record<string, unknown>): string {
+  return keyFields.map(f => `${f.name} = ${sqlLiteral(f, row[f.name])}`).join(' AND ')
 }
 
 /** INSERT statement. Lists every editable column explicitly — including empty
@@ -54,26 +70,28 @@ export function buildInsertSQL(table: string, schema: TableSchema, row: Record<s
   return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${vals.join(', ')});`
 }
 
-/** UPDATE statement, keyed on the business key (not the internal uuid). */
+/** UPDATE statement, keyed on the business key (not the internal uuid).
+ *  `keyRow` only needs to carry the key fields' values. */
 export function buildUpdateSQL(
   table: string,
   schema: TableSchema,
   changedFields: Record<string, unknown>,
-  keyField: Field,
-  keyValue: unknown,
+  keyFields: Field[],
+  keyRow: Record<string, unknown>,
 ): string {
+  const keyNames = new Set(keyFields.map(f => f.name))
   const sets: string[] = []
   for (const [name, val] of Object.entries(changedFields)) {
-    if (name === keyField.name) continue
+    if (keyNames.has(name)) continue
     const field = schema.fields.find(f => f.name === name)
     if (!field) continue
     sets.push(`${name} = ${sqlLiteral(field, val)}`)
   }
-  return `UPDATE ${table} SET ${sets.join(', ')} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
+  return `UPDATE ${table} SET ${sets.join(', ')} WHERE ${whereClause(keyFields, keyRow)};`
 }
 
-export function buildDeleteSQL(table: string, keyField: Field, keyValue: unknown): string {
-  return `DELETE FROM ${table} WHERE ${keyField.name} = ${sqlLiteral(keyField, keyValue)};`
+export function buildDeleteSQL(table: string, keyFields: Field[], keyRow: Record<string, unknown>): string {
+  return `DELETE FROM ${table} WHERE ${whereClause(keyFields, keyRow)};`
 }
 
 /** The form always resubmits every editable field, so a raw update payload alone
@@ -123,14 +141,14 @@ export async function recordInsertAudit(
   schema: TableSchema,
   insertedRow: Record<string, unknown>,
 ): Promise<void> {
-  const keyField = getAuditKeyField(schema)
-  const keyValue = String(insertedRow[keyField.name] ?? '')
+  const keyFields = getAuditKeyFields(schema)
+  const keyValue = keyValueString(keyFields, insertedRow)
   const existing = await findPending(admin, table, keyValue)
 
   const row = {
     table_name: table,
     operation: 'insert' as const,
-    record_key_field: keyField.name,
+    record_key_field: keyFields.map(f => f.name).join(','),
     record_key_value: keyValue,
     sql_query: buildInsertSQL(table, schema, insertedRow),
     payload: insertedRow,
@@ -159,8 +177,9 @@ export async function recordUpdateAudit(
   beforeRow: Record<string, unknown> | null,
   updateBody: Record<string, unknown>,
 ): Promise<void> {
-  const keyField = getAuditKeyField(schema)
-  const keyValue = String((beforeRow?.[keyField.name] ?? updateBody[keyField.name]) ?? '')
+  const keyFields = getAuditKeyFields(schema)
+  const keyRow = beforeRow ?? updateBody
+  const keyValue = keyValueString(keyFields, keyRow)
   const existing = await findPending(admin, table, keyValue)
 
   if (existing?.operation === 'insert') {
@@ -187,9 +206,9 @@ export async function recordUpdateAudit(
   const row = {
     table_name: table,
     operation: 'update' as const,
-    record_key_field: keyField.name,
+    record_key_field: keyFields.map(f => f.name).join(','),
     record_key_value: keyValue,
-    sql_query: buildUpdateSQL(table, schema, changed, keyField, keyValue),
+    sql_query: buildUpdateSQL(table, schema, changed, keyFields, keyRow),
     payload: updateBody,
     baseline,
     status: 'pending' as const,
@@ -208,8 +227,8 @@ export async function recordDeleteAudit(
   schema: TableSchema,
   deletedRow: Record<string, unknown>,
 ): Promise<void> {
-  const keyField = getAuditKeyField(schema)
-  const keyValue = String(deletedRow[keyField.name] ?? '')
+  const keyFields = getAuditKeyFields(schema)
+  const keyValue = keyValueString(keyFields, deletedRow)
   const existing = await findPending(admin, table, keyValue)
 
   if (existing?.operation === 'insert') {
@@ -220,9 +239,9 @@ export async function recordDeleteAudit(
   const row = {
     table_name: table,
     operation: 'delete' as const,
-    record_key_field: keyField.name,
+    record_key_field: keyFields.map(f => f.name).join(','),
     record_key_value: keyValue,
-    sql_query: buildDeleteSQL(table, keyField, keyValue),
+    sql_query: buildDeleteSQL(table, keyFields, deletedRow),
     payload: deletedRow,
     baseline: null,
     status: 'pending' as const,

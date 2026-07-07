@@ -156,6 +156,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { data, error } = await supabaseAdmin.from(table).insert([row1, row2]).select()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    if (schema.auditQueries) {
+      try {
+        await Promise.all((data as Record<string, unknown>[]).map(inserted =>
+          recordInsertAudit(supabaseAdmin, table, schema, inserted)
+        ))
+      } catch { /* audit log is best-effort — never block the real operation */ }
+    }
+
     return NextResponse.json((data as Record<string, unknown>[])[0], { status: 201 })
   }
 

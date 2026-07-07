@@ -80,7 +80,7 @@ export interface TableSchema {
   compactHeader?: boolean   // merge page title + action buttons into a single row (used when there's no search bar)
   bulkEdit?: boolean        // show "Alterar selecionados" button to mass-update checked rows
   auditQueries?: boolean    // log a ready-to-run SQL statement to audit_log on every insert/update/delete, for manual export to the production database
-  auditKeyField?: string   // field used to identify the row across environments in the generated SQL (defaults to the unique field, then the autoIncrement field, then the PK)
+  auditKeyField?: string | string[]  // field(s) used to identify the row across environments in the generated SQL (defaults to the unique field, then autoIncrement, then all noBulkEdit fields as a composite key, then the PK)
 }
 
 export const DOMAIN_LABELS: Record<string, string> = {
@@ -239,6 +239,7 @@ export const tables: Record<string, TableSchema> = {
     columnFilters: true,
     importExport: true,
     compactHeader: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Legado', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true },
@@ -261,6 +262,7 @@ export const tables: Record<string, TableSchema> = {
     compactColumns: true,
     compactHeader: true,
     bulkEdit: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, noBulkEdit: true,
@@ -304,6 +306,7 @@ export const tables: Record<string, TableSchema> = {
     compactColumns: true,
     compactHeader: true,
     bulkEdit: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, formFullWidth: true, listExpand: true, noBulkEdit: true,
@@ -337,6 +340,7 @@ export const tables: Record<string, TableSchema> = {
     compactColumns: true,
     compactHeader: true,
     bulkEdit: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listExpand: true, noBulkEdit: true,
@@ -372,6 +376,7 @@ export const tables: Record<string, TableSchema> = {
     importExport: true,
     compactHeader: true,
     bulkEdit: true,
+    auditQueries: true,
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, noBulkEdit: true,

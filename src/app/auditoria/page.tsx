@@ -32,6 +32,12 @@ const STATUS_LABELS: Record<AuditRow['status'], string> = {
   applied: 'Aplicado',
 }
 
+function formatRecordKey(row: AuditRow): string {
+  const names = row.record_key_field.split(',')
+  const values = row.record_key_value.split('|')
+  return names.map((n, i) => `${n}=${values[i] ?? ''}`).join(', ')
+}
+
 function buildSqlText(rows: AuditRow[]): string {
   return rows.map(r => r.sql_query).join('\n')
 }
@@ -250,7 +256,7 @@ export default function AuditoriaPage() {
                           {OPERATION_LABELS[row.operation]}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-on-surface-variant font-mono">{row.record_key_field}={row.record_key_value}</td>
+                      <td className="px-4 py-3 text-on-surface-variant font-mono">{formatRecordKey(row)}</td>
                       <td className="px-4 py-3 text-on-surface-variant">{STATUS_LABELS[row.status]}</td>
                       <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap">{new Date(row.created_at).toLocaleString('pt-BR')}</td>
                       <td className="px-4 py-3 whitespace-nowrap flex gap-2">
