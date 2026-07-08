@@ -208,6 +208,71 @@ function AccessoryGroupAccordion({ rows }: { rows: Row[] }) {
   )
 }
 
+// Groups non_combinable_comps rows by the "X" side (protheus_code/name1) — each
+// group becomes "X não combina com [lista de Z]" in the accordion below.
+function groupNonCombinablePairs(rows: Row[]): { code: string; name: string; items: Row[] }[] {
+  const map = new Map<string, { name: string; items: Row[] }>()
+  for (const r of rows) {
+    const code = r.protheus_code
+    if (!map.has(code)) map.set(code, { name: r.name1 || 'N/A', items: [] })
+    map.get(code)!.items.push(r)
+  }
+  return Array.from(map.entries())
+    .map(([code, v]) => ({ code, name: v.name, items: v.items }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+}
+
+/** Collapsed-by-default accordion: one row per "X" component, expanding it
+ *  reveals every "Z" component it can't be combined with. */
+function NonCombinableAccordion({ rows }: { rows: Row[] }) {
+  const groups = groupNonCombinablePairs(rows)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggle = (code: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    next.has(code) ? next.delete(code) : next.add(code)
+    return next
+  })
+
+  return (
+    <div className="flex flex-col gap-2">
+      {groups.map(g => {
+        const isOpen = expanded.has(g.code)
+        return (
+          <div key={g.code} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
+            <button
+              onClick={() => toggle(g.code)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="font-bold text-on-surface text-sm truncate">{g.name}</span>
+                <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">{g.code}</span>
+              </span>
+              <span className="flex items-center gap-3 shrink-0">
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-error/15 text-error">
+                  ✕ {g.items.length}
+                </span>
+                <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
+              </span>
+            </button>
+            {isOpen && (
+              <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {g.items.map(r => (
+                  <div key={r.id} className="rounded-lg border-2 border-error/30 bg-error/5 p-3">
+                    <div className="text-xs font-semibold text-error mb-1.5">✕ não combina com</div>
+                    <div className="font-bold text-on-surface text-sm">{r.name2 || 'N/A'}</div>
+                    <div className="mt-1 font-mono text-xs text-primary">{r.remove_list_code}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Simple entity card: name is the primary, prominent line; code is a small chip below it. */
 function InfoCard({ name, code, highlight, footer }: {
   name: string
@@ -367,16 +432,8 @@ export default function ExploradorRelacoesPage() {
             <AccessoryGroupAccordion rows={result.compatibleAccessories} />
           </SectionPanel>
 
-          <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length}>
-            {result.nonCombinable.map(r => (
-              <PairCard
-                key={r.id}
-                leftName={r.name1 || 'N/A'} leftCode={r.protheus_code}
-                rightName={r.name2 || 'N/A'} rightCode={r.remove_list_code}
-                connector="✕ não combina"
-                tone="error"
-              />
-            ))}
+          <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
+            <NonCombinableAccordion rows={result.nonCombinable} />
           </SectionPanel>
 
           <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
