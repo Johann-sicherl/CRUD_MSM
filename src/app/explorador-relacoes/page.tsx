@@ -451,6 +451,7 @@ function RelationAccordion({
       id: r.id,
       protheus_code: itemCode(r),
       accessoryName: itemLabel(r),
+      groupName: itemGroupName ? itemGroupName(r) : null,
       accessory: itemAccessory(r),
       alertDescription: itemAlert ? itemAlert(r) : null,
     },
@@ -464,6 +465,7 @@ function RelationAccordion({
         id: r.id,
         protheus_code: itemCode(r),
         accessoryName: itemLabel(r),
+        groupName: itemGroupName ? itemGroupName(r) : null,
         accessory: itemAccessory(r),
         alertDescription: itemAlert ? itemAlert(r) : null,
       }}
@@ -612,7 +614,10 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
         setComponentCodes(
           (compJson.data || [])
             .slice()
-            .sort((a: Row, b: Row) => (a.legacy_group_id ?? 0) - (b.legacy_group_id ?? 0))
+            .sort((a: Row, b: Row) =>
+              (a.legacy_group_id ?? 0) - (b.legacy_group_id ?? 0)
+              || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
+            )
             .map((r: Row) => ({
               code: r.protheus_code,
               label: r.name || 'N/A',
@@ -696,8 +701,8 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
                     className="text-left px-2 py-1.5 rounded hover:bg-surface-container-high transition-colors"
                   >
                     <span className="font-mono text-xs text-primary">{o.code}</span>
+                    {o.group && <span className="ml-2 text-xs text-outline">{o.group} ·</span>}
                     <span className="ml-2 text-xs text-on-surface-variant">{o.label}</span>
-                    {o.group && <span className="ml-2 text-xs text-outline">· {o.group}</span>}
                   </button>
                 ))}
               </div>
@@ -835,14 +840,19 @@ export default function ExploradorRelacoesPage() {
               itemCode={r => r.protheus_item_code}
               itemLabel={r => r.dependentName || 'N/A'}
               itemAccessory={r => r.dependentAccessory ?? null}
+              itemGroupName={r => r.dependentGroupName ?? null}
               itemAlert={r => r.dependentAlertDescription ?? null}
               itemExtra={r => [
                 { label: 'Qtd. Necessária', value: r.quantity },
                 { label: 'Fat. Proporcional', value: r.proportional_factor },
+                { label: 'Item Base (Cód. Protheus)', value: r.protheus_code },
+                { label: 'Item Base (Nome)', value: r.itemName },
+                { label: 'Grupo (Item Base)', value: r.codeGroupName },
               ]}
               connector={r => <NameCodeCaption name={r.itemName || 'N/A'} code={r.protheus_code} />}
               tone="primary"
               nested={false}
+              copyAll
             />
           </SectionPanel>
 
@@ -906,19 +916,28 @@ export default function ExploradorRelacoesPage() {
               itemCode={r => r.otherCode}
               itemLabel={r => r.otherName || 'N/A'}
               itemAccessory={r => r.otherAccessory ?? null}
+              itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
               itemExtra={r => r.role === 'item'
                 ? [
                     { label: 'Qtd. Necessária', value: r.quantity },
                     { label: 'Fat. Proporcional', value: r.proportional_factor },
+                    { label: 'Item Base (Cód. Protheus)', value: result.accessory.protheus_code },
+                    { label: 'Item Base (Nome)', value: result.accessory.name },
+                    { label: 'Grupo (Item Base)', value: result.groupName },
                   ]
-                : []
+                : [
+                    { label: 'Dependente (Cód. Protheus)', value: result.accessory.protheus_code },
+                    { label: 'Dependente (Nome)', value: result.accessory.name },
+                    { label: 'Grupo (Dependente)', value: result.groupName },
+                  ]
               }
               connector={r => (
                 <NameCodeCaption name={result.accessory.name} code={result.accessory.protheus_code} />
               )}
               tone="primary"
               nested={false}
+              copyAll
             />
           </SectionPanel>
 
