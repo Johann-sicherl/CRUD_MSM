@@ -156,8 +156,10 @@ function Property({ label, value }: { label: string; value: unknown }) {
 
 /** Full-property card for the searched Cadastro de Equipamentos item — every
  *  BOM field, not just the processor/memory summary shown for the other items. */
-function EquipmentItemDetailCard({ r }: { r: Row }) {
-  const fields = [
+/** Shared field list for a Cadastro de Equipamentos (BOM) row — used both by
+ *  the card itself and by the group-level/"copiar tudo" buttons. */
+function buildEquipmentItemFields(r: Row) {
+  return [
     { label: 'Cód. Protheus', value: r.protheus_code },
     { label: 'Status', value: r.status },
     { label: 'Processador', value: r.processor },
@@ -174,6 +176,10 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
     { label: 'Alerta', value: r.alertDescription },
     { label: 'Custo (R$)', value: Number(r.cost_std ?? 0).toFixed(2) },
   ]
+}
+
+function EquipmentItemDetailCard({ r }: { r: Row }) {
+  const fields = buildEquipmentItemFields(r)
   return (
     <div className="rounded-xl border-2 border-primary bg-primary/10 p-5 mb-4">
       <div className="flex items-center justify-between gap-2 mb-4">
@@ -222,12 +228,16 @@ function buildAccessoryFields(
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
-function AccessoryDetailCard({ r, extra, prefix, topCaption, hideStatus }: {
+function AccessoryDetailCard({ r, extra, prefix, topCaption, hideStatus, hideCatalogFields }: {
   r: Row
   extra?: { label: string; value: unknown }[]
   prefix?: { label: string; value: unknown }[]
   topCaption?: React.ReactNode
   hideStatus?: boolean
+  /** Hides the accessory catalog's own physical properties (color, material,
+   *  dimension, monitor size...) — for relations whose underlying table has
+   *  no such concept (e.g. dependant_items). */
+  hideCatalogFields?: boolean
 }) {
   const acc = r.accessory as Row | null
   const fields = buildAccessoryFields(r, extra, prefix)
@@ -253,11 +263,15 @@ function AccessoryDetailCard({ r, extra, prefix, topCaption, hideStatus }: {
       )}
       <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
         {extra?.map((e, i) => <Property key={`extra-${i}`} label={e.label} value={e.value} />)}
-        <Property label="Cor" value={acc?.color} />
-        <Property label="Material Predom." value={acc?.predominant_material} />
-        <Property label="Dimensão (mm)" value={acc?.dimensional_mm} />
-        <Property label="Tam. Monitor (pol)" value={acc?.monitor_size} />
-        <Property label="Qtd. Monitor Totem" value={acc?.quantity_monitor_totem} />
+        {!hideCatalogFields && (
+          <>
+            <Property label="Cor" value={acc?.color} />
+            <Property label="Material Predom." value={acc?.predominant_material} />
+            <Property label="Dimensão (mm)" value={acc?.dimensional_mm} />
+            <Property label="Tam. Monitor (pol)" value={acc?.monitor_size} />
+            <Property label="Qtd. Monitor Totem" value={acc?.quantity_monitor_totem} />
+          </>
+        )}
         <Property label="Custo (R$)" value={acc ? Number(acc.cost_std ?? 0).toFixed(2) : null} />
         <Property label="Alerta" value={r.alertDescription} />
         <Property label="Qtd. Máxima (regra)" value={r.maximum_quantity} />
@@ -277,6 +291,7 @@ function AccessoryDetailCard({ r, extra, prefix, topCaption, hideStatus }: {
  *  and every Cadastro de Equipamentos item in that group with full properties. */
 function UsedInEquipmentsAccordion({ rows }: { rows: Row[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [copiedAll, setCopiedAll] = useState(false)
 
   const toggle = (id: string) => setExpanded(prev => {
     const next = new Set(prev)
@@ -284,27 +299,49 @@ function UsedInEquipmentsAccordion({ rows }: { rows: Row[] }) {
     return next
   })
 
+  const allBom: Row[] = rows.flatMap(r => (r.bom || []) as Row[])
+
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex justify-end">
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(tsvFromRows(allBom.map(buildEquipmentItemFields))).then(() => {
+              setCopiedAll(true)
+              setTimeout(() => setCopiedAll(false), 1500)
+            }).catch(() => {})
+          }}
+          title="Copiar todos os itens de Cadastro de Equipamentos (colar no Excel)"
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
+            copiedAll ? 'border-green-500/40 text-green-400' : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
+          }`}
+        >
+          {copiedAll ? '✓ Copiado' : `⧉ Copiar tudo (${allBom.length})`}
+        </button>
+      </div>
       {rows.map(r => {
         const eq = r.equipment as Row | null
         const bom: Row[] = r.bom || []
         const isOpen = expanded.has(r.id)
         return (
           <div key={r.id} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
-            <button
+            <div
               onClick={() => toggle(r.id)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors cursor-pointer"
             >
               <span className="font-bold text-on-surface text-sm truncate">{eq?.name || 'N/A'}</span>
               <span className="flex items-center gap-3 shrink-0">
                 <StatusBadge status={r.status} />
+                <CopyButton
+                  getText={() => tsvFromRows(bom.map(buildEquipmentItemFields))}
+                  title="Copiar todos os itens deste equipamento (colar no Excel)"
+                />
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-primary/15 text-primary">
                   {bom.length}
                 </span>
                 <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
               </span>
-            </button>
+            </div>
             {isOpen && (
               <div className="p-4 pt-0">
                 <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
@@ -421,7 +458,7 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
 function RelationAccordion({
   rows, groupKey, groupLabel, groupCode,
   itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra, itemPrefix,
-  connector, tone, nested = true, copyAll = false, hideStatus = false,
+  connector, tone, nested = true, copyAll = false, hideStatus = false, hideCatalogFields = false,
 }: {
   rows: Row[]
   groupKey: (r: Row) => string
@@ -447,6 +484,10 @@ function RelationAccordion({
   /** Hides the accessory catalog status badge — for relations whose underlying
    *  table has no status concept of its own (e.g. dependant_items). */
   hideStatus?: boolean
+  /** Hides the accessory catalog's own physical properties (color, material,
+   *  dimension, monitor size...) — for relations whose underlying table has
+   *  no such concept (e.g. dependant_items). */
+  hideCatalogFields?: boolean
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -487,6 +528,7 @@ function RelationAccordion({
       prefix={itemPrefix ? itemPrefix(r) : undefined}
       topCaption={connector(r)}
       hideStatus={hideStatus}
+      hideCatalogFields={hideCatalogFields}
     />
   )
 
@@ -873,6 +915,7 @@ export default function ExploradorRelacoesPage() {
               nested={false}
               copyAll
               hideStatus
+              hideCatalogFields
             />
           </SectionPanel>
 
@@ -965,6 +1008,7 @@ export default function ExploradorRelacoesPage() {
               nested={false}
               copyAll
               hideStatus
+              hideCatalogFields
             />
           </SectionPanel>
 
