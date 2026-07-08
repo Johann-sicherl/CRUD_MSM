@@ -479,8 +479,11 @@ export default function ExploradorRelacoesPage() {
               itemLabel={r => r.dependentName || 'N/A'}
               itemAccessory={r => r.dependentAccessory ?? null}
               itemAlert={r => r.dependentAlertDescription ?? null}
-              itemExtra={r => [{ label: 'Qtd. Necessária', value: r.quantity }]}
-              connector={r => `→ requer x${r.quantity}`}
+              itemExtra={r => [
+                { label: 'Componente', value: `${r.itemName || 'N/A'} (${r.protheus_code})` },
+                { label: 'Qtd. Necessária', value: r.quantity },
+              ]}
+              connector={r => `${r.itemName || 'N/A'} → requer x${r.quantity}`}
               tone="primary"
               nested={false}
             />
@@ -550,8 +553,20 @@ export default function ExploradorRelacoesPage() {
               itemLabel={r => r.otherName || 'N/A'}
               itemAccessory={r => r.otherAccessory ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
-              itemExtra={r => r.role === 'item' ? [{ label: 'Qtd. Necessária', value: r.quantity }] : []}
-              connector={r => r.role === 'item' ? `→ requer x${r.quantity}` : '← requerido por'}
+              itemExtra={r => r.role === 'item'
+                ? [
+                    { label: 'Componente', value: `${result.accessory.name} (${result.accessory.protheus_code})` },
+                    { label: 'Qtd. Necessária', value: r.quantity },
+                  ]
+                : [
+                    { label: 'Dependente', value: `${result.accessory.name} (${result.accessory.protheus_code})` },
+                    { label: 'Qtd. Necessária', value: r.quantity },
+                  ]
+              }
+              connector={r => r.role === 'item'
+                ? `${result.accessory.name} → requer x${r.quantity}`
+                : `← requerido por ${result.accessory.name}`
+              }
               tone="primary"
               nested={false}
             />
