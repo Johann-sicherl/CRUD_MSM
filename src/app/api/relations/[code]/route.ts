@@ -211,20 +211,31 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
         equipment: equipMap[r.legacy_equipment_id] ?? null,
         bom: bomByEquipment[r.legacy_equipment_id] ?? [],
       })),
-      nonCombinable: nonComb.map(r => {
-        const isFirst = r.protheus_code === accessory.protheus_code
-        const otherCode = isFirst ? r.remove_list_code : r.protheus_code
-        const otherAcc = otherMap[otherCode] ?? null
-        return {
-          ...r,
-          equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null,
-          otherCode,
-          otherName: otherAcc?.name ?? null,
-          otherAccessory: otherAcc,
-          otherGroupName: otherAcc?.legacy_group_id != null ? (otherGroupNameMap[otherAcc.legacy_group_id] ?? null) : null,
-          otherAlertDescription: otherAcc?.legacy_general_alert_id ? (otherAlertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
+      nonCombinable: (() => {
+        // non_combinable_comps stores each rule twice (once per direction: A→B
+        // and B→A) — searching either code matches both rows and would show
+        // the same restriction as two identical cards. Dedupe by the pair.
+        const seen = new Set<string>()
+        const result: Row[] = []
+        for (const r of nonComb) {
+          const isFirst = r.protheus_code === accessory.protheus_code
+          const otherCode = isFirst ? r.remove_list_code : r.protheus_code
+          const key = `${r.legacy_equipment_id}::${otherCode}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          const otherAcc = otherMap[otherCode] ?? null
+          result.push({
+            ...r,
+            equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null,
+            otherCode,
+            otherName: otherAcc?.name ?? null,
+            otherAccessory: otherAcc,
+            otherGroupName: otherAcc?.legacy_group_id != null ? (otherGroupNameMap[otherAcc.legacy_group_id] ?? null) : null,
+            otherAlertDescription: otherAcc?.legacy_general_alert_id ? (otherAlertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
+          })
         }
-      }),
+        return result
+      })(),
       dependants: dependants.map(r => {
         const isFirst = r.protheus_code === accessory.protheus_code
         const otherCode = isFirst ? r.protheus_item_code : r.protheus_code
