@@ -334,6 +334,7 @@ function UsedInEquipmentsAccordion({ rows }: { rows: Row[] }) {
 function AccessoryGroupAccordion({ rows }: { rows: Row[] }) {
   const groups = groupByAccessoryGroup(rows)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [copiedAll, setCopiedAll] = useState(false)
 
   const toggle = (name: string) => setExpanded(prev => {
     const next = new Set(prev)
@@ -343,6 +344,22 @@ function AccessoryGroupAccordion({ rows }: { rows: Row[] }) {
 
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex justify-end">
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(tsvFromRows(rows.map(r => buildAccessoryFields(r)))).then(() => {
+              setCopiedAll(true)
+              setTimeout(() => setCopiedAll(false), 1500)
+            }).catch(() => {})
+          }}
+          title="Copiar todos os acessórios compatíveis (colar no Excel)"
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
+            copiedAll ? 'border-green-500/40 text-green-400' : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
+          }`}
+        >
+          {copiedAll ? '✓ Copiado' : `⧉ Copiar tudo (${rows.length})`}
+        </button>
+      </div>
       {groups.map(g => {
         const isOpen = expanded.has(g.groupName)
         return (
