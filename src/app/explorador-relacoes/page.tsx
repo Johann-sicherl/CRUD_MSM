@@ -95,9 +95,9 @@ function SectionPanel({ title, tint, count, plain, children }: {
 function Property({ label, value }: { label: string; value: unknown }) {
   const shown = value === null || value === undefined || value === '' ? '—' : String(value)
   return (
-    <div className="flex justify-between gap-2">
-      <span className="text-outline">{label}</span>
-      <span className="text-on-surface-variant font-medium text-right">{shown}</span>
+    <div className="flex justify-between gap-3">
+      <span className="text-on-surface-variant font-medium">{label}</span>
+      <span className="text-on-surface font-bold text-right">{shown}</span>
     </div>
   )
 }
@@ -143,10 +143,10 @@ function AccessoryDetailCard({ r }: { r: Row }) {
         <div className="font-bold text-on-surface text-base leading-snug">{r.accessoryName || 'N/A'}</div>
         <StatusBadge status={acc?.status} />
       </div>
-      <div className="mb-3 inline-block font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">
+      <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
         {r.protheus_code}
       </div>
-      <div className="flex flex-col gap-1 text-xs border-t border-outline-variant pt-2">
+      <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
         <Property label="Cor" value={acc?.color} />
         <Property label="Material Predom." value={acc?.predominant_material} />
         <Property label="Dimensão (mm)" value={acc?.dimensional_mm} />
