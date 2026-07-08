@@ -49,6 +49,16 @@ function tsvFromFields(fields: { label: string; value: unknown }[]): string {
   return `${headers}\n${values}`
 }
 
+/** Multi-row table (one header row + one row per item) — for copying an
+ *  entire expanded group at once, ready to paste into Excel. */
+function tsvFromRows(rowsFields: { label: string; value: unknown }[][]): string {
+  if (rowsFields.length === 0) return ''
+  const cell = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v).replace(/\t|\n/g, ' '))
+  const headers = rowsFields[0].map(f => f.label).join('\t')
+  const lines = rowsFields.map(fields => fields.map(f => cell(f.value)).join('\t'))
+  return [headers, ...lines].join('\n')
+}
+
 /** Small copy-to-clipboard button — shows a checkmark briefly after copying. */
 function CopyButton({ getText, title }: { getText: () => string; title?: string }) {
   const [copied, setCopied] = useState(false)
@@ -182,6 +192,27 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
   )
 }
 
+/** Shared field list for an accessory-cascade row — used both by the card
+ *  itself and by the group-level "copy all" button. */
+function buildAccessoryFields(r: Row, extra?: { label: string; value: unknown }[]) {
+  const acc = r.accessory as Row | null
+  return [
+    { label: 'Cód. Protheus', value: r.protheus_code },
+    { label: 'Nome', value: r.accessoryName },
+    { label: 'Status', value: acc?.status },
+    ...(extra ?? []),
+    { label: 'Cor', value: acc?.color },
+    { label: 'Material Predom.', value: acc?.predominant_material },
+    { label: 'Dimensão (mm)', value: acc?.dimensional_mm },
+    { label: 'Tam. Monitor (pol)', value: acc?.monitor_size },
+    { label: 'Qtd. Monitor Totem', value: acc?.quantity_monitor_totem },
+    { label: 'Custo (R$)', value: acc ? Number(acc.cost_std ?? 0).toFixed(2) : null },
+    { label: 'Alerta', value: r.alertDescription },
+    { label: 'Qtd. Máxima (regra)', value: r.maximum_quantity },
+    { label: 'Tempo Oper. (regra)', value: r.operation_time },
+  ]
+}
+
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
@@ -191,6 +222,7 @@ function AccessoryDetailCard({ r, extra, topCaption }: {
   topCaption?: React.ReactNode
 }) {
   const acc = r.accessory as Row | null
+  const fields = buildAccessoryFields(r, extra)
   return (
     <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
       {topCaption && (
@@ -200,7 +232,10 @@ function AccessoryDetailCard({ r, extra, topCaption }: {
       )}
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="font-bold text-on-surface text-base leading-snug">{r.accessoryName || 'N/A'}</div>
-        <StatusBadge status={acc?.status} />
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusBadge status={acc?.status} />
+          <CopyButton getText={() => tsvFromFields(fields)} />
+        </div>
       </div>
       <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
         {r.protheus_code}
@@ -312,18 +347,22 @@ function AccessoryGroupAccordion({ rows }: { rows: Row[] }) {
         const isOpen = expanded.has(g.groupName)
         return (
           <div key={g.groupName} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
-            <button
+            <div
               onClick={() => toggle(g.groupName)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors cursor-pointer"
             >
               <span className="font-bold text-on-surface text-sm">{g.groupName}</span>
               <span className="flex items-center gap-3">
+                <CopyButton
+                  getText={() => tsvFromRows(g.items.map(r => buildAccessoryFields(r)))}
+                  title="Copiar todos os itens deste grupo (colar no Excel)"
+                />
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant">
                   {g.items.length}
                 </span>
                 <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
               </span>
-            </button>
+            </div>
             {isOpen && (
               <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {g.items.map(r => <AccessoryDetailCard key={r.id} r={r} />)}
