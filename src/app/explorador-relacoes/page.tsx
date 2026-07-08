@@ -199,6 +199,7 @@ function buildAccessoryFields(r: Row, extra?: { label: string; value: unknown }[
   return [
     { label: 'Cód. Protheus', value: r.protheus_code },
     { label: 'Nome', value: r.accessoryName },
+    { label: 'Grupo', value: r.groupName },
     { label: 'Status', value: acc?.status },
     ...(extra ?? []),
     { label: 'Cor', value: acc?.color },
