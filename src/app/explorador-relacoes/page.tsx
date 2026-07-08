@@ -431,8 +431,9 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
         for (const g of (groupJson.data || [])) equipNameByLegacyId[g.legacy_id] = g.name
         setEquipmentCodes(
           (eqJson.data || [])
+            .slice()
+            .sort((a: Row, b: Row) => (a.legacy_equipment_id ?? 0) - (b.legacy_equipment_id ?? 0))
             .map((r: Row) => ({ code: r.protheus_code, label: equipNameByLegacyId[r.legacy_equipment_id] || 'N/A' }))
-            .sort((a: CodeOption, b: CodeOption) => a.code.localeCompare(b.code, 'pt-BR'))
         )
         setComponentCodes(
           (compJson.data || [])
