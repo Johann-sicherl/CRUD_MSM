@@ -107,12 +107,11 @@ function Property({ label, value }: { label: string; value: unknown }) {
 function EquipmentItemDetailCard({ r }: { r: Row }) {
   return (
     <div className="rounded-xl border-2 border-primary bg-primary/10 p-5 mb-4">
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="font-bold text-on-surface text-lg">{r.processor || '—'} · {r.memory || '—'}</div>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="font-mono text-sm font-bold px-2 py-1 rounded bg-surface-container-highest text-primary">
+          {r.protheus_code}
+        </div>
         <StatusBadge status={r.status} />
-      </div>
-      <div className="mb-4 inline-block font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">
-        {r.protheus_code}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1.5 text-sm">
         <Property label="Processador" value={r.processor} />
