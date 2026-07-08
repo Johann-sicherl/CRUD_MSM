@@ -181,39 +181,67 @@ function AccessoryDetailCard({ r, extra, topCaption, topCaptionClass }: {
   )
 }
 
-/** Full-property card for one equipment in "Usado nestes Equipamentos" — every
- *  Grupo de Equipamentos field (margins, commissions, rates...) plus the
- *  compatibility rule's own fields (max quantity, operation time, description). */
-function EquipmentUsageCard({ r }: { r: Row }) {
-  const eq = r.equipment as Row | null
-  const bom: Row[] = r.bom || []
+/** Collapsed-by-default accordion, one row per equipment that uses the searched
+ *  accessory — expanding one reveals the ID Leg., the rule's own description
+ *  and every Cadastro de Equipamentos item in that group with full properties. */
+function UsedInEquipmentsAccordion({ rows }: { rows: Row[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
   return (
-    <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="font-bold text-on-surface text-base leading-snug">{eq?.name || 'N/A'}</div>
-        <StatusBadge status={r.status} />
-      </div>
-      <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
-        ID Leg. {eq?.legacy_id ?? '—'}
-      </div>
-      {!eq && (
-        <div className="mb-3 text-xs text-error italic">Não encontrado em Grupo de Equipamentos</div>
-      )}
-      {r.description && (
-        <div className="mb-3 pb-3 border-b border-outline-variant text-xs text-on-surface-variant leading-relaxed">
-          {r.description}
-        </div>
-      )}
-      <div className="text-xs font-bold text-on-surface-variant mb-2 border-t border-outline-variant pt-3">
-        Cadastro de Equipamentos <span className="text-outline font-normal">({bom.length})</span>
-      </div>
-      {bom.length === 0 ? (
-        <div className="text-xs text-outline italic">Nenhum código cadastrado neste grupo</div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {bom.map(b => <EquipmentItemDetailCard key={b.id} r={b} />)}
-        </div>
-      )}
+    <div className="flex flex-col gap-2">
+      {rows.map(r => {
+        const eq = r.equipment as Row | null
+        const bom: Row[] = r.bom || []
+        const isOpen = expanded.has(r.id)
+        return (
+          <div key={r.id} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
+            <button
+              onClick={() => toggle(r.id)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors"
+            >
+              <span className="font-bold text-on-surface text-sm truncate">{eq?.name || 'N/A'}</span>
+              <span className="flex items-center gap-3 shrink-0">
+                <StatusBadge status={r.status} />
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-primary/15 text-primary">
+                  {bom.length}
+                </span>
+                <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
+              </span>
+            </button>
+            {isOpen && (
+              <div className="p-4 pt-0">
+                <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
+                  ID Leg. {eq?.legacy_id ?? '—'}
+                </div>
+                {!eq && (
+                  <div className="mb-3 text-xs text-error italic">Não encontrado em Grupo de Equipamentos</div>
+                )}
+                {r.description && (
+                  <div className="mb-3 pb-3 border-b border-outline-variant text-xs text-on-surface-variant leading-relaxed">
+                    {r.description}
+                  </div>
+                )}
+                <div className="text-xs font-bold text-on-surface-variant mb-2 border-t border-outline-variant pt-3">
+                  Cadastro de Equipamentos <span className="text-outline font-normal">({bom.length})</span>
+                </div>
+                {bom.length === 0 ? (
+                  <div className="text-xs text-outline italic">Nenhum código cadastrado neste grupo</div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {bom.map(b => <EquipmentItemDetailCard key={b.id} r={b} />)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -718,9 +746,7 @@ export default function ExploradorRelacoesPage() {
           </div>
 
           <SectionPanel title="Usado nestes Equipamentos" tint="blue" count={result.usedInEquipments.length} plain>
-            <div className="flex flex-col gap-3">
-              {result.usedInEquipments.map(r => <EquipmentUsageCard key={r.id} r={r} />)}
-            </div>
+            <UsedInEquipmentsAccordion rows={result.usedInEquipments} />
           </SectionPanel>
 
           <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
