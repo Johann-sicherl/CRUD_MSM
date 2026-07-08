@@ -420,15 +420,18 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
   useEffect(() => {
     (async () => {
       try {
-        const [eqRes, compRes] = await Promise.all([
+        const [eqRes, compRes, groupRes] = await Promise.all([
           fetch('/api/standard_equipment_items?limit=25000'),
           fetch('/api/accessories?limit=25000'),
+          fetch('/api/equipments?limit=25000'),
         ])
-        if (!eqRes.ok || !compRes.ok) { setError('Erro ao carregar códigos'); setLoading(false); return }
-        const [eqJson, compJson] = await Promise.all([eqRes.json(), compRes.json()])
+        if (!eqRes.ok || !compRes.ok || !groupRes.ok) { setError('Erro ao carregar códigos'); setLoading(false); return }
+        const [eqJson, compJson, groupJson] = await Promise.all([eqRes.json(), compRes.json(), groupRes.json()])
+        const equipNameByLegacyId: Record<number, string> = {}
+        for (const g of (groupJson.data || [])) equipNameByLegacyId[g.legacy_id] = g.name
         setEquipmentCodes(
           (eqJson.data || [])
-            .map((r: Row) => ({ code: r.protheus_code, label: `${r.processor || '—'} · ${r.memory || '—'}` }))
+            .map((r: Row) => ({ code: r.protheus_code, label: equipNameByLegacyId[r.legacy_equipment_id] || 'N/A' }))
             .sort((a: CodeOption, b: CodeOption) => a.code.localeCompare(b.code, 'pt-BR'))
         )
         setComponentCodes(
