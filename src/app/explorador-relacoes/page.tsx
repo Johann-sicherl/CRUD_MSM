@@ -656,30 +656,8 @@ export default function ExploradorRelacoesPage() {
             <div className="text-sm text-outline mt-2 font-mono">ID Leg. {result.equipment?.legacy_id} · código buscado: {result.code}</div>
           </div>
 
-          <SectionPanel title="Cadastro de Equipamentos (BOM)" tint="blue" count={result.bom.length} plain>
+          <SectionPanel title="Cadastro de Equipamentos (BOM)" tint="blue" count={result.bom.filter(r => r.isSearched).length} plain>
             {result.bom.filter(r => r.isSearched).map(r => <EquipmentItemDetailCard key={r.id} r={r} />)}
-
-            {result.bom.filter(r => !r.isSearched).length > 0 && (
-              <>
-                <div className="text-sm font-bold text-on-surface mt-2 mb-3">
-                  Outros equipamentos deste grupo
-                  <span className="text-outline font-normal"> ({result.bom.filter(r => !r.isSearched).length})</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {result.bom.filter(r => !r.isSearched).map(r => (
-                    <InfoCard
-                      key={r.id}
-                      name={`${r.processor || '—'} · ${r.memory || '—'}`}
-                      code={r.protheus_code}
-                      footer={<>
-                        <StatusBadge status={r.status} />
-                        <span className="text-sm font-semibold text-on-surface-variant font-mono">R$ {Number(r.cost_std ?? 0).toFixed(2)}</span>
-                      </>}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
           </SectionPanel>
 
           <SectionPanel title="Acessórios Compatíveis" tint="amber" count={result.compatibleAccessories.length} plain>
