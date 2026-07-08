@@ -437,8 +437,9 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
         )
         setComponentCodes(
           (compJson.data || [])
+            .slice()
+            .sort((a: Row, b: Row) => (a.legacy_group_id ?? 0) - (b.legacy_group_id ?? 0))
             .map((r: Row) => ({ code: r.protheus_code, label: r.name || 'N/A' }))
-            .sort((a: CodeOption, b: CodeOption) => a.code.localeCompare(b.code, 'pt-BR'))
         )
       } catch {
         setError('Erro ao carregar códigos')
