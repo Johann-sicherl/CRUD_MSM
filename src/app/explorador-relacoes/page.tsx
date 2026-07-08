@@ -223,14 +223,18 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
 
 /** Collapsed-by-default accordion for non_combinable_comps pairs: one row per
  *  group (an "X" component, or an equipment — whichever side is fixed for this
- *  view), expanding it reveals every item it can't be combined with. */
-function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemName, itemCode }: {
+ *  view). Expanding it reveals a second cascade — the other-side components,
+ *  sub-grouped by their own accessory group — each shown with every property. */
+function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert }: {
   rows: Row[]
   groupKey: (r: Row) => string
   groupLabel: (r: Row) => string
   groupCode?: (r: Row) => string | undefined
-  itemName: (r: Row) => string
   itemCode: (r: Row) => string
+  itemLabel: (r: Row) => string
+  itemAccessory: (r: Row) => Row | null
+  itemGroupName: (r: Row) => string | null
+  itemAlert?: (r: Row) => string | null
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -246,6 +250,11 @@ function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemNam
       {groups.map(g => {
         const isOpen = expanded.has(g.key)
         const code = groupCode?.(g.items[0])
+        const subGroups = groupRowsBy(
+          g.items,
+          r => itemGroupName(r) || 'Sem grupo',
+          r => itemGroupName(r) || 'Sem grupo',
+        )
         return (
           <div key={g.key} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
             <button
@@ -264,12 +273,26 @@ function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemNam
               </span>
             </button>
             {isOpen && (
-              <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {g.items.map(r => (
-                  <div key={r.id} className="rounded-lg border-2 border-error/30 bg-error/5 p-3">
-                    <div className="text-xs font-semibold text-error mb-1.5">✕ não combina com</div>
-                    <div className="font-bold text-on-surface text-sm">{itemName(r)}</div>
-                    <div className="mt-1 font-mono text-xs text-primary">{itemCode(r)}</div>
+              <div className="p-4 pt-0 flex flex-col gap-4">
+                {subGroups.map(sg => (
+                  <div key={sg.key}>
+                    <div className="text-xs font-semibold text-error mb-2">
+                      ✕ não combina com — {sg.label} <span className="text-outline font-normal">({sg.items.length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {sg.items.map(r => (
+                        <AccessoryDetailCard
+                          key={r.id}
+                          r={{
+                            id: r.id,
+                            protheus_code: itemCode(r),
+                            accessoryName: itemLabel(r),
+                            accessory: itemAccessory(r),
+                            alertDescription: itemAlert ? itemAlert(r) : null,
+                          }}
+                        />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -446,8 +469,11 @@ export default function ExploradorRelacoesPage() {
               groupKey={r => r.protheus_code}
               groupLabel={r => r.name1 || 'N/A'}
               groupCode={r => r.protheus_code}
-              itemName={r => r.name2 || 'N/A'}
               itemCode={r => r.remove_list_code}
+              itemLabel={r => r.name2 || 'N/A'}
+              itemAccessory={r => r.otherAccessory ?? null}
+              itemGroupName={r => r.otherGroupName ?? null}
+              itemAlert={r => r.otherAlertDescription ?? null}
             />
           </SectionPanel>
 
@@ -508,8 +534,11 @@ export default function ExploradorRelacoesPage() {
               rows={result.nonCombinable}
               groupKey={r => String(r.legacy_equipment_id)}
               groupLabel={r => r.equipmentName || 'N/A'}
-              itemName={r => r.otherName || 'N/A'}
               itemCode={r => r.otherCode}
+              itemLabel={r => r.otherName || 'N/A'}
+              itemAccessory={r => r.otherAccessory ?? null}
+              itemGroupName={r => r.otherGroupName ?? null}
+              itemAlert={r => r.otherAlertDescription ?? null}
             />
           </SectionPanel>
 

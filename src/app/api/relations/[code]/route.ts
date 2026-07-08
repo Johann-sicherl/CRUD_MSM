@@ -87,11 +87,17 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           alertDescription: acc?.legacy_general_alert_id ? (alertMap[acc.legacy_general_alert_id] ?? null) : null,
         }
       }),
-      nonCombinable: nonComb.map(r => ({
-        ...r,
-        name1: accessoryMap[r.protheus_code]?.name ?? null,
-        name2: accessoryMap[r.remove_list_code]?.name ?? null,
-      })),
+      nonCombinable: nonComb.map(r => {
+        const otherAcc = accessoryMap[r.remove_list_code] ?? null
+        return {
+          ...r,
+          name1: accessoryMap[r.protheus_code]?.name ?? null,
+          name2: otherAcc?.name ?? null,
+          otherAccessory: otherAcc,
+          otherGroupName: otherAcc?.legacy_group_id != null ? (groupNameMap[otherAcc.legacy_group_id] ?? null) : null,
+          otherAlertDescription: otherAcc?.legacy_general_alert_id ? (alertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
+        }
+      }),
       dependants: dependants.map(r => ({
         ...r,
         itemName: accessoryMap[r.protheus_code]?.name ?? null,
@@ -140,10 +146,27 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     for (const r of nonComb)    otherCodes.add(r.protheus_code === accessory.protheus_code ? r.remove_list_code : r.protheus_code)
     for (const r of dependants) otherCodes.add(r.protheus_code === accessory.protheus_code ? r.protheus_item_code : r.protheus_code)
     const { data: otherRows } = otherCodes.size > 0
-      ? await supabaseAdmin.from('accessories').select('protheus_code, name').in('protheus_code', Array.from(otherCodes))
+      ? await supabaseAdmin.from('accessories').select('*').in('protheus_code', Array.from(otherCodes))
       : { data: [] as Row[] }
-    const otherMap: Record<string, string> = {}
-    for (const a of (otherRows || [])) otherMap[a.protheus_code] = a.name
+    // Full accessory row per "other side" code (used to show every property in the cascade)
+    const otherMap: Record<string, Row> = {}
+    for (const a of (otherRows || [])) otherMap[a.protheus_code] = a
+
+    const otherGroupIds = new Set<number>()
+    for (const a of Object.values(otherMap)) if (a.legacy_group_id != null) otherGroupIds.add(a.legacy_group_id)
+    const { data: otherGroupRows } = otherGroupIds.size > 0
+      ? await supabaseAdmin.from('accessory_groups').select('legacy_id, name').in('legacy_id', Array.from(otherGroupIds))
+      : { data: [] as Row[] }
+    const otherGroupNameMap: Record<number, string> = {}
+    for (const g of (otherGroupRows || [])) otherGroupNameMap[g.legacy_id] = g.name
+
+    const otherAlertIds = new Set<number>()
+    for (const a of Object.values(otherMap)) if (a.legacy_general_alert_id) otherAlertIds.add(a.legacy_general_alert_id)
+    const { data: otherAlertRows } = otherAlertIds.size > 0
+      ? await supabaseAdmin.from('general_alerts').select('legacy_id, description').in('legacy_id', Array.from(otherAlertIds))
+      : { data: [] as Row[] }
+    const otherAlertMap: Record<number, string> = {}
+    for (const al of (otherAlertRows || [])) otherAlertMap[al.legacy_id] = al.description
 
     return NextResponse.json({
       type: 'accessory',
@@ -154,7 +177,16 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       nonCombinable: nonComb.map(r => {
         const isFirst = r.protheus_code === accessory.protheus_code
         const otherCode = isFirst ? r.remove_list_code : r.protheus_code
-        return { ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null, otherCode, otherName: otherMap[otherCode] ?? null }
+        const otherAcc = otherMap[otherCode] ?? null
+        return {
+          ...r,
+          equipmentName: equipMap[r.legacy_equipment_id] ?? null,
+          otherCode,
+          otherName: otherAcc?.name ?? null,
+          otherAccessory: otherAcc,
+          otherGroupName: otherAcc?.legacy_group_id != null ? (otherGroupNameMap[otherAcc.legacy_group_id] ?? null) : null,
+          otherAlertDescription: otherAcc?.legacy_general_alert_id ? (otherAlertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
+        }
       }),
       dependants: dependants.map(r => {
         const isFirst = r.protheus_code === accessory.protheus_code
@@ -164,7 +196,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           equipmentName: equipMap[r.legacy_equipment_id] ?? null,
           role: isFirst ? 'item' : 'dependente',
           otherCode,
-          otherName: otherMap[otherCode] ?? null,
+          otherName: otherMap[otherCode]?.name ?? null,
         }
       }),
       rollerTables: roller.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null })),
