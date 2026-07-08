@@ -210,7 +210,7 @@ function EquipmentUsageCard({ r }: { r: Row }) {
       {bom.length === 0 ? (
         <div className="text-xs text-outline italic">Nenhum código cadastrado neste grupo</div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        <div className="flex flex-col gap-3">
           {bom.map(b => <EquipmentItemDetailCard key={b.id} r={b} />)}
         </div>
       )}
@@ -564,8 +564,10 @@ export default function ExploradorRelacoesPage() {
             </div>
           </div>
 
-          <SectionPanel title="Usado nestes Equipamentos" tint="blue" count={result.usedInEquipments.length}>
-            {result.usedInEquipments.map(r => <EquipmentUsageCard key={r.id} r={r} />)}
+          <SectionPanel title="Usado nestes Equipamentos" tint="blue" count={result.usedInEquipments.length} plain>
+            <div className="flex flex-col gap-3">
+              {result.usedInEquipments.map(r => <EquipmentUsageCard key={r.id} r={r} />)}
+            </div>
           </SectionPanel>
 
           <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
