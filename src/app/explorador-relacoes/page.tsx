@@ -208,45 +208,53 @@ function AccessoryGroupAccordion({ rows }: { rows: Row[] }) {
   )
 }
 
-// Groups non_combinable_comps rows by the "X" side (protheus_code/name1) — each
-// group becomes "X não combina com [lista de Z]" in the accordion below.
-function groupNonCombinablePairs(rows: Row[]): { code: string; name: string; items: Row[] }[] {
-  const map = new Map<string, { name: string; items: Row[] }>()
+// Generic grouper: buckets rows by a key, keeping the first label seen for that key.
+function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) => string): { key: string; label: string; items: Row[] }[] {
+  const map = new Map<string, { label: string; items: Row[] }>()
   for (const r of rows) {
-    const code = r.protheus_code
-    if (!map.has(code)) map.set(code, { name: r.name1 || 'N/A', items: [] })
-    map.get(code)!.items.push(r)
+    const key = keyFn(r)
+    if (!map.has(key)) map.set(key, { label: labelFn(r), items: [] })
+    map.get(key)!.items.push(r)
   }
   return Array.from(map.entries())
-    .map(([code, v]) => ({ code, name: v.name, items: v.items }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+    .map(([key, v]) => ({ key, label: v.label, items: v.items }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
 }
 
-/** Collapsed-by-default accordion: one row per "X" component, expanding it
- *  reveals every "Z" component it can't be combined with. */
-function NonCombinableAccordion({ rows }: { rows: Row[] }) {
-  const groups = groupNonCombinablePairs(rows)
+/** Collapsed-by-default accordion for non_combinable_comps pairs: one row per
+ *  group (an "X" component, or an equipment — whichever side is fixed for this
+ *  view), expanding it reveals every item it can't be combined with. */
+function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemName, itemCode }: {
+  rows: Row[]
+  groupKey: (r: Row) => string
+  groupLabel: (r: Row) => string
+  groupCode?: (r: Row) => string | undefined
+  itemName: (r: Row) => string
+  itemCode: (r: Row) => string
+}) {
+  const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const toggle = (code: string) => setExpanded(prev => {
+  const toggle = (key: string) => setExpanded(prev => {
     const next = new Set(prev)
-    next.has(code) ? next.delete(code) : next.add(code)
+    next.has(key) ? next.delete(key) : next.add(key)
     return next
   })
 
   return (
     <div className="flex flex-col gap-2">
       {groups.map(g => {
-        const isOpen = expanded.has(g.code)
+        const isOpen = expanded.has(g.key)
+        const code = groupCode?.(g.items[0])
         return (
-          <div key={g.code} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
+          <div key={g.key} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
             <button
-              onClick={() => toggle(g.code)}
+              onClick={() => toggle(g.key)}
               className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors"
             >
               <span className="flex items-center gap-2 min-w-0">
-                <span className="font-bold text-on-surface text-sm truncate">{g.name}</span>
-                <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">{g.code}</span>
+                <span className="font-bold text-on-surface text-sm truncate">{g.label}</span>
+                {code && <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">{code}</span>}
               </span>
               <span className="flex items-center gap-3 shrink-0">
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-error/15 text-error">
@@ -260,8 +268,8 @@ function NonCombinableAccordion({ rows }: { rows: Row[] }) {
                 {g.items.map(r => (
                   <div key={r.id} className="rounded-lg border-2 border-error/30 bg-error/5 p-3">
                     <div className="text-xs font-semibold text-error mb-1.5">✕ não combina com</div>
-                    <div className="font-bold text-on-surface text-sm">{r.name2 || 'N/A'}</div>
-                    <div className="mt-1 font-mono text-xs text-primary">{r.remove_list_code}</div>
+                    <div className="font-bold text-on-surface text-sm">{itemName(r)}</div>
+                    <div className="mt-1 font-mono text-xs text-primary">{itemCode(r)}</div>
                   </div>
                 ))}
               </div>
@@ -433,7 +441,14 @@ export default function ExploradorRelacoesPage() {
           </SectionPanel>
 
           <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
-            <NonCombinableAccordion rows={result.nonCombinable} />
+            <NonCombinableAccordion
+              rows={result.nonCombinable}
+              groupKey={r => r.protheus_code}
+              groupLabel={r => r.name1 || 'N/A'}
+              groupCode={r => r.protheus_code}
+              itemName={r => r.name2 || 'N/A'}
+              itemCode={r => r.remove_list_code}
+            />
           </SectionPanel>
 
           <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
@@ -488,17 +503,14 @@ export default function ExploradorRelacoesPage() {
             ))}
           </SectionPanel>
 
-          <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length}>
-            {result.nonCombinable.map(r => (
-              <PairCard
-                key={r.id}
-                context={r.equipmentName}
-                leftName={result.accessory.name} leftCode={result.accessory.protheus_code}
-                rightName={r.otherName || 'N/A'} rightCode={r.otherCode}
-                connector="✕ não combina"
-                tone="error"
-              />
-            ))}
+          <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
+            <NonCombinableAccordion
+              rows={result.nonCombinable}
+              groupKey={r => String(r.legacy_equipment_id)}
+              groupLabel={r => r.equipmentName || 'N/A'}
+              itemName={r => r.otherName || 'N/A'}
+              itemCode={r => r.otherCode}
+            />
           </SectionPanel>
 
           <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
