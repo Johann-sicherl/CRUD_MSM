@@ -150,7 +150,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                 : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
             }`}
           >
-            <span className="truncate">Explorador de Relações</span>
+            <span className="truncate">Janela de Pesquisa Avançada</span>
           </Link>
         </div>
 

@@ -810,9 +810,9 @@ export default function ExploradorRelacoesPage() {
     <div className="p-8 max-w-7xl flex flex-col gap-4">
       <div>
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
-          Sistema · explorador de relações
+          Sistema · janela de pesquisa avançada
         </div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Explorador de Relações</h1>
+        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Janela de Pesquisa Avançada</h1>
         <p className="text-on-surface-variant text-base mt-1">
           Digite um código de Cadastro de Equipamentos ou de Cadastro de Componentes e veja tudo que está ligado a ele
         </p>
