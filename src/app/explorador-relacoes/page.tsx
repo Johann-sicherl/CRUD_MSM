@@ -222,11 +222,12 @@ function buildAccessoryFields(
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
-function AccessoryDetailCard({ r, extra, prefix, topCaption }: {
+function AccessoryDetailCard({ r, extra, prefix, topCaption, hideStatus }: {
   r: Row
   extra?: { label: string; value: unknown }[]
   prefix?: { label: string; value: unknown }[]
   topCaption?: React.ReactNode
+  hideStatus?: boolean
 }) {
   const acc = r.accessory as Row | null
   const fields = buildAccessoryFields(r, extra, prefix)
@@ -240,7 +241,7 @@ function AccessoryDetailCard({ r, extra, prefix, topCaption }: {
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="font-bold text-on-surface text-base leading-snug">{r.accessoryName || 'N/A'}</div>
         <div className="flex items-center gap-2 shrink-0">
-          <StatusBadge status={acc?.status} />
+          {!hideStatus && <StatusBadge status={acc?.status} />}
           <CopyButton getText={() => tsvFromFields(fields)} />
         </div>
       </div>
@@ -420,7 +421,7 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
 function RelationAccordion({
   rows, groupKey, groupLabel, groupCode,
   itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra, itemPrefix,
-  connector, tone, nested = true, copyAll = false,
+  connector, tone, nested = true, copyAll = false, hideStatus = false,
 }: {
   rows: Row[]
   groupKey: (r: Row) => string
@@ -443,6 +444,9 @@ function RelationAccordion({
   /** Adds a top "copiar tudo" button and a per-group copy button, mirroring
    *  Acessórios Compatíveis — enable where a bulk export of the cascade makes sense. */
   copyAll?: boolean
+  /** Hides the accessory catalog status badge — for relations whose underlying
+   *  table has no status concept of its own (e.g. dependant_items). */
+  hideStatus?: boolean
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -482,6 +486,7 @@ function RelationAccordion({
       extra={itemExtra ? itemExtra(r) : undefined}
       prefix={itemPrefix ? itemPrefix(r) : undefined}
       topCaption={connector(r)}
+      hideStatus={hideStatus}
     />
   )
 
@@ -867,6 +872,7 @@ export default function ExploradorRelacoesPage() {
               tone="primary"
               nested={false}
               copyAll
+              hideStatus
             />
           </SectionPanel>
 
@@ -958,6 +964,7 @@ export default function ExploradorRelacoesPage() {
               tone="primary"
               nested={false}
               copyAll
+              hideStatus
             />
           </SectionPanel>
 
