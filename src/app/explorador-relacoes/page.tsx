@@ -185,14 +185,11 @@ function AccessoryDetailCard({ r, extra, topCaption, topCaptionClass }: {
  *  compatibility rule's own fields (max quantity, operation time, description). */
 function EquipmentUsageCard({ r }: { r: Row }) {
   const eq = r.equipment as Row | null
-  const pct = (v: unknown) => v != null ? `${Number(v).toFixed(2)}%` : null
+  const bom: Row[] = r.bom || []
   return (
     <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
       <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="font-bold text-on-surface text-base leading-snug">
-          {eq?.name || 'N/A'}
-          {eq?.commercial_name && <span className="text-on-surface-variant font-normal"> / {eq.commercial_name}</span>}
-        </div>
+        <div className="font-bold text-on-surface text-base leading-snug">{eq?.name || 'N/A'}</div>
         <StatusBadge status={r.status} />
       </div>
       <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
@@ -201,19 +198,23 @@ function EquipmentUsageCard({ r }: { r: Row }) {
       {!eq && (
         <div className="mb-3 text-xs text-error italic">Não encontrado em Grupo de Equipamentos</div>
       )}
-      <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
-        <Property label="IPI" value={eq ? pct(eq.ipi_tax_rate) : null} />
-        <Property label="Margem" value={eq ? pct(eq.contribution_margin_ratio) : null} />
-        <Property label="Com. Vendedor" value={eq ? pct(eq.seller_commission) : null} />
-        <Property label="Com. Gerente" value={eq ? pct(eq.manager_commission) : null} />
-        <Property label="Com. Diretor" value={eq ? pct(eq.director_commission) : null} />
-        <Property label="Custo Certif. (R$)" value={eq ? Number(eq.certification_cost ?? 0).toFixed(2) : null} />
-        <Property label="M.O." value={eq ? pct(eq.labor_cost_rate) : null} />
-        <Property label="Garantia" value={eq ? pct(eq.warranty_rate) : null} />
-        <Property label="Prov. Peças" value={eq ? pct(eq.parts_provision_rate) : null} />
-        <Property label="Qtd. Máxima (regra)" value={r.maximum_quantity} />
-        <Property label="Tempo Oper. (regra)" value={r.operation_time} />
+      <div className="text-xs font-bold text-on-surface-variant mb-2 border-t border-outline-variant pt-3">
+        Cadastro de Equipamentos <span className="text-outline font-normal">({bom.length})</span>
       </div>
+      {bom.length === 0 ? (
+        <div className="text-xs text-outline italic">Nenhum código cadastrado neste grupo</div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {bom.map(b => (
+            <div key={b.id} className="flex items-center justify-between gap-2">
+              <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">
+                {b.protheus_code}
+              </span>
+              <span className="text-on-surface-variant text-xs truncate">{b.processor || '—'} · {b.memory || '—'}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {r.description && (
         <div className="mt-3 pt-2 border-t border-outline-variant text-xs text-on-surface-variant leading-relaxed">
           {r.description}

@@ -145,11 +145,21 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     for (const r of roller)     equipmentIds.add(r.legacy_equipment_id)
 
     const { data: equipRows } = equipmentIds.size > 0
-      ? await supabaseAdmin.from('equipments').select('*').in('legacy_id', Array.from(equipmentIds))
+      ? await supabaseAdmin.from('equipments').select('legacy_id, name').in('legacy_id', Array.from(equipmentIds))
       : { data: [] as Row[] }
-    // Full equipment row per legacy_id (used to show every property in Usado nestes Equipamentos)
     const equipMap: Record<number, Row> = {}
     for (const e of (equipRows || [])) equipMap[e.legacy_id] = e
+
+    // Cadastro de Equipamentos (standard_equipment_items) rows for each equipment group,
+    // so "Usado nestes Equipamentos" can list the actual catalog codes instead of fiscal data.
+    const { data: bomRows } = equipmentIds.size > 0
+      ? await supabaseAdmin.from('standard_equipment_items').select('*').in('legacy_equipment_id', Array.from(equipmentIds)).order('protheus_code')
+      : { data: [] as Row[] }
+    const bomByEquipment: Record<number, Row[]> = {}
+    for (const b of (bomRows || [])) {
+      if (!bomByEquipment[b.legacy_equipment_id]) bomByEquipment[b.legacy_equipment_id] = []
+      bomByEquipment[b.legacy_equipment_id].push(b)
+    }
 
     const otherCodes = new Set<string>()
     for (const r of nonComb)    otherCodes.add(r.protheus_code === accessory.protheus_code ? r.remove_list_code : r.protheus_code)
@@ -186,6 +196,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
         ...r,
         equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null,
         equipment: equipMap[r.legacy_equipment_id] ?? null,
+        bom: bomByEquipment[r.legacy_equipment_id] ?? [],
       })),
       nonCombinable: nonComb.map(r => {
         const isFirst = r.protheus_code === accessory.protheus_code
