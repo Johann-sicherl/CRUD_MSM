@@ -414,7 +414,7 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
 function RelationAccordion({
   rows, groupKey, groupLabel, groupCode,
   itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra,
-  connector, tone, nested = true,
+  connector, tone, nested = true, copyAll = false,
 }: {
   rows: Row[]
   groupKey: (r: Row) => string
@@ -431,9 +431,13 @@ function RelationAccordion({
   /** false = a single flat level (e.g. group already reflects the item's own
    *  accessory group); true = also sub-group each group's items by itemGroupName. */
   nested?: boolean
+  /** Adds a top "copiar tudo" button and a per-group copy button, mirroring
+   *  Acessórios Compatíveis — enable where a bulk export of the cascade makes sense. */
+  copyAll?: boolean
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [copiedAll, setCopiedAll] = useState(false)
   const toneBadge = tone === 'error' ? 'bg-error/15 text-error' : 'bg-primary/15 text-primary'
 
   const toggle = (key: string) => setExpanded(prev => {
@@ -441,6 +445,17 @@ function RelationAccordion({
     next.has(key) ? next.delete(key) : next.add(key)
     return next
   })
+
+  const buildFields = (r: Row) => buildAccessoryFields(
+    {
+      id: r.id,
+      protheus_code: itemCode(r),
+      accessoryName: itemLabel(r),
+      accessory: itemAccessory(r),
+      alertDescription: itemAlert ? itemAlert(r) : null,
+    },
+    itemExtra ? itemExtra(r) : undefined,
+  )
 
   const renderItem = (r: Row) => (
     <AccessoryDetailCard
@@ -459,6 +474,24 @@ function RelationAccordion({
 
   return (
     <div className="flex flex-col gap-2">
+      {copyAll && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(tsvFromRows(rows.map(buildFields))).then(() => {
+                setCopiedAll(true)
+                setTimeout(() => setCopiedAll(false), 1500)
+              }).catch(() => {})
+            }}
+            title="Copiar todos os itens desta cascata (colar no Excel)"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
+              copiedAll ? 'border-green-500/40 text-green-400' : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
+            }`}
+          >
+            {copiedAll ? '✓ Copiado' : `⧉ Copiar tudo (${rows.length})`}
+          </button>
+        </div>
+      )}
       {groups.map(g => {
         const isOpen = expanded.has(g.key)
         const code = groupCode?.(g.items[0])
@@ -469,21 +502,27 @@ function RelationAccordion({
         ) : null
         return (
           <div key={g.key} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
-            <button
+            <div
               onClick={() => toggle(g.key)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-container-highest transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-2 min-w-0">
                 <span className="font-bold text-on-surface text-sm truncate">{g.label}</span>
                 {code && <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">{code}</span>}
               </span>
               <span className="flex items-center gap-3 shrink-0">
+                {copyAll && (
+                  <CopyButton
+                    getText={() => tsvFromRows(g.items.map(buildFields))}
+                    title="Copiar todos os itens deste grupo (colar no Excel)"
+                  />
+                )}
                 <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${toneBadge}`}>
                   {g.items.length}
                 </span>
                 <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
               </span>
-            </button>
+            </div>
             {isOpen && (
               <div className="p-4 pt-0">
                 {subGroups ? (
@@ -778,8 +817,13 @@ export default function ExploradorRelacoesPage() {
               itemAccessory={r => r.otherAccessory ?? null}
               itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
+              itemExtra={r => [
+                { label: 'Não Combina Com (Cód. Protheus)', value: r.protheus_code },
+                { label: 'Não Combina Com (Nome)', value: r.name1 },
+              ]}
               connector={() => <span className="text-error font-bold text-sm">✕ não combina com</span>}
               tone="error"
+              copyAll
             />
           </SectionPanel>
 
@@ -843,8 +887,14 @@ export default function ExploradorRelacoesPage() {
               itemAccessory={r => r.otherAccessory ?? null}
               itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
+              itemExtra={r => [
+                { label: 'Equipamento', value: r.equipmentName },
+                { label: 'Não Combina Com (Cód. Protheus)', value: result.accessory.protheus_code },
+                { label: 'Não Combina Com (Nome)', value: result.accessory.name },
+              ]}
               connector={() => <span className="text-error font-bold text-sm">✕ não combina com</span>}
               tone="error"
+              copyAll
             />
           </SectionPanel>
 
