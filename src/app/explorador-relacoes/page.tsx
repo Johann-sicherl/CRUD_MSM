@@ -194,9 +194,14 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
 
 /** Shared field list for an accessory-cascade row — used both by the card
  *  itself and by the group-level "copy all" button. */
-function buildAccessoryFields(r: Row, extra?: { label: string; value: unknown }[]) {
+function buildAccessoryFields(
+  r: Row,
+  extra?: { label: string; value: unknown }[],
+  prefix?: { label: string; value: unknown }[],
+) {
   const acc = r.accessory as Row | null
   return [
+    ...(prefix ?? []),
     { label: 'Cód. Protheus', value: r.protheus_code },
     { label: 'Nome', value: r.accessoryName },
     { label: 'Grupo', value: r.groupName },
@@ -217,13 +222,14 @@ function buildAccessoryFields(r: Row, extra?: { label: string; value: unknown }[
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
-function AccessoryDetailCard({ r, extra, topCaption }: {
+function AccessoryDetailCard({ r, extra, prefix, topCaption }: {
   r: Row
   extra?: { label: string; value: unknown }[]
+  prefix?: { label: string; value: unknown }[]
   topCaption?: React.ReactNode
 }) {
   const acc = r.accessory as Row | null
-  const fields = buildAccessoryFields(r, extra)
+  const fields = buildAccessoryFields(r, extra, prefix)
   return (
     <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
       {topCaption && (
@@ -413,7 +419,7 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
  *  group — each shown with every property. */
 function RelationAccordion({
   rows, groupKey, groupLabel, groupCode,
-  itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra,
+  itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra, itemPrefix,
   connector, tone, nested = true, copyAll = false,
 }: {
   rows: Row[]
@@ -426,6 +432,9 @@ function RelationAccordion({
   itemGroupName?: (r: Row) => string | null
   itemAlert?: (r: Row) => string | null
   itemExtra?: (r: Row) => { label: string; value: unknown }[]
+  /** Fields rendered before Cód. Protheus/Nome/Grupo — for a reference item that
+   *  should read first (e.g. the base item that triggers a dependency). */
+  itemPrefix?: (r: Row) => { label: string; value: unknown }[]
   connector: (r: Row) => React.ReactNode
   tone: 'error' | 'primary'
   /** false = a single flat level (e.g. group already reflects the item's own
@@ -456,6 +465,7 @@ function RelationAccordion({
       alertDescription: itemAlert ? itemAlert(r) : null,
     },
     itemExtra ? itemExtra(r) : undefined,
+    itemPrefix ? itemPrefix(r) : undefined,
   )
 
   const renderItem = (r: Row) => (
@@ -470,6 +480,7 @@ function RelationAccordion({
         alertDescription: itemAlert ? itemAlert(r) : null,
       }}
       extra={itemExtra ? itemExtra(r) : undefined}
+      prefix={itemPrefix ? itemPrefix(r) : undefined}
       topCaption={connector(r)}
     />
   )
@@ -846,6 +857,8 @@ export default function ExploradorRelacoesPage() {
               itemExtra={r => [
                 { label: 'Qtd. Necessária', value: r.quantity },
                 { label: 'Fat. Proporcional', value: r.proportional_factor },
+              ]}
+              itemPrefix={r => [
                 { label: 'Item Base (Cód. Protheus)', value: r.protheus_code },
                 { label: 'Item Base (Nome)', value: r.itemName },
                 { label: 'Grupo (Item Base)', value: r.codeGroupName },
@@ -924,6 +937,11 @@ export default function ExploradorRelacoesPage() {
                 ? [
                     { label: 'Qtd. Necessária', value: r.quantity },
                     { label: 'Fat. Proporcional', value: r.proportional_factor },
+                  ]
+                : []
+              }
+              itemPrefix={r => r.role === 'item'
+                ? [
                     { label: 'Item Base (Cód. Protheus)', value: result.accessory.protheus_code },
                     { label: 'Item Base (Nome)', value: result.accessory.name },
                     { label: 'Grupo (Item Base)', value: result.groupName },
