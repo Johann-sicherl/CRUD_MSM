@@ -88,11 +88,13 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
         }
       }),
       nonCombinable: nonComb.map(r => {
+        const firstAcc = accessoryMap[r.protheus_code] ?? null
         const otherAcc = accessoryMap[r.remove_list_code] ?? null
         return {
           ...r,
-          name1: accessoryMap[r.protheus_code]?.name ?? null,
+          name1: firstAcc?.name ?? null,
           name2: otherAcc?.name ?? null,
+          firstGroupName: firstAcc?.legacy_group_id != null ? (groupNameMap[firstAcc.legacy_group_id] ?? null) : null,
           otherAccessory: otherAcc,
           otherGroupName: otherAcc?.legacy_group_id != null ? (groupNameMap[otherAcc.legacy_group_id] ?? null) : null,
           otherAlertDescription: otherAcc?.legacy_general_alert_id ? (alertMap[otherAcc.legacy_general_alert_id] ?? null) : null,

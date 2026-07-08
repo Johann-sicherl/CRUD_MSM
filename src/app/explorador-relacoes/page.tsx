@@ -825,6 +825,7 @@ export default function ExploradorRelacoesPage() {
               itemExtra={r => [
                 { label: 'Não Combina Com (Cód. Protheus)', value: r.protheus_code },
                 { label: 'Não Combina Com (Nome)', value: r.name1 },
+                { label: 'Não Combina Com (Grupo)', value: r.firstGroupName },
               ]}
               connector={() => <span className="text-error font-bold text-sm">✕ não combina com</span>}
               tone="error"
@@ -901,6 +902,7 @@ export default function ExploradorRelacoesPage() {
                 { label: 'Equipamento', value: r.equipmentName },
                 { label: 'Não Combina Com (Cód. Protheus)', value: result.accessory.protheus_code },
                 { label: 'Não Combina Com (Nome)', value: result.accessory.name },
+                { label: 'Não Combina Com (Grupo)', value: result.groupName },
               ]}
               connector={() => <span className="text-error font-bold text-sm">✕ não combina com</span>}
               tone="error"
