@@ -114,6 +114,7 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
         <StatusBadge status={r.status} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1.5 text-sm">
+        <Property label="Status" value={r.status} />
         <Property label="Processador" value={r.processor} />
         <Property label="Memória" value={r.memory} />
         <Property label="Armazenamento" value={r.storage} />
