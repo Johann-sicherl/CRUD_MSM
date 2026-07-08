@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -402,14 +402,138 @@ function InfoCard({ name, code, highlight, footer }: {
   )
 }
 
+interface CodeOption {
+  code: string
+  label: string
+}
+
+/** Modal listing every available code from Cadastro de Equipamentos and
+ *  Cadastro de Componentes, split only by which catalog they come from —
+ *  no further grouping. Picking one runs the search immediately. */
+function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (code: string) => void }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState('')
+  const [equipmentCodes, setEquipmentCodes] = useState<CodeOption[]>([])
+  const [componentCodes, setComponentCodes] = useState<CodeOption[]>([])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [eqRes, compRes] = await Promise.all([
+          fetch('/api/standard_equipment_items?limit=25000'),
+          fetch('/api/accessories?limit=25000'),
+        ])
+        if (!eqRes.ok || !compRes.ok) { setError('Erro ao carregar códigos'); setLoading(false); return }
+        const [eqJson, compJson] = await Promise.all([eqRes.json(), compRes.json()])
+        setEquipmentCodes(
+          (eqJson.data || [])
+            .map((r: Row) => ({ code: r.protheus_code, label: `${r.processor || '—'} · ${r.memory || '—'}` }))
+            .sort((a: CodeOption, b: CodeOption) => a.code.localeCompare(b.code, 'pt-BR'))
+        )
+        setComponentCodes(
+          (compJson.data || [])
+            .map((r: Row) => ({ code: r.protheus_code, label: r.name || 'N/A' }))
+            .sort((a: CodeOption, b: CodeOption) => a.code.localeCompare(b.code, 'pt-BR'))
+        )
+      } catch {
+        setError('Erro ao carregar códigos')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  const matches = (o: CodeOption) => {
+    const f = filter.trim().toLowerCase()
+    if (!f) return true
+    return o.code.toLowerCase().includes(f) || o.label.toLowerCase().includes(f)
+  }
+  const filteredEquipment = equipmentCodes.filter(matches)
+  const filteredComponent = componentCodes.filter(matches)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
+          <h2 className="text-base font-semibold text-on-surface">Buscar código</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-outline-variant shrink-0">
+          <input
+            type="text"
+            autoFocus
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Filtrar por código ou nome…"
+            className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-outline gap-3">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-mono">Carregando…</span>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-16 text-error text-sm">⚠ {error}</div>
+        ) : (
+          <div className="flex-1 overflow-auto grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-outline-variant">
+            <div className="p-4">
+              <div className="text-xs font-bold text-blue-400 uppercase tracking-wide mb-2">
+                Cadastro de Equipamentos <span className="text-outline font-normal">({filteredEquipment.length})</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {filteredEquipment.length === 0 ? (
+                  <div className="text-xs text-outline italic">Nenhum código encontrado</div>
+                ) : filteredEquipment.map(o => (
+                  <button
+                    key={o.code}
+                    onClick={() => onPick(o.code)}
+                    className="text-left px-2 py-1.5 rounded hover:bg-surface-container-high transition-colors"
+                  >
+                    <span className="font-mono text-xs text-primary">{o.code}</span>
+                    <span className="ml-2 text-xs text-on-surface-variant">{o.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs font-bold text-amber-400 uppercase tracking-wide mb-2">
+                Cadastro de Componentes <span className="text-outline font-normal">({filteredComponent.length})</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {filteredComponent.length === 0 ? (
+                  <div className="text-xs text-outline italic">Nenhum código encontrado</div>
+                ) : filteredComponent.map(o => (
+                  <button
+                    key={o.code}
+                    onClick={() => onPick(o.code)}
+                    className="text-left px-2 py-1.5 rounded hover:bg-surface-container-high transition-colors"
+                  >
+                    <span className="font-mono text-xs text-primary">{o.code}</span>
+                    <span className="ml-2 text-xs text-on-surface-variant">{o.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ExploradorRelacoesPage() {
   const [input, setInput]     = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [result, setResult]   = useState<Result | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
-  const handleSearch = async () => {
-    const code = input.trim()
+  const handleSearch = async (codeOverride?: string) => {
+    const code = (codeOverride ?? input).trim()
     if (!code) return
     setLoading(true)
     setError('')
@@ -427,6 +551,12 @@ export default function ExploradorRelacoesPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handlePick = (code: string) => {
+    setInput(code)
+    setPickerOpen(false)
+    handleSearch(code)
   }
 
   return (
@@ -451,13 +581,22 @@ export default function ExploradorRelacoesPage() {
           className="flex-1 bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 font-mono"
         />
         <button
-          onClick={handleSearch}
+          onClick={() => setPickerOpen(true)}
+          title="Ver todos os códigos disponíveis"
+          className="px-3 py-2 bg-surface-container border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+        >
+          🔍
+        </button>
+        <button
+          onClick={() => handleSearch()}
           disabled={loading || !input.trim()}
           className="px-5 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
           {loading ? 'Buscando…' : 'Buscar'}
         </button>
       </div>
+
+      {pickerOpen && <CodePickerModal onClose={() => setPickerOpen(false)} onPick={handlePick} />}
 
       {error && (
         <div className="flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-sm max-w-xl">
