@@ -145,10 +145,11 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     for (const r of roller)     equipmentIds.add(r.legacy_equipment_id)
 
     const { data: equipRows } = equipmentIds.size > 0
-      ? await supabaseAdmin.from('equipments').select('legacy_id, name').in('legacy_id', Array.from(equipmentIds))
+      ? await supabaseAdmin.from('equipments').select('*').in('legacy_id', Array.from(equipmentIds))
       : { data: [] as Row[] }
-    const equipMap: Record<number, string> = {}
-    for (const e of (equipRows || [])) equipMap[e.legacy_id] = e.name
+    // Full equipment row per legacy_id (used to show every property in Usado nestes Equipamentos)
+    const equipMap: Record<number, Row> = {}
+    for (const e of (equipRows || [])) equipMap[e.legacy_id] = e
 
     const otherCodes = new Set<string>()
     for (const r of nonComb)    otherCodes.add(r.protheus_code === accessory.protheus_code ? r.remove_list_code : r.protheus_code)
@@ -181,14 +182,18 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       code,
       accessory,
       groupName: groupRes.data?.name ?? null,
-      usedInEquipments: compat.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null })),
+      usedInEquipments: compat.map(r => ({
+        ...r,
+        equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null,
+        equipment: equipMap[r.legacy_equipment_id] ?? null,
+      })),
       nonCombinable: nonComb.map(r => {
         const isFirst = r.protheus_code === accessory.protheus_code
         const otherCode = isFirst ? r.remove_list_code : r.protheus_code
         const otherAcc = otherMap[otherCode] ?? null
         return {
           ...r,
-          equipmentName: equipMap[r.legacy_equipment_id] ?? null,
+          equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null,
           otherCode,
           otherName: otherAcc?.name ?? null,
           otherAccessory: otherAcc,
@@ -207,7 +212,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           : (otherAcc?.legacy_group_id != null ? (otherGroupNameMap[otherAcc.legacy_group_id] ?? null) : null)
         return {
           ...r,
-          equipmentName: equipMap[r.legacy_equipment_id] ?? null,
+          equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null,
           role: isFirst ? 'item' : 'dependente',
           codeGroupName,
           otherCode,
@@ -217,7 +222,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           otherAlertDescription: otherAcc?.legacy_general_alert_id ? (otherAlertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
         }
       }),
-      rollerTables: roller.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null })),
+      rollerTables: roller.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id]?.name ?? null })),
     })
   }
 

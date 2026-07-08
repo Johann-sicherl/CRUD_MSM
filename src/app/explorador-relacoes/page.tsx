@@ -180,6 +180,49 @@ function AccessoryDetailCard({ r, extra, topCaption, topCaptionClass }: {
   )
 }
 
+/** Full-property card for one equipment in "Usado nestes Equipamentos" — every
+ *  Grupo de Equipamentos field (margins, commissions, rates...) plus the
+ *  compatibility rule's own fields (max quantity, operation time, description). */
+function EquipmentUsageCard({ r }: { r: Row }) {
+  const eq = r.equipment as Row | null
+  const pct = (v: unknown) => v != null ? `${Number(v).toFixed(2)}%` : null
+  return (
+    <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div className="font-bold text-on-surface text-base leading-snug">
+          {eq?.name || 'N/A'}
+          {eq?.commercial_name && <span className="text-on-surface-variant font-normal"> / {eq.commercial_name}</span>}
+        </div>
+        <StatusBadge status={r.status} />
+      </div>
+      <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
+        ID Leg. {eq?.legacy_id ?? '—'}
+      </div>
+      {!eq && (
+        <div className="mb-3 text-xs text-error italic">Não encontrado em Grupo de Equipamentos</div>
+      )}
+      <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
+        <Property label="IPI" value={eq ? pct(eq.ipi_tax_rate) : null} />
+        <Property label="Margem" value={eq ? pct(eq.contribution_margin_ratio) : null} />
+        <Property label="Com. Vendedor" value={eq ? pct(eq.seller_commission) : null} />
+        <Property label="Com. Gerente" value={eq ? pct(eq.manager_commission) : null} />
+        <Property label="Com. Diretor" value={eq ? pct(eq.director_commission) : null} />
+        <Property label="Custo Certif. (R$)" value={eq ? Number(eq.certification_cost ?? 0).toFixed(2) : null} />
+        <Property label="M.O." value={eq ? pct(eq.labor_cost_rate) : null} />
+        <Property label="Garantia" value={eq ? pct(eq.warranty_rate) : null} />
+        <Property label="Prov. Peças" value={eq ? pct(eq.parts_provision_rate) : null} />
+        <Property label="Qtd. Máxima (regra)" value={r.maximum_quantity} />
+        <Property label="Tempo Oper. (regra)" value={r.operation_time} />
+      </div>
+      {r.description && (
+        <div className="mt-3 pt-2 border-t border-outline-variant text-xs text-on-surface-variant leading-relaxed">
+          {r.description}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Collapsed-by-default accordion of accessory groups — expanding a group reveals
  *  every accessory in it with its full set of properties. */
 function AccessoryGroupAccordion({ rows }: { rows: Row[] }) {
@@ -527,16 +570,7 @@ export default function ExploradorRelacoesPage() {
           </div>
 
           <SectionPanel title="Usado nestes Equipamentos" tint="blue" count={result.usedInEquipments.length}>
-            {result.usedInEquipments.map(r => (
-              <InfoCard
-                key={r.id}
-                name={r.equipmentName || 'N/A'}
-                footer={<>
-                  <StatusBadge status={r.status} />
-                  {r.maximum_quantity != null && <span className="text-xs font-semibold text-outline">máx. {r.maximum_quantity}</span>}
-                </>}
-              />
-            ))}
+            {result.usedInEquipments.map(r => <EquipmentUsageCard key={r.id} r={r} />)}
           </SectionPanel>
 
           <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
