@@ -29,6 +29,48 @@ interface AccessoryResult {
 
 type Result = EquipmentResult | AccessoryResult
 
+/** Prominent name + code pairing used as a card's top caption — the code renders
+ *  as a solid high-contrast badge instead of small colored text. */
+function NameCodeCaption({ name, code }: { name: string; code: string }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="font-bold text-on-surface text-sm">{name}</span>
+      <span className="font-mono text-sm font-bold px-2 py-0.5 rounded bg-primary text-on-primary">{code}</span>
+    </div>
+  )
+}
+
+/** Tab-separated header+value row — pasting this into Excel drops each field
+ *  into its own column, with the label row on top. */
+function tsvFromFields(fields: { label: string; value: unknown }[]): string {
+  const cell = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v).replace(/\t|\n/g, ' '))
+  const headers = fields.map(f => f.label).join('\t')
+  const values = fields.map(f => cell(f.value)).join('\t')
+  return `${headers}\n${values}`
+}
+
+/** Small copy-to-clipboard button — shows a checkmark briefly after copying. */
+function CopyButton({ getText, title }: { getText: () => string; title?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={e => {
+        e.stopPropagation()
+        navigator.clipboard.writeText(getText()).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        }).catch(() => {})
+      }}
+      title={title ?? 'Copiar dados (colar no Excel)'}
+      className={`shrink-0 w-6 h-6 flex items-center justify-center rounded transition-colors ${
+        copied ? 'text-green-400' : 'text-outline hover:text-primary hover:bg-surface-container-highest'
+      }`}
+    >
+      {copied ? '✓' : '⧉'}
+    </button>
+  )
+}
+
 function StatusBadge({ status }: { status?: string | null }) {
   if (!status) return null
   const active = status === 'active'
@@ -105,29 +147,36 @@ function Property({ label, value }: { label: string; value: unknown }) {
 /** Full-property card for the searched Cadastro de Equipamentos item — every
  *  BOM field, not just the processor/memory summary shown for the other items. */
 function EquipmentItemDetailCard({ r }: { r: Row }) {
+  const fields = [
+    { label: 'Cód. Protheus', value: r.protheus_code },
+    { label: 'Status', value: r.status },
+    { label: 'Processador', value: r.processor },
+    { label: 'Memória', value: r.memory },
+    { label: 'Armazenamento', value: r.storage },
+    { label: 'Placa Gráfica', value: r.graphics_card },
+    { label: 'Cap. Correia (kg)', value: r.conveyor_belt_load_capacity_kg },
+    { label: 'Potência Tubo (kV)', value: r.tube_power_kv },
+    { label: 'Certificado', value: r.certificate },
+    { label: 'Tipo Correia', value: r.conveyor_belt_type },
+    { label: 'Tipo Motopolia', value: r.motopolia_type },
+    { label: 'Idioma', value: r.language },
+    { label: 'Cor', value: r.color },
+    { label: 'Alerta', value: r.alertDescription },
+    { label: 'Custo (R$)', value: Number(r.cost_std ?? 0).toFixed(2) },
+  ]
   return (
     <div className="rounded-xl border-2 border-primary bg-primary/10 p-5 mb-4">
       <div className="flex items-center justify-between gap-2 mb-4">
         <div className="font-mono text-sm font-bold px-2 py-1 rounded bg-surface-container-highest text-primary">
           {r.protheus_code}
         </div>
-        <StatusBadge status={r.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={r.status} />
+          <CopyButton getText={() => tsvFromFields(fields)} />
+        </div>
       </div>
       <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
-        <Property label="Status" value={r.status} />
-        <Property label="Processador" value={r.processor} />
-        <Property label="Memória" value={r.memory} />
-        <Property label="Armazenamento" value={r.storage} />
-        <Property label="Placa Gráfica" value={r.graphics_card} />
-        <Property label="Cap. Correia (kg)" value={r.conveyor_belt_load_capacity_kg} />
-        <Property label="Potência Tubo (kV)" value={r.tube_power_kv} />
-        <Property label="Certificado" value={r.certificate} />
-        <Property label="Tipo Correia" value={r.conveyor_belt_type} />
-        <Property label="Tipo Motopolia" value={r.motopolia_type} />
-        <Property label="Idioma" value={r.language} />
-        <Property label="Cor" value={r.color} />
-        <Property label="Alerta" value={r.alertDescription} />
-        <Property label="Custo (R$)" value={Number(r.cost_std ?? 0).toFixed(2)} />
+        {fields.map(f => <Property key={f.label} label={f.label} value={f.value} />)}
       </div>
     </div>
   )
@@ -136,17 +185,16 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
-function AccessoryDetailCard({ r, extra, topCaption, topCaptionClass }: {
+function AccessoryDetailCard({ r, extra, topCaption }: {
   r: Row
   extra?: { label: string; value: unknown }[]
-  topCaption?: string
-  topCaptionClass?: string
+  topCaption?: React.ReactNode
 }) {
   const acc = r.accessory as Row | null
   return (
     <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
       {topCaption && (
-        <div className={`text-xs font-bold mb-3 pb-3 border-b border-outline-variant ${topCaptionClass ?? 'text-primary'}`}>
+        <div className="mb-3 pb-3 border-b border-outline-variant">
           {topCaption}
         </div>
       )}
@@ -321,7 +369,7 @@ function RelationAccordion({
   itemGroupName?: (r: Row) => string | null
   itemAlert?: (r: Row) => string | null
   itemExtra?: (r: Row) => { label: string; value: unknown }[]
-  connector: (r: Row) => string
+  connector: (r: Row) => React.ReactNode
   tone: 'error' | 'primary'
   /** false = a single flat level (e.g. group already reflects the item's own
    *  accessory group); true = also sub-group each group's items by itemGroupName. */
@@ -329,8 +377,7 @@ function RelationAccordion({
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const toneBadge   = tone === 'error' ? 'bg-error/15 text-error' : 'bg-primary/15 text-primary'
-  const toneCaption = tone === 'error' ? 'text-error' : 'text-primary'
+  const toneBadge = tone === 'error' ? 'bg-error/15 text-error' : 'bg-primary/15 text-primary'
 
   const toggle = (key: string) => setExpanded(prev => {
     const next = new Set(prev)
@@ -350,7 +397,6 @@ function RelationAccordion({
       }}
       extra={itemExtra ? itemExtra(r) : undefined}
       topCaption={connector(r)}
-      topCaptionClass={toneCaption}
     />
   )
 
@@ -675,7 +721,7 @@ export default function ExploradorRelacoesPage() {
               itemAccessory={r => r.otherAccessory ?? null}
               itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
-              connector={() => '✕ não combina com'}
+              connector={() => <span className="text-error font-bold text-sm">✕ não combina com</span>}
               tone="error"
             />
           </SectionPanel>
@@ -689,8 +735,11 @@ export default function ExploradorRelacoesPage() {
               itemLabel={r => r.dependentName || 'N/A'}
               itemAccessory={r => r.dependentAccessory ?? null}
               itemAlert={r => r.dependentAlertDescription ?? null}
-              itemExtra={r => [{ label: 'Qtd. Necessária', value: r.quantity }]}
-              connector={r => `Componente: ${r.itemName || 'N/A'} (${r.protheus_code}) → requer x${r.quantity}`}
+              itemExtra={r => [
+                { label: 'Qtd. Necessária', value: r.quantity },
+                { label: 'Fat. Proporcional', value: r.proportional_factor },
+              ]}
+              connector={r => <NameCodeCaption name={r.itemName || 'N/A'} code={r.protheus_code} />}
               tone="primary"
               nested={false}
             />
@@ -737,7 +786,7 @@ export default function ExploradorRelacoesPage() {
               itemAccessory={r => r.otherAccessory ?? null}
               itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
-              connector={() => '✕ não combina com'}
+              connector={() => <span className="text-error font-bold text-sm">✕ não combina com</span>}
               tone="error"
             />
           </SectionPanel>
@@ -751,11 +800,16 @@ export default function ExploradorRelacoesPage() {
               itemLabel={r => r.otherName || 'N/A'}
               itemAccessory={r => r.otherAccessory ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
-              itemExtra={r => r.role === 'item' ? [{ label: 'Qtd. Necessária', value: r.quantity }] : []}
-              connector={r => r.role === 'item'
-                ? `Componente: ${result.accessory.name} (${result.accessory.protheus_code}) → requer x${r.quantity}`
-                : `Dependente: ${result.accessory.name} (${result.accessory.protheus_code}) ← requerido por`
+              itemExtra={r => r.role === 'item'
+                ? [
+                    { label: 'Qtd. Necessária', value: r.quantity },
+                    { label: 'Fat. Proporcional', value: r.proportional_factor },
+                  ]
+                : []
               }
+              connector={r => (
+                <NameCodeCaption name={result.accessory.name} code={result.accessory.protheus_code} />
+              )}
               tone="primary"
               nested={false}
             />
