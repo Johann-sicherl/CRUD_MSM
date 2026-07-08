@@ -135,10 +135,20 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
-function AccessoryDetailCard({ r, extra }: { r: Row; extra?: { label: string; value: unknown }[] }) {
+function AccessoryDetailCard({ r, extra, topCaption, topCaptionClass }: {
+  r: Row
+  extra?: { label: string; value: unknown }[]
+  topCaption?: string
+  topCaptionClass?: string
+}) {
   const acc = r.accessory as Row | null
   return (
     <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
+      {topCaption && (
+        <div className={`text-xs font-bold mb-3 pb-3 border-b border-outline-variant ${topCaptionClass ?? 'text-primary'}`}>
+          {topCaption}
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="font-bold text-on-surface text-base leading-snug">{r.accessoryName || 'N/A'}</div>
         <StatusBadge status={acc?.status} />
@@ -146,6 +156,9 @@ function AccessoryDetailCard({ r, extra }: { r: Row; extra?: { label: string; va
       <div className="mb-3 inline-block font-mono text-sm font-bold px-2 py-1 rounded bg-primary text-on-primary">
         {r.protheus_code}
       </div>
+      {!acc && (
+        <div className="mb-3 text-xs text-error italic">Não encontrado em Cadastro de Componentes</div>
+      )}
       <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
         {extra?.map((e, i) => <Property key={`extra-${i}`} label={e.label} value={e.value} />)}
         <Property label="Cor" value={acc?.color} />
@@ -260,19 +273,19 @@ function RelationAccordion({
   })
 
   const renderItem = (r: Row) => (
-    <div key={r.id}>
-      <div className={`text-xs font-semibold mb-1.5 ${toneCaption}`}>{connector(r)}</div>
-      <AccessoryDetailCard
-        r={{
-          id: r.id,
-          protheus_code: itemCode(r),
-          accessoryName: itemLabel(r),
-          accessory: itemAccessory(r),
-          alertDescription: itemAlert ? itemAlert(r) : null,
-        }}
-        extra={itemExtra ? itemExtra(r) : undefined}
-      />
-    </div>
+    <AccessoryDetailCard
+      key={r.id}
+      r={{
+        id: r.id,
+        protheus_code: itemCode(r),
+        accessoryName: itemLabel(r),
+        accessory: itemAccessory(r),
+        alertDescription: itemAlert ? itemAlert(r) : null,
+      }}
+      extra={itemExtra ? itemExtra(r) : undefined}
+      topCaption={connector(r)}
+      topCaptionClass={toneCaption}
+    />
   )
 
   return (
@@ -479,11 +492,8 @@ export default function ExploradorRelacoesPage() {
               itemLabel={r => r.dependentName || 'N/A'}
               itemAccessory={r => r.dependentAccessory ?? null}
               itemAlert={r => r.dependentAlertDescription ?? null}
-              itemExtra={r => [
-                { label: 'Componente', value: `${r.itemName || 'N/A'} (${r.protheus_code})` },
-                { label: 'Qtd. Necessária', value: r.quantity },
-              ]}
-              connector={r => `${r.itemName || 'N/A'} → requer x${r.quantity}`}
+              itemExtra={r => [{ label: 'Qtd. Necessária', value: r.quantity }]}
+              connector={r => `Componente: ${r.itemName || 'N/A'} (${r.protheus_code}) → requer x${r.quantity}`}
               tone="primary"
               nested={false}
             />
@@ -553,19 +563,10 @@ export default function ExploradorRelacoesPage() {
               itemLabel={r => r.otherName || 'N/A'}
               itemAccessory={r => r.otherAccessory ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
-              itemExtra={r => r.role === 'item'
-                ? [
-                    { label: 'Componente', value: `${result.accessory.name} (${result.accessory.protheus_code})` },
-                    { label: 'Qtd. Necessária', value: r.quantity },
-                  ]
-                : [
-                    { label: 'Dependente', value: `${result.accessory.name} (${result.accessory.protheus_code})` },
-                    { label: 'Qtd. Necessária', value: r.quantity },
-                  ]
-              }
+              itemExtra={r => r.role === 'item' ? [{ label: 'Qtd. Necessária', value: r.quantity }] : []}
               connector={r => r.role === 'item'
-                ? `${result.accessory.name} → requer x${r.quantity}`
-                : `← requerido por ${result.accessory.name}`
+                ? `Componente: ${result.accessory.name} (${result.accessory.protheus_code}) → requer x${r.quantity}`
+                : `Dependente: ${result.accessory.name} (${result.accessory.protheus_code}) ← requerido por`
               }
               tone="primary"
               nested={false}
