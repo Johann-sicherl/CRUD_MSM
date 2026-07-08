@@ -152,11 +152,22 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
     // Cadastro de Equipamentos (standard_equipment_items) rows for each equipment group,
     // so "Usado nestes Equipamentos" can list the actual catalog codes instead of fiscal data.
-    const { data: bomRows } = equipmentIds.size > 0
+    const { data: bomRowsRaw } = equipmentIds.size > 0
       ? await supabaseAdmin.from('standard_equipment_items').select('*').in('legacy_equipment_id', Array.from(equipmentIds)).order('protheus_code')
       : { data: [] as Row[] }
+    const bomRows: Row[] = bomRowsRaw || []
+
+    const bomAlertIds = new Set<number>()
+    for (const b of bomRows) if (b.legacy_general_alert_id) bomAlertIds.add(b.legacy_general_alert_id)
+    const { data: bomAlertRows } = bomAlertIds.size > 0
+      ? await supabaseAdmin.from('general_alerts').select('legacy_id, description').in('legacy_id', Array.from(bomAlertIds))
+      : { data: [] as Row[] }
+    const bomAlertMap: Record<number, string> = {}
+    for (const al of (bomAlertRows || [])) bomAlertMap[al.legacy_id] = al.description
+
     const bomByEquipment: Record<number, Row[]> = {}
-    for (const b of (bomRows || [])) {
+    for (const raw of bomRows) {
+      const b: Row = { ...raw, alertDescription: raw.legacy_general_alert_id ? (bomAlertMap[raw.legacy_general_alert_id] ?? null) : null }
       if (!bomByEquipment[b.legacy_equipment_id]) bomByEquipment[b.legacy_equipment_id] = []
       bomByEquipment[b.legacy_equipment_id].push(b)
     }

@@ -198,26 +198,19 @@ function EquipmentUsageCard({ r }: { r: Row }) {
       {!eq && (
         <div className="mb-3 text-xs text-error italic">Não encontrado em Grupo de Equipamentos</div>
       )}
+      {r.description && (
+        <div className="mb-3 pb-3 border-b border-outline-variant text-xs text-on-surface-variant leading-relaxed">
+          {r.description}
+        </div>
+      )}
       <div className="text-xs font-bold text-on-surface-variant mb-2 border-t border-outline-variant pt-3">
         Cadastro de Equipamentos <span className="text-outline font-normal">({bom.length})</span>
       </div>
       {bom.length === 0 ? (
         <div className="text-xs text-outline italic">Nenhum código cadastrado neste grupo</div>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {bom.map(b => (
-            <div key={b.id} className="flex items-center justify-between gap-2">
-              <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">
-                {b.protheus_code}
-              </span>
-              <span className="text-on-surface-variant text-xs truncate">{b.processor || '—'} · {b.memory || '—'}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {r.description && (
-        <div className="mt-3 pt-2 border-t border-outline-variant text-xs text-on-surface-variant leading-relaxed">
-          {r.description}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          {bom.map(b => <EquipmentItemDetailCard key={b.id} r={b} />)}
         </div>
       )}
     </div>
