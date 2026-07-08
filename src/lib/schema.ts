@@ -84,6 +84,21 @@ export interface TableSchema {
   auditKeyField?: string | string[]  // field(s) used to identify the row across environments in the generated SQL (defaults to the unique field, then autoIncrement, then all noBulkEdit fields as a composite key, then the PK)
 }
 
+// Financial multiplier fields that the Atualizador Global de Tabelas MSM always
+// forces to 1 on import, regardless of what the official CSV export contains,
+// in any table that has them.
+export const FORCE_TO_ONE_FIELDS = [
+  'cost_std',
+  'ipi_tax_rate',
+  'contribution_margin_ratio',
+  'seller_commission',
+  'manager_commission',
+  'director_commission',
+  'certification_cost',
+  'labor_cost_rate',
+  'warranty_rate',
+]
+
 export const DOMAIN_LABELS: Record<string, string> = {
   catalogo: 'Portifólio',
   regras: 'Regras',

@@ -152,6 +152,16 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           >
             <span className="truncate">Janela de Pesquisa Avançada</span>
           </Link>
+          <Link
+            href="/atualizador-global"
+            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+              pathname === '/atualizador-global'
+                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+            }`}
+          >
+            <span className="truncate">Atualizador Global de Tabelas MSM</span>
+          </Link>
         </div>
 
         {/* Footer */}
