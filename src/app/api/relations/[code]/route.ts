@@ -99,10 +99,12 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
         }
       }),
       dependants: dependants.map(r => {
+        const itemAcc = accessoryMap[r.protheus_code] ?? null
         const depAcc = accessoryMap[r.protheus_item_code] ?? null
         return {
           ...r,
-          itemName: accessoryMap[r.protheus_code]?.name ?? null,
+          itemName: itemAcc?.name ?? null,
+          codeGroupName: itemAcc?.legacy_group_id != null ? (groupNameMap[itemAcc.legacy_group_id] ?? null) : null,
           dependentName: depAcc?.name ?? null,
           dependentAccessory: depAcc,
           dependentGroupName: depAcc?.legacy_group_id != null ? (groupNameMap[depAcc.legacy_group_id] ?? null) : null,
@@ -198,10 +200,16 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
         const isFirst = r.protheus_code === accessory.protheus_code
         const otherCode = isFirst ? r.protheus_item_code : r.protheus_code
         const otherAcc = otherMap[otherCode] ?? null
+        // r.protheus_code is the search accessory itself when isFirst, otherwise it's
+        // the "other" accessory already resolved above (otherCode === r.protheus_code then).
+        const codeGroupName = isFirst
+          ? (groupRes.data?.name ?? null)
+          : (otherAcc?.legacy_group_id != null ? (otherGroupNameMap[otherAcc.legacy_group_id] ?? null) : null)
         return {
           ...r,
           equipmentName: equipMap[r.legacy_equipment_id] ?? null,
           role: isFirst ? 'item' : 'dependente',
+          codeGroupName,
           otherCode,
           otherName: otherAcc?.name ?? null,
           otherAccessory: otherAcc,

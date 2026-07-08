@@ -230,7 +230,7 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
 function RelationAccordion({
   rows, groupKey, groupLabel, groupCode,
   itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra,
-  connector, tone,
+  connector, tone, nested = true,
 }: {
   rows: Row[]
   groupKey: (r: Row) => string
@@ -239,11 +239,14 @@ function RelationAccordion({
   itemCode: (r: Row) => string
   itemLabel: (r: Row) => string
   itemAccessory: (r: Row) => Row | null
-  itemGroupName: (r: Row) => string | null
+  itemGroupName?: (r: Row) => string | null
   itemAlert?: (r: Row) => string | null
   itemExtra?: (r: Row) => { label: string; value: unknown }[]
   connector: (r: Row) => string
   tone: 'error' | 'primary'
+  /** false = a single flat level (e.g. group already reflects the item's own
+   *  accessory group); true = also sub-group each group's items by itemGroupName. */
+  nested?: boolean
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -256,16 +259,32 @@ function RelationAccordion({
     return next
   })
 
+  const renderItem = (r: Row) => (
+    <div key={r.id}>
+      <div className={`text-xs font-semibold mb-1.5 ${toneCaption}`}>{connector(r)}</div>
+      <AccessoryDetailCard
+        r={{
+          id: r.id,
+          protheus_code: itemCode(r),
+          accessoryName: itemLabel(r),
+          accessory: itemAccessory(r),
+          alertDescription: itemAlert ? itemAlert(r) : null,
+        }}
+        extra={itemExtra ? itemExtra(r) : undefined}
+      />
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-2">
       {groups.map(g => {
         const isOpen = expanded.has(g.key)
         const code = groupCode?.(g.items[0])
-        const subGroups = groupRowsBy(
+        const subGroups = nested && itemGroupName ? groupRowsBy(
           g.items,
           r => itemGroupName(r) || 'Sem grupo',
           r => itemGroupName(r) || 'Sem grupo',
-        )
+        ) : null
         return (
           <div key={g.key} className="rounded-lg border border-outline-variant bg-surface-container-high overflow-hidden">
             <button
@@ -284,31 +303,25 @@ function RelationAccordion({
               </span>
             </button>
             {isOpen && (
-              <div className="p-4 pt-0 flex flex-col gap-4">
-                {subGroups.map(sg => (
-                  <div key={sg.key}>
-                    <div className="text-sm font-bold text-on-surface mb-2">
-                      {sg.label} <span className="text-outline font-normal">({sg.items.length})</span>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {sg.items.map(r => (
-                        <div key={r.id}>
-                          <div className={`text-xs font-semibold mb-1.5 ${toneCaption}`}>{connector(r)}</div>
-                          <AccessoryDetailCard
-                            r={{
-                              id: r.id,
-                              protheus_code: itemCode(r),
-                              accessoryName: itemLabel(r),
-                              accessory: itemAccessory(r),
-                              alertDescription: itemAlert ? itemAlert(r) : null,
-                            }}
-                            extra={itemExtra ? itemExtra(r) : undefined}
-                          />
+              <div className="p-4 pt-0">
+                {subGroups ? (
+                  <div className="flex flex-col gap-4">
+                    {subGroups.map(sg => (
+                      <div key={sg.key}>
+                        <div className="text-sm font-bold text-on-surface mb-2">
+                          {sg.label} <span className="text-outline font-normal">({sg.items.length})</span>
                         </div>
-                      ))}
-                    </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {sg.items.map(renderItem)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {g.items.map(renderItem)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -460,17 +473,16 @@ export default function ExploradorRelacoesPage() {
           <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length} plain>
             <RelationAccordion
               rows={result.dependants}
-              groupKey={r => r.protheus_code}
-              groupLabel={r => r.itemName || 'N/A'}
-              groupCode={r => r.protheus_code}
+              groupKey={r => r.codeGroupName || 'Sem grupo'}
+              groupLabel={r => r.codeGroupName || 'Sem grupo'}
               itemCode={r => r.protheus_item_code}
               itemLabel={r => r.dependentName || 'N/A'}
               itemAccessory={r => r.dependentAccessory ?? null}
-              itemGroupName={r => r.dependentGroupName ?? null}
               itemAlert={r => r.dependentAlertDescription ?? null}
               itemExtra={r => [{ label: 'Qtd. Necessária', value: r.quantity }]}
               connector={r => `→ requer x${r.quantity}`}
               tone="primary"
+              nested={false}
             />
           </SectionPanel>
 
@@ -532,16 +544,16 @@ export default function ExploradorRelacoesPage() {
           <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length} plain>
             <RelationAccordion
               rows={result.dependants}
-              groupKey={r => String(r.legacy_equipment_id)}
-              groupLabel={r => r.equipmentName || 'N/A'}
+              groupKey={r => r.codeGroupName || 'Sem grupo'}
+              groupLabel={r => r.codeGroupName || 'Sem grupo'}
               itemCode={r => r.otherCode}
               itemLabel={r => r.otherName || 'N/A'}
               itemAccessory={r => r.otherAccessory ?? null}
-              itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
               itemExtra={r => r.role === 'item' ? [{ label: 'Qtd. Necessária', value: r.quantity }] : []}
               connector={r => r.role === 'item' ? `→ requer x${r.quantity}` : '← requerido por'}
               tone="primary"
+              nested={false}
             />
           </SectionPanel>
 
