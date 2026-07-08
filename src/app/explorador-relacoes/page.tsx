@@ -405,6 +405,7 @@ function InfoCard({ name, code, highlight, footer }: {
 interface CodeOption {
   code: string
   label: string
+  group?: string
 }
 
 /** Modal listing every available code from Cadastro de Equipamentos and
@@ -420,15 +421,18 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
   useEffect(() => {
     (async () => {
       try {
-        const [eqRes, compRes, groupRes] = await Promise.all([
+        const [eqRes, compRes, groupRes, accGroupRes] = await Promise.all([
           fetch('/api/standard_equipment_items?limit=25000'),
           fetch('/api/accessories?limit=25000'),
           fetch('/api/equipments?limit=25000'),
+          fetch('/api/accessory_groups?limit=25000'),
         ])
-        if (!eqRes.ok || !compRes.ok || !groupRes.ok) { setError('Erro ao carregar códigos'); setLoading(false); return }
-        const [eqJson, compJson, groupJson] = await Promise.all([eqRes.json(), compRes.json(), groupRes.json()])
+        if (!eqRes.ok || !compRes.ok || !groupRes.ok || !accGroupRes.ok) { setError('Erro ao carregar códigos'); setLoading(false); return }
+        const [eqJson, compJson, groupJson, accGroupJson] = await Promise.all([eqRes.json(), compRes.json(), groupRes.json(), accGroupRes.json()])
         const equipNameByLegacyId: Record<number, string> = {}
         for (const g of (groupJson.data || [])) equipNameByLegacyId[g.legacy_id] = g.name
+        const accGroupNameByLegacyId: Record<number, string> = {}
+        for (const g of (accGroupJson.data || [])) accGroupNameByLegacyId[g.legacy_id] = g.name
         setEquipmentCodes(
           (eqJson.data || [])
             .slice()
@@ -439,7 +443,11 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
           (compJson.data || [])
             .slice()
             .sort((a: Row, b: Row) => (a.legacy_group_id ?? 0) - (b.legacy_group_id ?? 0))
-            .map((r: Row) => ({ code: r.protheus_code, label: r.name || 'N/A' }))
+            .map((r: Row) => ({
+              code: r.protheus_code,
+              label: r.name || 'N/A',
+              group: r.legacy_group_id != null ? (accGroupNameByLegacyId[r.legacy_group_id] || 'Sem grupo') : 'Sem grupo',
+            }))
         )
       } catch {
         setError('Erro ao carregar códigos')
@@ -452,14 +460,14 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
   const matches = (o: CodeOption) => {
     const f = filter.trim().toLowerCase()
     if (!f) return true
-    return o.code.toLowerCase().includes(f) || o.label.toLowerCase().includes(f)
+    return o.code.toLowerCase().includes(f) || o.label.toLowerCase().includes(f) || (o.group?.toLowerCase().includes(f) ?? false)
   }
   const filteredEquipment = equipmentCodes.filter(matches)
   const filteredComponent = componentCodes.filter(matches)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-fade-in">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-6xl max-h-[85vh] flex flex-col animate-fade-in">
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
           <h2 className="text-base font-semibold text-on-surface">Buscar código</h2>
           <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
@@ -519,6 +527,7 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
                   >
                     <span className="font-mono text-xs text-primary">{o.code}</span>
                     <span className="ml-2 text-xs text-on-surface-variant">{o.label}</span>
+                    {o.group && <span className="ml-2 text-xs text-outline">· {o.group}</span>}
                   </button>
                 ))}
               </div>
