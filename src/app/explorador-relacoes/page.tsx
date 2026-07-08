@@ -135,7 +135,7 @@ function EquipmentItemDetailCard({ r }: { r: Row }) {
 /** Full-property card for one accessory inside an expanded group — shows every
  *  catalog field (color, material, dimensions, cost, alert...) plus the
  *  compatibility rule's own fields (max quantity, operation time). */
-function AccessoryDetailCard({ r }: { r: Row }) {
+function AccessoryDetailCard({ r, extra }: { r: Row; extra?: { label: string; value: unknown }[] }) {
   const acc = r.accessory as Row | null
   return (
     <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
@@ -147,6 +147,7 @@ function AccessoryDetailCard({ r }: { r: Row }) {
         {r.protheus_code}
       </div>
       <div className="flex flex-col gap-1.5 text-sm border-t border-outline-variant pt-3">
+        {extra?.map((e, i) => <Property key={`extra-${i}`} label={e.label} value={e.value} />)}
         <Property label="Cor" value={acc?.color} />
         <Property label="Material Predom." value={acc?.predominant_material} />
         <Property label="Dimensão (mm)" value={acc?.dimensional_mm} />
@@ -221,11 +222,16 @@ function groupRowsBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) =
     .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
 }
 
-/** Collapsed-by-default accordion for non_combinable_comps pairs: one row per
- *  group (an "X" component, or an equipment — whichever side is fixed for this
- *  view). Expanding it reveals a second cascade — the other-side components,
- *  sub-grouped by their own accessory group — each shown with every property. */
-function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert }: {
+/** Collapsed-by-default accordion for pair-style relations (non_combinable_comps,
+ *  dependant_items): one row per group (an "X" component, or an equipment —
+ *  whichever side is fixed for this view). Expanding it reveals a second
+ *  cascade — the other-side components, sub-grouped by their own accessory
+ *  group — each shown with every property. */
+function RelationAccordion({
+  rows, groupKey, groupLabel, groupCode,
+  itemCode, itemLabel, itemAccessory, itemGroupName, itemAlert, itemExtra,
+  connector, tone,
+}: {
   rows: Row[]
   groupKey: (r: Row) => string
   groupLabel: (r: Row) => string
@@ -235,9 +241,14 @@ function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemCod
   itemAccessory: (r: Row) => Row | null
   itemGroupName: (r: Row) => string | null
   itemAlert?: (r: Row) => string | null
+  itemExtra?: (r: Row) => { label: string; value: unknown }[]
+  connector: (r: Row) => string
+  tone: 'error' | 'primary'
 }) {
   const groups = groupRowsBy(rows, groupKey, groupLabel)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toneBadge   = tone === 'error' ? 'bg-error/15 text-error' : 'bg-primary/15 text-primary'
+  const toneCaption = tone === 'error' ? 'text-error' : 'text-primary'
 
   const toggle = (key: string) => setExpanded(prev => {
     const next = new Set(prev)
@@ -266,8 +277,8 @@ function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemCod
                 {code && <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary shrink-0">{code}</span>}
               </span>
               <span className="flex items-center gap-3 shrink-0">
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-error/15 text-error">
-                  ✕ {g.items.length}
+                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${toneBadge}`}>
+                  {g.items.length}
                 </span>
                 <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
               </span>
@@ -276,21 +287,24 @@ function NonCombinableAccordion({ rows, groupKey, groupLabel, groupCode, itemCod
               <div className="p-4 pt-0 flex flex-col gap-4">
                 {subGroups.map(sg => (
                   <div key={sg.key}>
-                    <div className="text-xs font-semibold text-error mb-2">
-                      ✕ não combina com — {sg.label} <span className="text-outline font-normal">({sg.items.length})</span>
+                    <div className="text-sm font-bold text-on-surface mb-2">
+                      {sg.label} <span className="text-outline font-normal">({sg.items.length})</span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {sg.items.map(r => (
-                        <AccessoryDetailCard
-                          key={r.id}
-                          r={{
-                            id: r.id,
-                            protheus_code: itemCode(r),
-                            accessoryName: itemLabel(r),
-                            accessory: itemAccessory(r),
-                            alertDescription: itemAlert ? itemAlert(r) : null,
-                          }}
-                        />
+                        <div key={r.id}>
+                          <div className={`text-xs font-semibold mb-1.5 ${toneCaption}`}>{connector(r)}</div>
+                          <AccessoryDetailCard
+                            r={{
+                              id: r.id,
+                              protheus_code: itemCode(r),
+                              accessoryName: itemLabel(r),
+                              accessory: itemAccessory(r),
+                              alertDescription: itemAlert ? itemAlert(r) : null,
+                            }}
+                            extra={itemExtra ? itemExtra(r) : undefined}
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -320,42 +334,6 @@ function InfoCard({ name, code, highlight, footer }: {
         </div>
       )}
       {footer && <div className="mt-3 flex items-center justify-between gap-2">{footer}</div>}
-    </div>
-  )
-}
-
-/** Relational pair card: two sides joined by a connector badge — used for
- *  "não combina com" and "requer" links, where two codes/names relate to
- *  each other under a given equipment context. */
-function PairCard({ context, leftName, leftCode, rightName, rightCode, connector, tone }: {
-  context?: string | null
-  leftName: string
-  leftCode: string
-  rightName: string
-  rightCode: string
-  connector: string
-  tone: 'error' | 'primary'
-}) {
-  return (
-    <div className="rounded-lg border-2 border-outline-variant bg-surface-container-high p-4">
-      {context && <div className="text-xs font-semibold text-on-surface-variant mb-3 truncate">{context}</div>}
-      <div className="flex items-stretch gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-on-surface text-sm leading-snug break-words">{leftName}</div>
-          <div className="mt-1 font-mono text-xs text-primary truncate">{leftCode}</div>
-        </div>
-        <div className="shrink-0 flex items-center">
-          <span className={`text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${
-            tone === 'error' ? 'bg-error/15 text-error' : 'bg-primary/15 text-primary'
-          }`}>
-            {connector}
-          </span>
-        </div>
-        <div className="flex-1 min-w-0 text-right">
-          <div className="font-bold text-on-surface text-sm leading-snug break-words">{rightName}</div>
-          <div className="mt-1 font-mono text-xs text-primary truncate">{rightCode}</div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -464,7 +442,7 @@ export default function ExploradorRelacoesPage() {
           </SectionPanel>
 
           <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
-            <NonCombinableAccordion
+            <RelationAccordion
               rows={result.nonCombinable}
               groupKey={r => r.protheus_code}
               groupLabel={r => r.name1 || 'N/A'}
@@ -474,19 +452,26 @@ export default function ExploradorRelacoesPage() {
               itemAccessory={r => r.otherAccessory ?? null}
               itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
+              connector={() => '✕ não combina com'}
+              tone="error"
             />
           </SectionPanel>
 
-          <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
-            {result.dependants.map(r => (
-              <PairCard
-                key={r.id}
-                leftName={r.itemName || 'N/A'} leftCode={r.protheus_code}
-                rightName={r.dependentName || 'N/A'} rightCode={r.protheus_item_code}
-                connector={`→ requer x${r.quantity}`}
-                tone="primary"
-              />
-            ))}
+          <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length} plain>
+            <RelationAccordion
+              rows={result.dependants}
+              groupKey={r => r.protheus_code}
+              groupLabel={r => r.itemName || 'N/A'}
+              groupCode={r => r.protheus_code}
+              itemCode={r => r.protheus_item_code}
+              itemLabel={r => r.dependentName || 'N/A'}
+              itemAccessory={r => r.dependentAccessory ?? null}
+              itemGroupName={r => r.dependentGroupName ?? null}
+              itemAlert={r => r.dependentAlertDescription ?? null}
+              itemExtra={r => [{ label: 'Qtd. Necessária', value: r.quantity }]}
+              connector={r => `→ requer x${r.quantity}`}
+              tone="primary"
+            />
           </SectionPanel>
 
           <SectionPanel title="Mesas de Roletes" tint="amber" count={result.rollerTables.length}>
@@ -530,7 +515,7 @@ export default function ExploradorRelacoesPage() {
           </SectionPanel>
 
           <SectionPanel title="Produtos Não Combináveis" tint="amber" count={result.nonCombinable.length} plain>
-            <NonCombinableAccordion
+            <RelationAccordion
               rows={result.nonCombinable}
               groupKey={r => String(r.legacy_equipment_id)}
               groupLabel={r => r.equipmentName || 'N/A'}
@@ -539,20 +524,25 @@ export default function ExploradorRelacoesPage() {
               itemAccessory={r => r.otherAccessory ?? null}
               itemGroupName={r => r.otherGroupName ?? null}
               itemAlert={r => r.otherAlertDescription ?? null}
+              connector={() => '✕ não combina com'}
+              tone="error"
             />
           </SectionPanel>
 
-          <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length}>
-            {result.dependants.map(r => (
-              <PairCard
-                key={r.id}
-                context={r.equipmentName}
-                leftName={result.accessory.name} leftCode={result.accessory.protheus_code}
-                rightName={r.otherName || 'N/A'} rightCode={r.otherCode}
-                connector={r.role === 'item' ? `→ requer x${r.quantity}` : `← requerido por`}
-                tone="primary"
-              />
-            ))}
+          <SectionPanel title="Produtos Dependentes" tint="amber" count={result.dependants.length} plain>
+            <RelationAccordion
+              rows={result.dependants}
+              groupKey={r => String(r.legacy_equipment_id)}
+              groupLabel={r => r.equipmentName || 'N/A'}
+              itemCode={r => r.otherCode}
+              itemLabel={r => r.otherName || 'N/A'}
+              itemAccessory={r => r.otherAccessory ?? null}
+              itemGroupName={r => r.otherGroupName ?? null}
+              itemAlert={r => r.otherAlertDescription ?? null}
+              itemExtra={r => r.role === 'item' ? [{ label: 'Qtd. Necessária', value: r.quantity }] : []}
+              connector={r => r.role === 'item' ? `→ requer x${r.quantity}` : '← requerido por'}
+              tone="primary"
+            />
           </SectionPanel>
 
           <SectionPanel title="Mesas de Roletes" tint="amber" count={result.rollerTables.length}>

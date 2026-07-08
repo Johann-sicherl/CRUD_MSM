@@ -98,11 +98,17 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           otherAlertDescription: otherAcc?.legacy_general_alert_id ? (alertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
         }
       }),
-      dependants: dependants.map(r => ({
-        ...r,
-        itemName: accessoryMap[r.protheus_code]?.name ?? null,
-        dependentName: accessoryMap[r.protheus_item_code]?.name ?? null,
-      })),
+      dependants: dependants.map(r => {
+        const depAcc = accessoryMap[r.protheus_item_code] ?? null
+        return {
+          ...r,
+          itemName: accessoryMap[r.protheus_code]?.name ?? null,
+          dependentName: depAcc?.name ?? null,
+          dependentAccessory: depAcc,
+          dependentGroupName: depAcc?.legacy_group_id != null ? (groupNameMap[depAcc.legacy_group_id] ?? null) : null,
+          dependentAlertDescription: depAcc?.legacy_general_alert_id ? (alertMap[depAcc.legacy_general_alert_id] ?? null) : null,
+        }
+      }),
       rollerTables: roller.map(r => ({ ...r, accessoryName: accessoryMap[r.protheus_code]?.name ?? null })),
     })
   }
@@ -191,12 +197,16 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       dependants: dependants.map(r => {
         const isFirst = r.protheus_code === accessory.protheus_code
         const otherCode = isFirst ? r.protheus_item_code : r.protheus_code
+        const otherAcc = otherMap[otherCode] ?? null
         return {
           ...r,
           equipmentName: equipMap[r.legacy_equipment_id] ?? null,
           role: isFirst ? 'item' : 'dependente',
           otherCode,
-          otherName: otherMap[otherCode]?.name ?? null,
+          otherName: otherAcc?.name ?? null,
+          otherAccessory: otherAcc,
+          otherGroupName: otherAcc?.legacy_group_id != null ? (otherGroupNameMap[otherAcc.legacy_group_id] ?? null) : null,
+          otherAlertDescription: otherAcc?.legacy_general_alert_id ? (otherAlertMap[otherAcc.legacy_general_alert_id] ?? null) : null,
         }
       }),
       rollerTables: roller.map(r => ({ ...r, equipmentName: equipMap[r.legacy_equipment_id] ?? null })),
