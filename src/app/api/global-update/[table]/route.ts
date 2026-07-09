@@ -1,17 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables, FORCE_TO_ONE_FIELDS, getRealColumnFields } from '@/lib/schema'
+import { tables, FORCE_TO_ONE_FIELDS, getRealColumnFields, type Field } from '@/lib/schema'
 
 type RouteParams = { params: { table: string } }
 
 // Deliberately does not import anything from '@/lib/sqlAudit' — a full-table
 // replace from the official CSV export must never appear in Auditoria.
 
-function toCellValue(type: string, raw: unknown): unknown {
-  if (raw === undefined || raw === null) return null
+// Official CSV exports often spell an absent value out as the literal text
+// "NULL" instead of leaving the cell empty — treat both as no value.
+function isBlankCell(raw: unknown): boolean {
+  const s = String(raw ?? '').trim()
+  return s === '' || s.toUpperCase() === 'NULL'
+}
+
+// A blank/"NULL" cell on a NOT NULL column that has a schema default falls
+// back to that default (mirrors the regular POST /api/[table] route) instead
+// of being sent as SQL NULL, which would fail the column's NOT NULL
+// constraint since jsonb_populate_recordset never applies table-level
+// DEFAULTs on its own.
+function toCellValue(field: Field, raw: unknown): unknown {
+  if (isBlankCell(raw)) {
+    return !field.nullable && field.defaultValue !== undefined ? field.defaultValue : null
+  }
   const s = String(raw).trim()
-  if (s === '') return null
-  if (type === 'jsonb') {
+  if (field.type === 'jsonb') {
     try { return JSON.parse(s) } catch { return s }
   }
   return s
@@ -36,7 +49,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     for (const [key, raw] of Object.entries(row)) {
       const field = fieldByLowerName.get(key.trim().toLowerCase())
       if (!field) continue // column not part of this table's schema — dropped
-      out[field.name] = toCellValue(field.type, raw)
+      out[field.name] = toCellValue(field, raw)
     }
     // Financial multipliers must always be 1, regardless of the CSV value
     for (const f of FORCE_TO_ONE_FIELDS) {

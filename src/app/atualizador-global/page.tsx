@@ -113,6 +113,14 @@ function detectTable(headers: string[]): DetectionResult | null {
   }
 }
 
+// Official CSV exports often spell an absent value out as the literal text
+// "NULL" instead of leaving the cell empty — treat both as no value, same as
+// the server (src/app/api/global-update/[table]/route.ts).
+const isBlankCell = (raw: unknown) => {
+  const s = String(raw ?? '').trim()
+  return s === '' || s.toUpperCase() === 'NULL'
+}
+
 function computeRowIssues(detection: DetectionResult, rows: Record<string, string>[]) {
   const requiredFields = detection.realFields.filter(f =>
     isRequiredField(f) && detection.headerByLowerName.has(f.name.toLowerCase())
@@ -126,12 +134,12 @@ function computeRowIssues(detection: DetectionResult, rows: Record<string, strin
   for (const row of rows) {
     for (const f of requiredFields) {
       const header = detection.headerByLowerName.get(f.name.toLowerCase())!
-      if (String(row[header] ?? '').trim() === '') requiredEmptyCount++
+      if (isBlankCell(row[header])) requiredEmptyCount++
     }
     for (const f of selectFields) {
       const header = detection.headerByLowerName.get(f.name.toLowerCase())!
       const v = String(row[header] ?? '').trim()
-      if (v !== '' && !f.options!.some(o => o.toLowerCase() === v.toLowerCase())) selectInvalidCount++
+      if (!isBlankCell(v) && !f.options!.some(o => o.toLowerCase() === v.toLowerCase())) selectInvalidCount++
     }
   }
   return { requiredEmptyCount, selectInvalidCount }
@@ -366,7 +374,7 @@ export default function AtualizadorGlobalPage() {
                                     const raw = header ? row[header] : undefined
                                     return (
                                       <td key={f.name} className={`px-2 py-1 whitespace-nowrap ${forced ? 'text-amber-400 font-semibold' : 'text-on-surface'}`}>
-                                        {forced ? '1' : (raw === undefined || raw === '' ? <span className="text-outline">—</span> : raw)}
+                                        {forced ? '1' : (raw === undefined || isBlankCell(raw) ? <span className="text-outline">—</span> : raw)}
                                       </td>
                                     )
                                   })}
