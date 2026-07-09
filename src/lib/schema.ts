@@ -413,6 +413,28 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
+  structure_property_rules: {
+    label: 'Parâmetros de Análise de Estruturas',
+    description: 'Regras usadas pelo Analisador de Estruturas: se um código aparece na estrutura, a propriedade do equipamento deve ter este valor',
+    domain: 'regras',
+    hasTimestamps: true,
+    orderBy: 'property_field',
+    columnFilters: true,
+    importExport: true,
+    compactHeader: true,
+    bulkEdit: true,
+    auditQueries: true,
+    fields: [
+      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
+      { name: 'property_field', label: 'Grupo Acessórios (coluna)', type: 'select', nullable: false, showInList: true,
+        options: ['processor', 'memory', 'storage', 'graphics_card', 'conveyor_belt_load_capacity_kg', 'tube_power_kv', 'certificate', 'conveyor_belt_type', 'motopolia_type', 'language', 'color'] },
+      { name: 'component_code', label: 'Código Acessório Protheus', type: 'text', nullable: false, showInList: true, listFilterType: 'text' },
+      { name: 'expected_value', label: 'Output', type: 'text', nullable: false, showInList: true, listFilterType: 'text' },
+      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
+      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
+    ],
+  },
+
   // ── TRANSACIONAL (oculto da UI) ───────────────────────────────────────────
 
   quotes: {

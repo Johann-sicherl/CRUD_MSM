@@ -162,6 +162,16 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           >
             <span className="truncate">Atualizador Global de Tabelas MSM</span>
           </Link>
+          <Link
+            href="/analisador-estruturas"
+            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+              pathname === '/analisador-estruturas'
+                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+            }`}
+          >
+            <span className="truncate">Analisador de Estruturas</span>
+          </Link>
         </div>
 
         {/* Footer */}
