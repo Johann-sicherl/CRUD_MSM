@@ -20,7 +20,9 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
-    items: Object.entries(tables).filter(([, schema]) => schema.domain === domain),
+    // structure_property_rules gets its own dedicated JSON editor page,
+    // linked manually under "Sistema" — excluded here to avoid a duplicate entry.
+    items: Object.entries(tables).filter(([tableName, schema]) => schema.domain === domain && tableName !== 'structure_property_rules'),
   }))
 
   return (
@@ -79,6 +81,16 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           >
             <span className="font-medium">Dashboard</span>
           </Link>
+          <Link
+            href="/explorador-relacoes"
+            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+              pathname === '/explorador-relacoes'
+                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+            }`}
+          >
+            <span className="truncate">Janela de Pesquisa Avançada</span>
+          </Link>
 
           {byDomain.map(({ domain, items }) => (
             <div key={domain} className="mt-5">
@@ -115,64 +127,66 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               )}
             </div>
           ))}
-        </nav>
 
-        {/* Sistema */}
-        <div className="mt-5 mb-2">
-          <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-            Sistema
+          {/* Sistema — kept inside the same scrollable flow as Regras, right
+              below it, instead of a separate flex sibling (which used to get
+              pushed to the bottom of the sidebar regardless of content length) */}
+          <div className="mt-5">
+            <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
+              Sistema
+            </div>
+            <Link
+              href="/options"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/options'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Listas de Opções</span>
+            </Link>
+            <Link
+              href="/auditoria"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/auditoria'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Auditoria</span>
+            </Link>
+            <Link
+              href="/parametros-estrutura"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/parametros-estrutura'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Parâmetros de Estrutura</span>
+            </Link>
+            <Link
+              href="/atualizador-global"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/atualizador-global'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Atualizador Global de Tabelas MSM</span>
+            </Link>
+            <Link
+              href="/analisador-estruturas"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/analisador-estruturas'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Analisador de Estruturas</span>
+            </Link>
           </div>
-          <Link
-            href="/options"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/options'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Listas de Opções</span>
-          </Link>
-          <Link
-            href="/auditoria"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/auditoria'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Auditoria</span>
-          </Link>
-          <Link
-            href="/explorador-relacoes"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/explorador-relacoes'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Janela de Pesquisa Avançada</span>
-          </Link>
-          <Link
-            href="/atualizador-global"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/atualizador-global'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Atualizador Global de Tabelas MSM</span>
-          </Link>
-          <Link
-            href="/analisador-estruturas"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/analisador-estruturas'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Analisador de Estruturas</span>
-          </Link>
-        </div>
+        </nav>
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-outline-variant text-[10px] text-outline font-mono flex items-center justify-between">
