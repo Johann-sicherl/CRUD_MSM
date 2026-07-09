@@ -1,11 +1,12 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { tables, FORCE_TO_ONE_FIELDS, type Field, type TableSchema } from '@/lib/schema'
+import { tables, FORCE_TO_ONE_FIELDS, getRealColumnFields, type Field, type TableSchema } from '@/lib/schema'
 
 interface DetectionResult {
   tableName: string
   schema: TableSchema
+  realFields: Field[]
   headerByLowerName: Map<string, string>
   missingRequired: Field[]
   missingOptional: Field[]
@@ -75,32 +76,34 @@ async function parseCsvRaw(file: File): Promise<{ headers: string[]; rows: Recor
 
 function detectTable(headers: string[]): DetectionResult | null {
   const headerLowerSet = new Set(headers.map(h => h.toLowerCase()))
-  let best: { tableName: string; schema: TableSchema; overlap: number } | null = null
+  let best: { tableName: string; schema: TableSchema; realFields: Field[]; overlap: number } | null = null
   for (const [tableName, schema] of Object.entries(tables)) {
-    const overlap = schema.fields.filter(f => headerLowerSet.has(f.name.toLowerCase())).length
-    if (!best || overlap > best.overlap) best = { tableName, schema, overlap }
+    const realFields = getRealColumnFields(schema)
+    const overlap = realFields.filter(f => headerLowerSet.has(f.name.toLowerCase())).length
+    if (!best || overlap > best.overlap) best = { tableName, schema, realFields, overlap }
   }
   if (!best || best.overlap === 0) return null
 
   const headerByLowerName = new Map(headers.map(h => [h.toLowerCase(), h]))
-  const fieldLowerSet = new Set(best.schema.fields.map(f => f.name.toLowerCase()))
+  const fieldLowerSet = new Set(best.realFields.map(f => f.name.toLowerCase()))
   const present = (f: Field) => headerByLowerName.has(f.name.toLowerCase())
 
   return {
     tableName: best.tableName,
     schema: best.schema,
+    realFields: best.realFields,
     headerByLowerName,
-    missingRequired: best.schema.fields.filter(f => !present(f) && isRequiredField(f)),
-    missingOptional: best.schema.fields.filter(f => !present(f) && !isRequiredField(f)),
+    missingRequired: best.realFields.filter(f => !present(f) && isRequiredField(f)),
+    missingOptional: best.realFields.filter(f => !present(f) && !isRequiredField(f)),
     extraColumns: headers.filter(h => !fieldLowerSet.has(h.toLowerCase())),
   }
 }
 
 function computeRowIssues(detection: DetectionResult, rows: Record<string, string>[]) {
-  const requiredFields = detection.schema.fields.filter(f =>
+  const requiredFields = detection.realFields.filter(f =>
     isRequiredField(f) && detection.headerByLowerName.has(f.name.toLowerCase())
   )
-  const selectFields = detection.schema.fields.filter(f =>
+  const selectFields = detection.realFields.filter(f =>
     f.type === 'select' && f.options && detection.headerByLowerName.has(f.name.toLowerCase())
   )
 
@@ -315,7 +318,7 @@ export default function AtualizadorGlobalPage() {
                           <table className="text-xs w-full">
                             <thead className="sticky top-0 bg-surface-container-highest">
                               <tr>
-                                {d.schema.fields.map(f => (
+                                {d.realFields.map(f => (
                                   <th key={f.name} className={`text-left px-2 py-1.5 font-mono whitespace-nowrap border-b border-outline-variant ${
                                     FORCE_TO_ONE_FIELDS.includes(f.name) ? 'text-amber-400' : 'text-on-surface-variant'
                                   }`}>
@@ -329,7 +332,7 @@ export default function AtualizadorGlobalPage() {
                             <tbody>
                               {previewRows.map((row, i) => (
                                 <tr key={i} className="border-b border-outline-variant/50 odd:bg-surface-container-low">
-                                  {d.schema.fields.map(f => {
+                                  {d.realFields.map(f => {
                                     const header = d.headerByLowerName.get(f.name.toLowerCase())
                                     const forced = FORCE_TO_ONE_FIELDS.includes(f.name)
                                     const raw = header ? row[header] : undefined

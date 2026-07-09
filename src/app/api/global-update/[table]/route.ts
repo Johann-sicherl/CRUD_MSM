@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { tables, FORCE_TO_ONE_FIELDS, getRealColumnFields } from '@/lib/schema'
 
 type RouteParams = { params: { table: string } }
 
@@ -26,7 +26,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const rows: Record<string, unknown>[] = Array.isArray(body.rows) ? body.rows : []
   if (rows.length === 0) return NextResponse.json({ error: 'Nenhuma linha para importar' }, { status: 400 })
 
-  const fieldByLowerName = new Map(schema.fields.map(f => [f.name.toLowerCase(), f]))
+  // Only real database columns — excludes join-derived display fields
+  // (e.g. accessory_name resolved from protheus_code), which don't exist as
+  // columns in the actual table and would make the insert fail.
+  const fieldByLowerName = new Map(getRealColumnFields(schema).map(f => [f.name.toLowerCase(), f]))
 
   const insertRows = rows.map(row => {
     const out: Record<string, unknown> = {}

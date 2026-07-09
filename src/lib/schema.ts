@@ -536,6 +536,20 @@ export function getEditableFields(tableName: string): Field[] {
   return schema.fields.filter(f => !f.isPk && !f.isReadonly)
 }
 
+// A field whose lookupFrom sets sourceField is entirely computed by joining
+// through ANOTHER field's value (e.g. accessory_name resolved from
+// protheus_code) — it has no column of its own in the real database table,
+// it only exists in this schema for the app's own list/form display. Used by
+// the Atualizador Global de Tabelas MSM to compare a CSV export (which only
+// has real columns) against the actual table structure, not the app's schema.
+export function isRealColumnField(field: Field): boolean {
+  return !field.lookupFrom?.sourceField
+}
+
+export function getRealColumnFields(schema: TableSchema): Field[] {
+  return schema.fields.filter(isRealColumnField)
+}
+
 export function getListFields(tableName: string): Field[] {
   const schema = tables[tableName]
   if (!schema) return []
