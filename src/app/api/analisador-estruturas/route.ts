@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { readStructurePropertyRules, type StructurePropertyRule } from '@/lib/structurePropertyRules'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -13,19 +14,17 @@ export async function POST(request: NextRequest) {
 
   if (!protheusCode) return NextResponse.json({ error: 'Nome do arquivo não corresponde a um código Protheus' }, { status: 400 })
 
-  const uniqueCodes = Array.from(new Set(codes))
+  const uniqueCodes = new Set(codes)
 
-  const [rulesRes, equipRes] = await Promise.all([
-    uniqueCodes.length > 0
-      ? supabaseAdmin.from('structure_property_rules').select('*').in('component_code', uniqueCodes)
-      : Promise.resolve({ data: [] as Row[] }),
+  const [allRules, equipRes] = await Promise.all([
+    Promise.resolve(readStructurePropertyRules()),
     supabaseAdmin.from('standard_equipment_items').select('*').ilike('protheus_code', protheusCode).maybeSingle(),
   ])
 
-  const rules: Row[] = rulesRes.data || []
+  const rules: StructurePropertyRule[] = allRules.filter(r => uniqueCodes.has(r.component_code))
   const equipment: Row | null = equipRes.data
 
-  const byProperty = new Map<string, Row[]>()
+  const byProperty = new Map<string, StructurePropertyRule[]>()
   for (const r of rules) {
     if (!byProperty.has(r.property_field)) byProperty.set(r.property_field, [])
     byProperty.get(r.property_field)!.push(r)
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
       protheus_code: equipment.protheus_code,
       status: equipment.status,
     } : null,
-    codesAnalyzed: uniqueCodes.length,
+    codesAnalyzed: uniqueCodes.size,
     properties,
   })
 }

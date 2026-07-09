@@ -20,9 +20,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
-    // structure_property_rules gets its own dedicated JSON editor page,
-    // linked manually under "Sistema" — excluded here to avoid a duplicate entry.
-    items: Object.entries(tables).filter(([tableName, schema]) => schema.domain === domain && tableName !== 'structure_property_rules'),
+    items: Object.entries(tables).filter(([, schema]) => schema.domain === domain),
   }))
 
   return (

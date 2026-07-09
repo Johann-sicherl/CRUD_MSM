@@ -132,7 +132,7 @@ export default function AnalisadorEstruturasPage() {
           Envie um ou mais arquivos .xlsx de estrutura (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot;) —
           o nome do arquivo deve ser o código Protheus do equipamento. Cada código da estrutura é
           comparado com as regras cadastradas em{' '}
-          <a href="/structure_property_rules" className="text-primary hover:underline">Parâmetros de Análise de Estruturas</a>
+          <a href="/parametros-estrutura" className="text-primary hover:underline">Parâmetros de Estrutura</a>
           : se dois códigos do mesmo grupo indicarem valores diferentes, gera alerta de duplicidade;
           se o valor não bater com o cadastro do equipamento em Cadastro de Equipamentos, gera alerta de erro.
         </p>

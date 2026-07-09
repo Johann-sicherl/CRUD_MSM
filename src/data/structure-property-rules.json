@@ -1,0 +1,892 @@
+[
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00039",
+    "expected_value": "SANDT - 170 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00102",
+    "expected_value": "SANDT - 160 kV"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00078",
+    "expected_value": "I3"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00078",
+    "expected_value": "4 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00078",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00078",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00079",
+    "expected_value": "I5"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00079",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00079",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00079",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00084",
+    "expected_value": "I3"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00084",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00084",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00084",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00090",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00090",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00090",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00090",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00004",
+    "expected_value": "MONOFASICA"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00053",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00117",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00119",
+    "expected_value": "MONOFASICA"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00121",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00093",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00093",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00093",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00093",
+    "expected_value": "4 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00095",
+    "expected_value": "I3"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00095",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00095",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00095",
+    "expected_value": "4 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00069",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00069",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00069",
+    "expected_value": "500 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.08.00299",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00104",
+    "expected_value": "I5"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00104",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00104",
+    "expected_value": "500 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00104",
+    "expected_value": "N/A"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00044",
+    "expected_value": "I5"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00044",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00044",
+    "expected_value": "500 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00044",
+    "expected_value": "N/A"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00108",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00108",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00108",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00108",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00109",
+    "expected_value": "I5"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00109",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00109",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00109",
+    "expected_value": "4 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "27.02.00897",
+    "expected_value": "I3"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "27.02.00897",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "27.02.00897",
+    "expected_value": "256 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "27.02.00897",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "27.02.00898",
+    "expected_value": "I5"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "27.02.00898",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "27.02.00898",
+    "expected_value": "256 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "27.02.00898",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "27.02.00899",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "27.02.00899",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "27.02.00899",
+    "expected_value": "256 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "27.02.00899",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "27.02.00900",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "27.02.00900",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "27.02.00900",
+    "expected_value": "512 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "27.02.00900",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "27.02.00901",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "27.02.00901",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "27.02.00901",
+    "expected_value": "256 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "27.02.00901",
+    "expected_value": "4 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00122",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00122",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00122",
+    "expected_value": "256 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00122",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00120",
+    "expected_value": "I3"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00120",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00120",
+    "expected_value": "256 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00120",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00132",
+    "expected_value": "RZ5"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00132",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00132",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00132",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00126",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00126",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00126",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00126",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00134",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00134",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00134",
+    "expected_value": "512 GB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00134",
+    "expected_value": "8 GB"
+  },
+  {
+    "property_field": "processor",
+    "component_code": "20.10.00115",
+    "expected_value": "I7"
+  },
+  {
+    "property_field": "memory",
+    "component_code": "20.10.00115",
+    "expected_value": "16 GB"
+  },
+  {
+    "property_field": "storage",
+    "component_code": "20.10.00115",
+    "expected_value": "1 TB"
+  },
+  {
+    "property_field": "graphics_card",
+    "component_code": "20.10.00115",
+    "expected_value": "2 GB"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00053",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00121",
+    "expected_value": "TIANJIN"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00117",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00004",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00119",
+    "expected_value": "TIANJIN"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00127",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00127",
+    "expected_value": "AMROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00018",
+    "expected_value": "MONOFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00018",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00012",
+    "expected_value": "MONOFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00012",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00068",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00068",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00071",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00071",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "20.14.00033",
+    "expected_value": "N/A"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "20.14.00033",
+    "expected_value": "N/A"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00069",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00069",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00063",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00063",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00129",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00129",
+    "expected_value": "AMROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.23.02933",
+    "expected_value": "N/A"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.23.02933",
+    "expected_value": "N/A"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00060",
+    "expected_value": "HZ - 160 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00040",
+    "expected_value": "SANDT - 150 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "27.02.00422",
+    "expected_value": "VMI - 160 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "27.02.00421",
+    "expected_value": "VMI - 180 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00038",
+    "expected_value": "SANDT - 110 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00042",
+    "expected_value": "SANDT - 200 kV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00044",
+    "expected_value": "HZ - 110 KV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00080",
+    "expected_value": "SANDT - 200 KV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00082",
+    "expected_value": "VJ - 200 KV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "01.30.00012",
+    "expected_value": "VARIAN - 320 KV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.06.00014",
+    "expected_value": "LINATRON - 6 MEV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "01.34.00001",
+    "expected_value": "LINATRON - 6 MEV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00121",
+    "expected_value": "SANDT - 160 KV 3MA"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00182",
+    "expected_value": "MONOFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00182",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "conveyor_belt_load_capacity_kg",
+    "component_code": "21.07.00173",
+    "expected_value": "TRIFASICA"
+  },
+  {
+    "property_field": "motopolia_type",
+    "component_code": "21.07.00173",
+    "expected_value": "INTERROLL"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.08.10790.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.08.10790.00",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "21.23.04290",
+    "expected_value": "BRANCO/CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.04290",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "21.23.02451",
+    "expected_value": "BRANCO/CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.02451",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "21.23.04530",
+    "expected_value": "BRANCO/CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.04530",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.02.10113.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.02.10113.00",
+    "expected_value": "ING"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.04.10109.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.04.10109.00",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.02.10108.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.02.10108.00",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.04.10115.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.04.10115.00",
+    "expected_value": "ING"
+  },
+  {
+    "property_field": "color",
+    "component_code": "21.23.04362",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.04362",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.03.10021.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.03.10021.00",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.03.10010.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.03.10010.00",
+    "expected_value": "ING/FRAN"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.03.10020.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.03.10020.00",
+    "expected_value": "ING/FRAN"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.03.11418.01",
+    "expected_value": "BRANCO/CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.03.11418.01",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.20.10562.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.20.10562.00",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.23.10310.02",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.23.10310.02",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.11.11090.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.11.11090.00",
+    "expected_value": "ING/FRAN"
+  },
+  {
+    "property_field": "color",
+    "component_code": "33.11.11117.00",
+    "expected_value": "CINZA"
+  },
+  {
+    "property_field": "language",
+    "component_code": "33.11.11117.00",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "color",
+    "component_code": "21.23.04611",
+    "expected_value": "BRANCO"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.04611",
+    "expected_value": "ING"
+  },
+  {
+    "property_field": "color",
+    "component_code": "21.23.02070",
+    "expected_value": "BRANCO"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.02070",
+    "expected_value": "ING/PORT"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00057",
+    "expected_value": "HZ - 125 KV"
+  },
+  {
+    "property_field": "tube_power_kv",
+    "component_code": "20.05.00095",
+    "expected_value": "HZ - 125 KV"
+  },
+  {
+    "property_field": "language",
+    "component_code": "21.23.04833",
+    "expected_value": "ING"
+  }
+]

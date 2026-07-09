@@ -26,17 +26,17 @@ export default function ParametrosEstruturaPage() {
   const [warning, setWarning] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
-  const loadFromDb = async () => {
+  const loadFromFile = async () => {
     setLoading(true)
     setError('')
     setSuccessMsg('')
     try {
-      const res = await fetch('/api/structure_property_rules?limit=25000')
+      const res = await fetch('/api/structure-property-rules')
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Falha ao carregar parâmetros'); return }
-      const rows: ParamRow[] = (json.data || [])
-        .map((r: ParamRow) => ({ property_field: r.property_field, component_code: r.component_code, expected_value: r.expected_value }))
-        .sort((a: ParamRow, b: ParamRow) => a.property_field.localeCompare(b.property_field) || a.component_code.localeCompare(b.component_code))
+      const rows: ParamRow[] = (json as ParamRow[])
+        .slice()
+        .sort((a, b) => a.property_field.localeCompare(b.property_field) || a.component_code.localeCompare(b.component_code))
       setJsonText(toJsonText(rows))
     } catch {
       setError('Falha de rede ao carregar parâmetros')
@@ -45,7 +45,7 @@ export default function ParametrosEstruturaPage() {
     }
   }
 
-  useEffect(() => { loadFromDb() }, [])
+  useEffect(() => { loadFromFile() }, [])
 
   const handleSave = async () => {
     setError('')
@@ -65,47 +65,30 @@ export default function ParametrosEstruturaPage() {
     }
 
     const unknownFields = new Set<string>()
-    for (let i = 0; i < parsed.length; i++) {
-      const row = parsed[i] as Record<string, unknown>
+    for (const row of parsed as Record<string, unknown>[]) {
       const field = String(row?.property_field ?? '').trim()
-      const code = String(row?.component_code ?? '').trim()
-      const value = String(row?.expected_value ?? '').trim()
-      if (!field || !code || !value) {
-        setError(`Linha ${i + 1}: precisa ter "property_field", "component_code" e "expected_value" preenchidos`)
-        return
-      }
-      if (!KNOWN_FIELDS.includes(field)) unknownFields.add(field)
+      if (field && !KNOWN_FIELDS.includes(field)) unknownFields.add(field)
     }
     if (unknownFields.size > 0) {
       setWarning(`Atenção: "${Array.from(unknownFields).join('", "')}" não é uma coluna conhecida de Cadastro de Equipamentos — confira a grafia.`)
     }
 
-    const nowIso = new Date().toISOString()
-    const rows = (parsed as Record<string, unknown>[]).map(row => ({
-      id: crypto.randomUUID(),
-      property_field: String(row.property_field).trim(),
-      component_code: String(row.component_code).trim(),
-      expected_value: String(row.expected_value).trim(),
-      created_at: nowIso,
-      updated_at: nowIso,
-    }))
-
     const ok = window.confirm(
-      `Isso vai substituir TODOS os parâmetros atuais pelos ${rows.length} deste JSON. Confirma?`
+      `Isso vai substituir TODOS os parâmetros atuais pelos ${parsed.length} deste JSON. Confirma?`
     )
     if (!ok) return
 
     setSaving(true)
     try {
-      const res = await fetch('/api/global-update/structure_property_rules', {
-        method: 'POST',
+      const res = await fetch('/api/structure-property-rules', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify(parsed),
       })
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Falha ao salvar parâmetros'); return }
-      setSuccessMsg(`${json.inserted} parâmetro(s) salvos com sucesso`)
-      await loadFromDb()
+      setSuccessMsg(`${json.saved} parâmetro(s) salvos com sucesso`)
+      await loadFromFile()
     } catch {
       setError('Falha de rede ao salvar parâmetros')
     } finally {
@@ -126,7 +109,9 @@ export default function ParametrosEstruturaPage() {
           na estrutura, a coluna <code className="bg-surface-container px-1 rounded">property_field</code> do
           equipamento (em Cadastro de Equipamentos) deve ter o valor de{' '}
           <code className="bg-surface-container px-1 rounded">expected_value</code>. Adicione, edite ou
-          remova entradas diretamente no JSON abaixo e clique em Salvar — isso substitui toda a lista atual.
+          remova entradas diretamente no JSON abaixo e clique em Salvar — isso substitui todo o arquivo.
+          Guardado em <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>,
+          sem depender de nenhuma tabela no banco de dados — mesmo padrão de Listas de Opções.
         </p>
       </div>
 
@@ -169,11 +154,11 @@ export default function ParametrosEstruturaPage() {
               {saving ? 'Salvando…' : 'Salvar'}
             </button>
             <button
-              onClick={loadFromDb}
+              onClick={loadFromFile}
               disabled={saving}
               className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
             >
-              Descartar alterações e recarregar do banco
+              Descartar alterações e recarregar do arquivo
             </button>
           </div>
         </>
