@@ -122,7 +122,7 @@ export default function AnalisadorEstruturasPage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-8 max-w-[108rem]">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
           Sistema · analisador de estruturas
