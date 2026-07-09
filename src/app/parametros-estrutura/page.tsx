@@ -2,166 +2,177 @@
 
 import { useEffect, useState } from 'react'
 
-interface ParamRow {
+interface Entry {
+  component_code: string
+  expected_value: string
+}
+
+interface Rule {
   property_field: string
   component_code: string
   expected_value: string
 }
 
-const KNOWN_FIELDS = [
-  'processor', 'memory', 'storage', 'graphics_card',
-  'conveyor_belt_load_capacity_kg', 'tube_power_kv', 'certificate',
-  'conveyor_belt_type', 'motopolia_type', 'language', 'color',
-]
-
-function toJsonText(rows: ParamRow[]): string {
-  return JSON.stringify(rows, null, 2)
+const FIELD_LABELS: Record<string, string> = {
+  processor: 'Processador',
+  memory: 'Memória',
+  storage: 'Armazenamento',
+  graphics_card: 'Placa Gráfica',
+  conveyor_belt_load_capacity_kg: 'Cap. Correia (kg)',
+  tube_power_kv: 'Potência Tubo (kV)',
+  certificate: 'Certificado',
+  conveyor_belt_type: 'Tipo Correia',
+  motopolia_type: 'Tipo Motopolia',
+  language: 'Idioma',
+  color: 'Cor',
 }
 
 export default function ParametrosEstruturaPage() {
-  const [jsonText, setJsonText] = useState('')
+  const [allRules, setAllRules] = useState<Record<string, Entry[]>>({})
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [warning, setWarning] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
+  const [codeInputs, setCodeInputs] = useState<Record<string, string>>({})
+  const [valueInputs, setValueInputs] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<Record<string, boolean>>({})
+  const [toast, setToast] = useState<string | null>(null)
 
-  const loadFromFile = async () => {
-    setLoading(true)
-    setError('')
-    setSuccessMsg('')
-    try {
-      const res = await fetch('/api/structure-property-rules')
-      const json = await res.json()
-      if (!res.ok) { setError(json.error || 'Falha ao carregar parâmetros'); return }
-      const rows: ParamRow[] = (json as ParamRow[])
-        .slice()
-        .sort((a, b) => a.property_field.localeCompare(b.property_field) || a.component_code.localeCompare(b.component_code))
-      setJsonText(toJsonText(rows))
-    } catch {
-      setError('Falha de rede ao carregar parâmetros')
-    } finally {
-      setLoading(false)
-    }
+  useEffect(() => {
+    fetch('/api/structure-property-rules')
+      .then(r => r.json())
+      .then((rows: Rule[]) => {
+        const grouped: Record<string, Entry[]> = {}
+        for (const r of rows) {
+          if (!grouped[r.property_field]) grouped[r.property_field] = []
+          grouped[r.property_field].push({ component_code: r.component_code, expected_value: r.expected_value })
+        }
+        setAllRules(grouped)
+        setLoading(false)
+      })
+  }, [])
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2500)
   }
 
-  useEffect(() => { loadFromFile() }, [])
-
-  const handleSave = async () => {
-    setError('')
-    setWarning('')
-    setSuccessMsg('')
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(jsonText)
-    } catch (e) {
-      setError(`JSON inválido: ${e instanceof Error ? e.message : String(e)}`)
-      return
+  const addEntry = async (field: string) => {
+    const code = (codeInputs[field] || '').trim()
+    const value = (valueInputs[field] || '').trim()
+    if (!code || !value) return
+    setBusy(prev => ({ ...prev, [field]: true }))
+    const res = await fetch('/api/structure-property-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ property_field: field, component_code: code, expected_value: value }),
+    })
+    if (res.ok) {
+      const updated: Rule[] = await res.json()
+      setAllRules(prev => ({ ...prev, [field]: updated.map(u => ({ component_code: u.component_code, expected_value: u.expected_value })) }))
+      setCodeInputs(prev => ({ ...prev, [field]: '' }))
+      setValueInputs(prev => ({ ...prev, [field]: '' }))
+      showToast(`"${code}" salvo em ${FIELD_LABELS[field] || field}`)
     }
-    if (!Array.isArray(parsed)) {
-      setError('O JSON precisa ser uma lista (array) de parâmetros — [ {...}, {...} ]')
-      return
-    }
+    setBusy(prev => ({ ...prev, [field]: false }))
+  }
 
-    const unknownFields = new Set<string>()
-    for (const row of parsed as Record<string, unknown>[]) {
-      const field = String(row?.property_field ?? '').trim()
-      if (field && !KNOWN_FIELDS.includes(field)) unknownFields.add(field)
-    }
-    if (unknownFields.size > 0) {
-      setWarning(`Atenção: "${Array.from(unknownFields).join('", "')}" não é uma coluna conhecida de Cadastro de Equipamentos — confira a grafia.`)
-    }
-
-    const ok = window.confirm(
-      `Isso vai substituir TODOS os parâmetros atuais pelos ${parsed.length} deste JSON. Confirma?`
-    )
-    if (!ok) return
-
-    setSaving(true)
-    try {
-      const res = await fetch('/api/structure-property-rules', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed),
-      })
-      const json = await res.json()
-      if (!res.ok) { setError(json.error || 'Falha ao salvar parâmetros'); return }
-      setSuccessMsg(`${json.saved} parâmetro(s) salvos com sucesso`)
-      await loadFromFile()
-    } catch {
-      setError('Falha de rede ao salvar parâmetros')
-    } finally {
-      setSaving(false)
+  const removeEntry = async (field: string, code: string) => {
+    const res = await fetch('/api/structure-property-rules', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ property_field: field, component_code: code }),
+    })
+    if (res.ok) {
+      const updated: Rule[] = await res.json()
+      setAllRules(prev => ({ ...prev, [field]: updated.map(u => ({ component_code: u.component_code, expected_value: u.expected_value })) }))
+      showToast(`"${code}" removido`)
     }
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-6 max-w-[1400px]">
       <div className="mb-6">
-        <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
-          Sistema · parâmetros de estrutura
-        </div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Parâmetros de Estrutura</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Edite livremente a lista de parâmetros usada pelo Analisador de Estruturas — cada item
-          diz que, se <code className="bg-surface-container px-1 rounded">component_code</code> aparecer
-          na estrutura, a coluna <code className="bg-surface-container px-1 rounded">property_field</code> do
-          equipamento (em Cadastro de Equipamentos) deve ter o valor de{' '}
-          <code className="bg-surface-container px-1 rounded">expected_value</code>. Adicione, edite ou
-          remova entradas diretamente no JSON abaixo e clique em Salvar — isso substitui todo o arquivo.
-          Guardado em <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>,
-          sem depender de nenhuma tabela no banco de dados — mesmo padrão de Listas de Opções.
+        <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
+        <h1 className="text-2xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
+        <p className="text-on-surface-variant text-sm mt-1">
+          Regras usadas pelo Analisador de Estruturas: se o código aparecer na estrutura de um
+          equipamento, a propriedade correspondente deve ter o valor cadastrado aqui. Salvo
+          automaticamente em <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
         </p>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-3 text-outline text-sm py-8">
+        <div className="flex items-center gap-3 py-16 text-outline">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          Carregando…
+          <span className="text-sm font-mono">Carregando...</span>
         </div>
       ) : (
-        <>
-          <textarea
-            value={jsonText}
-            onChange={e => setJsonText(e.target.value)}
-            spellCheck={false}
-            className="w-full h-[60vh] bg-surface-container border border-outline-variant rounded-lg p-4 text-xs font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 resize-y"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Object.entries(FIELD_LABELS).map(([field, label]) => {
+            const entries = (allRules[field] || []).slice().sort((a, b) => a.component_code.localeCompare(b.component_code))
+            return (
+              <div key={field} className="bg-surface-container rounded border border-outline-variant p-4 flex flex-col gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-on-surface">{label}</h3>
+                  <div className="text-[10px] font-mono text-outline mt-0.5">{field}</div>
+                </div>
 
-          {error && (
-            <div className="mt-3 flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-sm">
-              ⚠ {error}
-            </div>
-          )}
-          {warning && (
-            <div className="mt-3 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-400 text-sm">
-              ⚠ {warning}
-            </div>
-          )}
-          {successMsg && (
-            <div className="mt-3 flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">
-              ✓ {successMsg}
-            </div>
-          )}
+                <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                  {entries.length === 0 ? (
+                    <span className="text-xs text-outline italic">Nenhum parâmetro cadastrado</span>
+                  ) : (
+                    entries.map(e => (
+                      <span
+                        key={e.component_code}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-high border border-outline-variant rounded text-xs font-mono text-on-surface-variant"
+                      >
+                        {e.component_code} → {e.expected_value}
+                        <button
+                          onClick={() => removeEntry(field, e.component_code)}
+                          className="text-outline/50 hover:text-error transition-colors leading-none ml-0.5"
+                          title={`Remover "${e.component_code}"`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
 
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-5 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Salvando…' : 'Salvar'}
-            </button>
-            <button
-              onClick={loadFromFile}
-              disabled={saving}
-              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-            >
-              Descartar alterações e recarregar do arquivo
-            </button>
-          </div>
-        </>
+                <div className="flex gap-1.5 mt-auto">
+                  <input
+                    type="text"
+                    value={codeInputs[field] || ''}
+                    onChange={e => setCodeInputs(prev => ({ ...prev, [field]: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && addEntry(field)}
+                    placeholder="Código Protheus..."
+                    className="w-28 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-xs font-mono text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  />
+                  <input
+                    type="text"
+                    value={valueInputs[field] || ''}
+                    onChange={e => setValueInputs(prev => ({ ...prev, [field]: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && addEntry(field)}
+                    placeholder="Valor esperado..."
+                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-xs font-mono text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  />
+                  <button
+                    onClick={() => addEntry(field)}
+                    disabled={busy[field] || !(codeInputs[field] || '').trim() || !(valueInputs[field] || '').trim()}
+                    className="px-3 py-1.5 bg-primary text-on-primary rounded text-xs font-bold hover:shadow-neon disabled:opacity-40 transition-all"
+                    title="Adicionar (Enter)"
+                  >
+                    {busy[field] ? '…' : '+'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 px-5 py-3 bg-surface-container-highest border border-outline-variant rounded-lg shadow-lg text-sm text-on-surface animate-fade-in">
+          ✓ {toast}
+        </div>
       )}
     </div>
   )
