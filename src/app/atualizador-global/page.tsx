@@ -34,7 +34,7 @@ interface UploadedFile {
 }
 
 const isBlocking = (file: UploadedFile) =>
-  !file.detection || file.detection.missingRequired.length > 0 || file.requiredEmptyCount > 0
+  !file.detection || file.rows.length === 0 || file.detection.missingRequired.length > 0 || file.requiredEmptyCount > 0
 
 const isRequiredField = (f: Field) =>
   !f.isPk && !f.isReadonly && !f.autoIncrement && !f.nullable && f.defaultValue === undefined
@@ -325,6 +325,7 @@ export default function AtualizadorGlobalPage() {
                     ) : (
                       <Badge tone="error">Tabela não identificada</Badge>
                     )}
+                    {d && file.rows.length === 0 && <Badge tone="error">Sem linhas de dados</Badge>}
                     {d && d.missingRequired.length > 0 && <Badge tone="error">{d.missingRequired.length} coluna(s) obrigatória(s) faltando</Badge>}
                     {d && file.requiredEmptyCount > 0 && <Badge tone="error">{file.requiredEmptyCount} célula(s) obrigatória(s) vazia(s)</Badge>}
                     {d && d.missingOptional.length > 0 && <Badge tone="amber">{d.missingOptional.length} coluna(s) opcional(is) faltando</Badge>}

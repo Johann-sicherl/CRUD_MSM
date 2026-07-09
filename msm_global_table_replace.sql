@@ -17,15 +17,21 @@ SET search_path = public
 AS $$
 DECLARE
   inserted_count INTEGER;
+  expected_count INTEGER;
 BEGIN
+  -- Refuse to touch the table at all unless there is real data to reload —
+  -- checked BEFORE the delete. Previously the delete ran first and an empty/
+  -- missing new_rows just returned 0 with no error, silently wiping the
+  -- table with nothing to replace it.
+  IF new_rows IS NULL OR jsonb_typeof(new_rows) <> 'array' OR jsonb_array_length(new_rows) = 0 THEN
+    RAISE EXCEPTION 'Nenhuma linha válida recebida para importar — nada foi apagado.';
+  END IF;
+  expected_count := jsonb_array_length(new_rows);
+
   -- "WHERE true" is required — some Postgres setups (including Supabase)
   -- install a safety extension that rejects any DELETE/UPDATE without a
   -- WHERE clause, even inside a SECURITY DEFINER function.
   EXECUTE format('DELETE FROM %I WHERE true', target_table);
-
-  IF new_rows IS NULL OR jsonb_array_length(new_rows) = 0 THEN
-    RETURN 0;
-  END IF;
 
   EXECUTE format(
     'INSERT INTO %I SELECT * FROM jsonb_populate_recordset(NULL::%I, $1)',
@@ -33,6 +39,15 @@ BEGIN
   ) USING new_rows;
 
   GET DIAGNOSTICS inserted_count = ROW_COUNT;
+
+  -- Extra integrity check: if the insert somehow didn't produce exactly the
+  -- rows we expected, abort and roll back the delete too, rather than leave
+  -- the table half-loaded.
+  IF inserted_count <> expected_count THEN
+    RAISE EXCEPTION 'Esperava gravar % linha(s), mas % foram gravadas — operação cancelada, nada foi alterado.',
+      expected_count, inserted_count;
+  END IF;
+
   RETURN inserted_count;
 END;
 $$;
