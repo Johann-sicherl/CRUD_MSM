@@ -81,6 +81,35 @@ function CopyButton({ getText, title }: { getText: () => string; title?: string 
   )
 }
 
+/** Top action bar with a single "copiar tudo" button for a flat (non-grouped)
+ *  list of cards — mirrors the per-group "copiar tudo" buttons used inside
+ *  the accordion cascades. */
+function CopyAllBar({ rows, getFields, label }: {
+  rows: Row[]
+  getFields: (r: Row) => { label: string; value: unknown }[]
+  label?: string
+}) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="flex justify-end mb-3">
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(tsvFromRows(rows.map(getFields))).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }).catch(() => {})
+        }}
+        title="Copiar tudo (colar no Excel)"
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
+          copied ? 'border-green-500/40 text-green-400' : 'border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
+        }`}
+      >
+        {copied ? '✓ Copiado' : `⧉ ${label ?? 'Copiar tudo'} (${rows.length})`}
+      </button>
+    </div>
+  )
+}
+
 function StatusBadge({ status }: { status?: string | null }) {
   if (!status) return null
   const active = status === 'active'
@@ -914,7 +943,15 @@ export default function ExploradorRelacoesPage() {
           </div>
 
           <SectionPanel title="Cadastro de Equipamentos (BOM)" tint="blue" count={result.bom.filter(r => r.isSearched).length} plain>
-            {result.bom.filter(r => r.isSearched).map(r => <EquipmentItemDetailCard key={r.id} r={r} />)}
+            {(() => {
+              const bomItems = result.bom.filter(r => r.isSearched)
+              return (
+                <>
+                  {bomItems.length > 0 && <CopyAllBar rows={bomItems} getFields={buildEquipmentItemFields} />}
+                  {bomItems.map(r => <EquipmentItemDetailCard key={r.id} r={r} />)}
+                </>
+              )
+            })()}
           </SectionPanel>
 
           <SectionPanel title="Acessórios Compatíveis" tint="amber" count={result.compatibleAccessories.length} plain>
