@@ -2,100 +2,110 @@
 
 import { useEffect, useState } from 'react'
 
-interface Entry {
-  component_code: string
-  expected_value: string
-}
-
 interface Rule {
   property_field: string
   component_code: string
   expected_value: string
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  processor: 'Processador',
-  memory: 'Memória',
-  storage: 'Armazenamento',
-  graphics_card: 'Placa Gráfica',
-  conveyor_belt_load_capacity_kg: 'Cap. Correia (kg)',
-  tube_power_kv: 'Potência Tubo (kV)',
-  certificate: 'Certificado',
-  conveyor_belt_type: 'Tipo Correia',
-  motopolia_type: 'Tipo Motopolia',
-  language: 'Idioma',
-  color: 'Cor',
-}
-
 export default function ParametrosEstruturaPage() {
-  const [allRules, setAllRules] = useState<Record<string, Entry[]>>({})
+  const [rows, setRows] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
-  const [codeInputs, setCodeInputs] = useState<Record<string, string>>({})
-  const [valueInputs, setValueInputs] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState<Record<string, boolean>>({})
-  const [toast, setToast] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [filter, setFilter] = useState('')
 
-  useEffect(() => {
-    fetch('/api/structure-property-rules')
-      .then(r => r.json())
-      .then((rows: Rule[]) => {
-        const grouped: Record<string, Entry[]> = {}
-        for (const r of rows) {
-          if (!grouped[r.property_field]) grouped[r.property_field] = []
-          grouped[r.property_field].push({ component_code: r.component_code, expected_value: r.expected_value })
-        }
-        setAllRules(grouped)
-        setLoading(false)
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/structure-property-rules')
+      const json = await res.json()
+      if (!res.ok) { setError(json.error || 'Falha ao carregar parâmetros'); return }
+      const sorted = (json as Rule[]).slice().sort((a, b) =>
+        a.property_field.localeCompare(b.property_field) || a.component_code.localeCompare(b.component_code)
+      )
+      setRows(sorted)
+    } catch {
+      setError('Falha de rede ao carregar parâmetros')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const updateCell = (index: number, field: keyof Rule, value: string) => {
+    setRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r))
+  }
+
+  const addRow = () => {
+    setFilter('')
+    setRows(prev => [...prev, { property_field: '', component_code: '', expected_value: '' }])
+  }
+
+  const removeRow = (index: number) => {
+    setRows(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSave = async () => {
+    setError('')
+    setSuccessMsg('')
+
+    const clean = rows
+      .map(r => ({
+        property_field: r.property_field.trim(),
+        component_code: r.component_code.trim(),
+        expected_value: r.expected_value.trim(),
+      }))
+      .filter(r => r.property_field || r.component_code || r.expected_value)
+
+    for (let i = 0; i < clean.length; i++) {
+      const r = clean[i]
+      if (!r.property_field || !r.component_code || !r.expected_value) {
+        setError(`Linha ${i + 1}: preencha Grupo Acessórios, Código e Output`)
+        return
+      }
+    }
+
+    setSaving(true)
+    try {
+      const res = await fetch('/api/structure-property-rules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clean),
       })
-  }, [])
-
-  const showToast = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2500)
-  }
-
-  const addEntry = async (field: string) => {
-    const code = (codeInputs[field] || '').trim()
-    const value = (valueInputs[field] || '').trim()
-    if (!code || !value) return
-    setBusy(prev => ({ ...prev, [field]: true }))
-    const res = await fetch('/api/structure-property-rules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ property_field: field, component_code: code, expected_value: value }),
-    })
-    if (res.ok) {
-      const updated: Rule[] = await res.json()
-      setAllRules(prev => ({ ...prev, [field]: updated.map(u => ({ component_code: u.component_code, expected_value: u.expected_value })) }))
-      setCodeInputs(prev => ({ ...prev, [field]: '' }))
-      setValueInputs(prev => ({ ...prev, [field]: '' }))
-      showToast(`"${code}" salvo em ${FIELD_LABELS[field] || field}`)
-    }
-    setBusy(prev => ({ ...prev, [field]: false }))
-  }
-
-  const removeEntry = async (field: string, code: string) => {
-    const res = await fetch('/api/structure-property-rules', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ property_field: field, component_code: code }),
-    })
-    if (res.ok) {
-      const updated: Rule[] = await res.json()
-      setAllRules(prev => ({ ...prev, [field]: updated.map(u => ({ component_code: u.component_code, expected_value: u.expected_value })) }))
-      showToast(`"${code}" removido`)
+      const json = await res.json()
+      if (!res.ok) { setError(json.error || 'Falha ao salvar parâmetros'); return }
+      setSuccessMsg(`${json.saved} parâmetro(s) salvos com sucesso`)
+      setRows(clean)
+    } catch {
+      setError('Falha de rede ao salvar parâmetros')
+    } finally {
+      setSaving(false)
     }
   }
+
+  const filteredIndices = rows.map((_, i) => i).filter(i => {
+    const f = filter.trim().toLowerCase()
+    if (!f) return true
+    const r = rows[i]
+    return r.property_field.toLowerCase().includes(f)
+      || r.component_code.toLowerCase().includes(f)
+      || r.expected_value.toLowerCase().includes(f)
+  })
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="p-6 max-w-5xl">
       <div className="mb-6">
         <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
         <h1 className="text-2xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
         <p className="text-on-surface-variant text-sm mt-1">
-          Regras usadas pelo Analisador de Estruturas: se o código aparecer na estrutura de um
-          equipamento, a propriedade correspondente deve ter o valor cadastrado aqui. Salvo
-          automaticamente em <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
+          Regras usadas pelo Analisador de Estruturas, na mesma disposição da planilha original —
+          edite qualquer célula diretamente e clique em Salvar. Guardado em{' '}
+          <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
         </p>
       </div>
 
@@ -105,74 +115,101 @@ export default function ParametrosEstruturaPage() {
           <span className="text-sm font-mono">Carregando...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Object.entries(FIELD_LABELS).map(([field, label]) => {
-            const entries = (allRules[field] || []).slice().sort((a, b) => a.component_code.localeCompare(b.component_code))
-            return (
-              <div key={field} className="bg-surface-container rounded border border-outline-variant p-4 flex flex-col gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-on-surface">{label}</h3>
-                  <div className="text-[10px] font-mono text-outline mt-0.5">{field}</div>
-                </div>
+        <>
+          <div className="flex items-center gap-3 mb-3">
+            <input
+              type="text"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder="Filtrar por grupo, código ou output..."
+              className="flex-1 bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+            <span className="text-xs text-outline font-mono whitespace-nowrap">{filteredIndices.length} de {rows.length}</span>
+          </div>
 
-                <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-                  {entries.length === 0 ? (
-                    <span className="text-xs text-outline italic">Nenhum parâmetro cadastrado</span>
-                  ) : (
-                    entries.map(e => (
-                      <span
-                        key={e.component_code}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-high border border-outline-variant rounded text-xs font-mono text-on-surface-variant"
+          <div className="overflow-auto border border-outline-variant rounded-lg max-h-[65vh]">
+            <table className="text-xs w-full">
+              <thead className="sticky top-0 bg-surface-container-highest">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Grupo Acessórios</th>
+                  <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código Acessório Protheus</th>
+                  <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Output</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredIndices.map(i => (
+                  <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
+                    <td className="p-1">
+                      <input
+                        value={rows[i].property_field}
+                        onChange={e => updateCell(i, 'property_field', e.target.value)}
+                        className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface"
+                      />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        value={rows[i].component_code}
+                        onChange={e => updateCell(i, 'component_code', e.target.value)}
+                        className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface"
+                      />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        value={rows[i].expected_value}
+                        onChange={e => updateCell(i, 'expected_value', e.target.value)}
+                        className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface"
+                      />
+                    </td>
+                    <td className="p-1 text-center">
+                      <button
+                        onClick={() => removeRow(i)}
+                        className="text-outline hover:text-error transition-colors"
+                        title="Remover linha"
                       >
-                        {e.component_code} → {e.expected_value}
-                        <button
-                          onClick={() => removeEntry(field, e.component_code)}
-                          className="text-outline/50 hover:text-error transition-colors leading-none ml-0.5"
-                          title={`Remover "${e.component_code}"`}
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))
-                  )}
-                </div>
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-                <div className="flex gap-1.5 mt-auto">
-                  <input
-                    type="text"
-                    value={codeInputs[field] || ''}
-                    onChange={e => setCodeInputs(prev => ({ ...prev, [field]: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && addEntry(field)}
-                    placeholder="Código Protheus..."
-                    className="w-28 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-xs font-mono text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                  />
-                  <input
-                    type="text"
-                    value={valueInputs[field] || ''}
-                    onChange={e => setValueInputs(prev => ({ ...prev, [field]: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && addEntry(field)}
-                    placeholder="Valor esperado..."
-                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-xs font-mono text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                  />
-                  <button
-                    onClick={() => addEntry(field)}
-                    disabled={busy[field] || !(codeInputs[field] || '').trim() || !(valueInputs[field] || '').trim()}
-                    className="px-3 py-1.5 bg-primary text-on-primary rounded text-xs font-bold hover:shadow-neon disabled:opacity-40 transition-all"
-                    title="Adicionar (Enter)"
-                  >
-                    {busy[field] ? '…' : '+'}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+          {error && (
+            <div className="mt-3 flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-sm">
+              ⚠ {error}
+            </div>
+          )}
+          {successMsg && (
+            <div className="mt-3 flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">
+              ✓ {successMsg}
+            </div>
+          )}
 
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-5 py-3 bg-surface-container-highest border border-outline-variant rounded-lg shadow-lg text-sm text-on-surface animate-fade-in">
-          ✓ {toast}
-        </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={addRow}
+              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+            >
+              + Adicionar linha
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-5 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Salvando…' : 'Salvar'}
+            </button>
+            <button
+              onClick={load}
+              disabled={saving}
+              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+            >
+              Descartar alterações e recarregar
+            </button>
+          </div>
+        </>
       )}
     </div>
   )
