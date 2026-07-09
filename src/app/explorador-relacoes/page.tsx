@@ -772,21 +772,114 @@ function CodePickerModal({ onClose, onPick }: { onClose: () => void; onPick: (co
   )
 }
 
+interface EquipmentGroupOption {
+  legacyId: number
+  name: string
+  commercialName: string | null
+}
+
+/** Modal listing every Grupo de Equipamentos (equipments) — a level up from
+ *  the individual Cadastro de Equipamentos codes in CodePickerModal. Picking
+ *  one searches the whole group at once instead of a single item code. */
+function EquipmentGroupPickerModal({ onClose, onPick }: { onClose: () => void; onPick: (legacyId: number, name: string) => void }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState('')
+  const [groups, setGroups] = useState<EquipmentGroupOption[]>([])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/equipments?limit=25000')
+        if (!res.ok) { setError('Erro ao carregar grupos de equipamentos'); setLoading(false); return }
+        const json = await res.json()
+        setGroups(
+          (json.data || [])
+            .slice()
+            .sort((a: Row, b: Row) => (a.legacy_id ?? 0) - (b.legacy_id ?? 0))
+            .map((r: Row) => ({ legacyId: r.legacy_id, name: r.name || 'N/A', commercialName: r.commercial_name || null }))
+        )
+      } catch {
+        setError('Erro ao carregar grupos de equipamentos')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  const filtered = groups.filter(g => {
+    const f = filter.trim().toLowerCase()
+    if (!f) return true
+    return String(g.legacyId).includes(f) || g.name.toLowerCase().includes(f) || (g.commercialName?.toLowerCase().includes(f) ?? false)
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
+          <h2 className="text-base font-semibold text-on-surface">Buscar Grupo de Equipamentos</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-outline-variant shrink-0">
+          <input
+            type="text"
+            autoFocus
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Filtrar por ID ou nome…"
+            className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-outline gap-3">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-mono">Carregando…</span>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-16 text-error text-sm">⚠ {error}</div>
+        ) : (
+          <div className="flex-1 overflow-auto p-4">
+            <div className="flex flex-col gap-1">
+              {filtered.length === 0 ? (
+                <div className="text-xs text-outline italic">Nenhum grupo encontrado</div>
+              ) : filtered.map(g => (
+                <button
+                  key={g.legacyId}
+                  onClick={() => onPick(g.legacyId, g.name)}
+                  className="text-left px-2 py-1.5 rounded hover:bg-surface-container-high transition-colors"
+                >
+                  <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">ID {g.legacyId}</span>
+                  <span className="ml-2 text-xs text-on-surface-variant">{g.name}</span>
+                  {g.commercialName && <span className="ml-2 text-xs text-outline">/ {g.commercialName}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ExploradorRelacoesPage() {
   const [input, setInput]     = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [result, setResult]   = useState<Result | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false)
 
-  const handleSearch = async (codeOverride?: string) => {
+  const handleSearch = async (codeOverride?: string, groupMode?: boolean) => {
     const code = (codeOverride ?? input).trim()
     if (!code) return
     setLoading(true)
     setError('')
     setResult(null)
     try {
-      const res = await fetch(`/api/relations/${encodeURIComponent(code)}`)
+      const url = `/api/relations/${encodeURIComponent(code)}${groupMode ? '?group=1' : ''}`
+      const res = await fetch(url)
       const json = await res.json()
       if (!res.ok) {
         setError(json.error || 'Código não encontrado')
@@ -804,6 +897,12 @@ export default function ExploradorRelacoesPage() {
     setInput(code)
     setPickerOpen(false)
     handleSearch(code)
+  }
+
+  const handleGroupPick = (legacyId: number, name: string) => {
+    setInput(`Grupo ${legacyId} — ${name}`)
+    setGroupPickerOpen(false)
+    handleSearch(String(legacyId), true)
   }
 
   return (
@@ -841,9 +940,17 @@ export default function ExploradorRelacoesPage() {
         >
           {loading ? 'Buscando…' : 'Buscar'}
         </button>
+        <button
+          onClick={() => setGroupPickerOpen(true)}
+          title="Buscar por Grupo de Equipamentos"
+          className="px-3 py-2 bg-surface-container border border-outline-variant rounded text-xs font-semibold text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
+        >
+          Grupo de Equipamentos
+        </button>
       </div>
 
       {pickerOpen && <CodePickerModal onClose={() => setPickerOpen(false)} onPick={handlePick} />}
+      {groupPickerOpen && <EquipmentGroupPickerModal onClose={() => setGroupPickerOpen(false)} onPick={handleGroupPick} />}
 
       {error && (
         <div className="flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-sm max-w-xl">
