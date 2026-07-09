@@ -74,15 +74,27 @@ async function parseCsvRaw(file: File): Promise<{ headers: string[]; rows: Recor
   return { headers, rows }
 }
 
+// Picks the table whose real column set is the CLOSEST match to the CSV
+// header set — not just whichever table contains the most matching column
+// names. A table with many columns (e.g. equipments) can "contain" every
+// column of a smaller table (e.g. accessory_groups: id, legacy_id, name,
+// created_at, updated_at) as a subset without actually being the right
+// table, so we rank by total mismatch (missing + extra columns combined) and
+// take the smallest — an exact match scores 0 and always wins.
 function detectTable(headers: string[]): DetectionResult | null {
   const headerLowerSet = new Set(headers.map(h => h.toLowerCase()))
-  let best: { tableName: string; schema: TableSchema; realFields: Field[]; overlap: number } | null = null
+  let best: { tableName: string; schema: TableSchema; realFields: Field[]; diff: number } | null = null
   for (const [tableName, schema] of Object.entries(tables)) {
     const realFields = getRealColumnFields(schema)
+    const fieldLowerSet = new Set(realFields.map(f => f.name.toLowerCase()))
     const overlap = realFields.filter(f => headerLowerSet.has(f.name.toLowerCase())).length
-    if (!best || overlap > best.overlap) best = { tableName, schema, realFields, overlap }
+    if (overlap === 0) continue // completely unrelated table — not a candidate
+    const missingCount = realFields.length - overlap
+    const extraCount = headers.filter(h => !fieldLowerSet.has(h.toLowerCase())).length
+    const diff = missingCount + extraCount
+    if (!best || diff < best.diff) best = { tableName, schema, realFields, diff }
   }
-  if (!best || best.overlap === 0) return null
+  if (!best) return null
 
   const headerByLowerName = new Map(headers.map(h => [h.toLowerCase(), h]))
   const fieldLowerSet = new Set(best.realFields.map(f => f.name.toLowerCase()))
