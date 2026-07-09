@@ -23,7 +23,10 @@ BEGIN
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public' AND tablename ~ '_backup_[0-9]{14}$'
   LOOP
-    EXECUTE format('DROP TABLE IF EXISTS %I', r.tablename);
+    -- CASCADE is safe here: the only things depending on these backup
+    -- tables are OTHER backup tables (their old FKs followed the rename),
+    -- which are being dropped in this same loop anyway.
+    EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', r.tablename);
     RAISE NOTICE 'Removida: %', r.tablename;
   END LOOP;
 END $$;
