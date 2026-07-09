@@ -18,7 +18,10 @@ AS $$
 DECLARE
   inserted_count INTEGER;
 BEGIN
-  EXECUTE format('DELETE FROM %I', target_table);
+  -- "WHERE true" is required — some Postgres setups (including Supabase)
+  -- install a safety extension that rejects any DELETE/UPDATE without a
+  -- WHERE clause, even inside a SECURITY DEFINER function.
+  EXECUTE format('DELETE FROM %I WHERE true', target_table);
 
   IF new_rows IS NULL OR jsonb_array_length(new_rows) = 0 THEN
     RETURN 0;

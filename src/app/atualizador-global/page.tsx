@@ -21,10 +21,12 @@ interface UploadedFile {
   detection: DetectionResult | null
   requiredEmptyCount: number
   selectInvalidCount: number
-  confirmChecked: boolean
   status: 'reviewing' | 'sending' | 'success' | 'error'
   resultMessage?: string
 }
+
+const isBlocking = (file: UploadedFile) =>
+  !file.detection || file.detection.missingRequired.length > 0 || file.requiredEmptyCount > 0
 
 const isRequiredField = (f: Field) =>
   !f.isPk && !f.isReadonly && !f.autoIncrement && !f.nullable && f.defaultValue === undefined
@@ -151,6 +153,8 @@ function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline'; childr
 export default function AtualizadorGlobalPage() {
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [confirmChecked, setConfirmChecked] = useState(false)
+  const [sendingAll, setSendingAll] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFilesSelected = async (fileList: FileList | null) => {
@@ -165,15 +169,14 @@ export default function AtualizadorGlobalPage() {
           : { requiredEmptyCount: 0, selectInvalidCount: 0 }
         setFiles(prev => [...prev, {
           id, name: file.name, headers, rows, detection,
-          requiredEmptyCount, selectInvalidCount,
-          confirmChecked: false, status: 'reviewing',
+          requiredEmptyCount, selectInvalidCount, status: 'reviewing',
         }])
         setExpandedId(prevId => prevId ?? id)
       } catch {
         setFiles(prev => [...prev, {
           id, name: file.name, headers: [], rows: [], detection: null,
           requiredEmptyCount: 0, selectInvalidCount: 0,
-          confirmChecked: false, status: 'error', resultMessage: 'Não foi possível ler este arquivo (CSV inválido)',
+          status: 'error', resultMessage: 'Não foi possível ler este arquivo (CSV inválido)',
         }])
       }
     }
@@ -185,17 +188,8 @@ export default function AtualizadorGlobalPage() {
     setExpandedId(prev => (prev === id ? null : prev))
   }
 
-  const toggleChecked = (id: string) => {
-    setFiles(prev => prev.map(f => f.id === id ? { ...f, confirmChecked: !f.confirmChecked } : f))
-  }
-
-  const confirmReplace = async (file: UploadedFile) => {
+  const replaceOne = async (file: UploadedFile) => {
     if (!file.detection) return
-    const ok = window.confirm(
-      `Tem certeza? Isso vai APAGAR todos os registros atuais de "${file.detection.schema.label}" e substituir pelos ${file.rows.length} registros deste arquivo. Esta ação não pode ser desfeita.`
-    )
-    if (!ok) return
-
     setFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'sending' } : f))
     try {
       const res = await fetch(`/api/global-update/${file.detection.tableName}`, {
@@ -220,6 +214,26 @@ export default function AtualizadorGlobalPage() {
     }
   }
 
+  const pendingFiles = files.filter(f => f.status !== 'success')
+  const readyFiles = pendingFiles.filter(f => !isBlocking(f))
+  const anyBlocking = pendingFiles.some(isBlocking)
+
+  const confirmReplaceAll = async () => {
+    if (readyFiles.length === 0) return
+    const ok = window.confirm(
+      `Tem certeza? Isso vai APAGAR todos os registros atuais de ${readyFiles.length} tabela(s) — ` +
+      `${readyFiles.map(f => f.detection!.schema.label).join(', ')} — e substituir pelo conteúdo destes arquivos. ` +
+      `Esta ação não pode ser desfeita.`
+    )
+    if (!ok) return
+
+    setSendingAll(true)
+    for (const file of readyFiles) {
+      await replaceOne(file)
+    }
+    setSendingAll(false)
+  }
+
   return (
     <div className="p-8 max-w-6xl">
       <div className="mb-6">
@@ -228,11 +242,12 @@ export default function AtualizadorGlobalPage() {
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Atualizador Global de Tabelas MSM</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Envie o CSV oficial de uma tabela — a tela identifica sozinha de qual tabela se trata,
-          audite os dados abaixo e só então confirme. Ao confirmar, todos os registros atuais
-          daquela tabela são apagados e substituídos pelo conteúdo do arquivo. Colunas financeiras
-          ({FORCE_TO_ONE_FIELDS.join(', ')}) são sempre gravadas como 1. Você pode anexar vários
-          arquivos de tabelas diferentes, mas cada um precisa ser auditado e confirmado individualmente.
+          Envie o CSV oficial de uma ou mais tabelas — a tela identifica sozinha de qual tabela cada
+          arquivo se trata. Audite cada um individualmente (colunas faltando/extras, células
+          obrigatórias vazias, prévia dos dados) e, quando todos estiverem corretos, use o botão no
+          final da página para substituir tudo de uma vez. Cada tabela confirmada tem todos os seus
+          registros atuais apagados e substituídos pelo conteúdo do respectivo arquivo. Colunas
+          financeiras ({FORCE_TO_ONE_FIELDS.join(', ')}) são sempre gravadas como 1.
         </p>
       </div>
 
@@ -365,33 +380,13 @@ export default function AtualizadorGlobalPage() {
                           </div>
                         )}
 
-                        {file.status !== 'success' && (
-                          <div className="flex flex-col gap-3 pt-2 border-t border-outline-variant">
-                            <label className="flex items-start gap-2 text-sm text-on-surface-variant cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={file.confirmChecked}
-                                onChange={() => toggleChecked(file.id)}
-                                className="mt-0.5"
-                              />
-                              Entendo que TODOS os dados atuais de <strong className="text-on-surface">{d.schema.label}</strong> serão
-                              apagados e substituídos pelos dados deste arquivo, e que essa ação não passa pela Auditoria.
-                            </label>
-                            <div>
-                              <button
-                                onClick={() => confirmReplace(file)}
-                                disabled={blocking || !file.confirmChecked || file.status === 'sending'}
-                                className="px-4 py-2 rounded-lg bg-error text-on-error text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                              >
-                                {file.status === 'sending' ? 'Substituindo…' : 'Confirmar e Substituir Tabela'}
-                              </button>
-                            </div>
-                            {blocking && (
-                              <div className="text-xs text-error">
-                                Corrija as colunas/valores obrigatórios acima antes de confirmar.
-                              </div>
-                            )}
+                        {blocking && file.status !== 'success' && (
+                          <div className="text-xs text-error pt-2 border-t border-outline-variant">
+                            Corrija as colunas/valores obrigatórios acima — este arquivo será ignorado pelo botão de substituir tudo, no final da página.
                           </div>
+                        )}
+                        {file.status === 'sending' && (
+                          <div className="mt-3 text-sm text-primary">Substituindo…</div>
                         )}
                         {file.status === 'error' && (
                           <div className="mt-3 text-sm text-error">{file.resultMessage}</div>
@@ -403,6 +398,34 @@ export default function AtualizadorGlobalPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {files.length > 0 && (
+        <div className="mt-6 pt-5 border-t border-outline-variant flex flex-col gap-3">
+          <div className="text-sm text-on-surface-variant">
+            {readyFiles.length} de {pendingFiles.length} arquivo(s) pendente(s) prontos para substituir
+            {anyBlocking && ' — os demais têm pendências e serão ignorados até serem corrigidos ou removidos'}.
+          </div>
+          <label className="flex items-start gap-2 text-sm text-on-surface-variant cursor-pointer">
+            <input
+              type="checkbox"
+              checked={confirmChecked}
+              onChange={() => setConfirmChecked(v => !v)}
+              className="mt-0.5"
+            />
+            Entendo que TODOS os dados atuais das tabelas identificadas acima serão apagados e
+            substituídos pelos dados dos respectivos arquivos, e que essa ação não passa pela Auditoria.
+          </label>
+          <div>
+            <button
+              onClick={confirmReplaceAll}
+              disabled={readyFiles.length === 0 || !confirmChecked || sendingAll}
+              className="px-4 py-2 rounded-lg bg-error text-on-error text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+            >
+              {sendingAll ? 'Substituindo…' : `Confirmar e Substituir Tudo (${readyFiles.length})`}
+            </button>
+          </div>
         </div>
       )}
     </div>
