@@ -13,6 +13,13 @@ interface DetectionResult {
   extraColumns: string[]
 }
 
+interface SelectInvalidDetail {
+  field: string
+  label: string
+  options: string[]
+  values: { value: string; count: number }[]
+}
+
 interface UploadedFile {
   id: string
   name: string
@@ -21,6 +28,7 @@ interface UploadedFile {
   detection: DetectionResult | null
   requiredEmptyCount: number
   selectInvalidCount: number
+  selectInvalidDetails: SelectInvalidDetail[]
   status: 'reviewing' | 'sending' | 'success' | 'error'
   resultMessage?: string
 }
@@ -130,7 +138,7 @@ function computeRowIssues(detection: DetectionResult, rows: Record<string, strin
   )
 
   let requiredEmptyCount = 0
-  let selectInvalidCount = 0
+  const invalidByField = new Map<string, Map<string, number>>() // field name -> raw value -> count
   for (const row of rows) {
     for (const f of requiredFields) {
       const header = detection.headerByLowerName.get(f.name.toLowerCase())!
@@ -139,10 +147,27 @@ function computeRowIssues(detection: DetectionResult, rows: Record<string, strin
     for (const f of selectFields) {
       const header = detection.headerByLowerName.get(f.name.toLowerCase())!
       const v = String(row[header] ?? '').trim()
-      if (!isBlankCell(v) && !f.options!.some(o => o.toLowerCase() === v.toLowerCase())) selectInvalidCount++
+      if (!isBlankCell(v) && !f.options!.some(o => o.toLowerCase() === v.toLowerCase())) {
+        if (!invalidByField.has(f.name)) invalidByField.set(f.name, new Map())
+        const counts = invalidByField.get(f.name)!
+        counts.set(v, (counts.get(v) ?? 0) + 1)
+      }
     }
   }
-  return { requiredEmptyCount, selectInvalidCount }
+
+  const selectInvalidDetails: SelectInvalidDetail[] = selectFields
+    .filter(f => invalidByField.has(f.name))
+    .map(f => ({
+      field: f.name,
+      label: f.label,
+      options: f.options!,
+      values: Array.from(invalidByField.get(f.name)!.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count),
+    }))
+  const selectInvalidCount = selectInvalidDetails.reduce((sum, d) => sum + d.values.reduce((s, v) => s + v.count, 0), 0)
+
+  return { requiredEmptyCount, selectInvalidCount, selectInvalidDetails }
 }
 
 function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline'; children: React.ReactNode }) {
@@ -172,18 +197,18 @@ export default function AtualizadorGlobalPage() {
       try {
         const { headers, rows } = await parseCsvRaw(file)
         const detection = headers.length > 0 ? detectTable(headers) : null
-        const { requiredEmptyCount, selectInvalidCount } = detection
+        const { requiredEmptyCount, selectInvalidCount, selectInvalidDetails } = detection
           ? computeRowIssues(detection, rows)
-          : { requiredEmptyCount: 0, selectInvalidCount: 0 }
+          : { requiredEmptyCount: 0, selectInvalidCount: 0, selectInvalidDetails: [] }
         setFiles(prev => [...prev, {
           id, name: file.name, headers, rows, detection,
-          requiredEmptyCount, selectInvalidCount, status: 'reviewing',
+          requiredEmptyCount, selectInvalidCount, selectInvalidDetails, status: 'reviewing',
         }])
         setExpandedId(prevId => prevId ?? id)
       } catch {
         setFiles(prev => [...prev, {
           id, name: file.name, headers: [], rows: [], detection: null,
-          requiredEmptyCount: 0, selectInvalidCount: 0,
+          requiredEmptyCount: 0, selectInvalidCount: 0, selectInvalidDetails: [],
           status: 'error', resultMessage: 'Não foi possível ler este arquivo (CSV inválido)',
         }])
       }
@@ -347,6 +372,18 @@ export default function AtualizadorGlobalPage() {
                                 <strong>Colunas do CSV que serão ignoradas:</strong> {d.extraColumns.join(', ')}
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {file.selectInvalidDetails.length > 0 && (
+                          <div className="mb-4 flex flex-col gap-2 text-sm">
+                            {file.selectInvalidDetails.map(det => (
+                              <div key={det.field} className="text-amber-400">
+                                <strong>Valores fora da lista em &quot;{det.label}&quot;</strong>{' '}
+                                (esperado: {det.options.join(' ou ')}):{' '}
+                                {det.values.map(v => `"${v.value}" (${v.count}x)`).join(', ')}
+                              </div>
+                            ))}
                           </div>
                         )}
 

@@ -20,12 +20,23 @@ function isBlankCell(raw: unknown): boolean {
 // constraint since jsonb_populate_recordset never applies table-level
 // DEFAULTs on its own.
 function toCellValue(field: Field, raw: unknown): unknown {
-  if (isBlankCell(raw)) {
-    return !field.nullable && field.defaultValue !== undefined ? field.defaultValue : null
-  }
+  const fallback = () => (!field.nullable && field.defaultValue !== undefined ? field.defaultValue : null)
+  if (isBlankCell(raw)) return fallback()
+
   const s = String(raw).trim()
   if (field.type === 'jsonb') {
     try { return JSON.parse(s) } catch { return s }
+  }
+  // Real integer columns reject decimal-looking text ("350.0"), which CSV
+  // export tools commonly produce even for whole numbers — parse into an
+  // actual number instead of passing raw text through to Postgres.
+  if (field.type === 'number') {
+    const n = parseInt(s, 10)
+    return Number.isNaN(n) ? fallback() : n
+  }
+  if (field.type === 'decimal') {
+    const n = parseFloat(s)
+    return Number.isNaN(n) ? fallback() : n
   }
   return s
 }
