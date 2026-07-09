@@ -2,11 +2,11 @@
 -- MSM · VMI — ATUALIZADOR GLOBAL DE TABELAS (substituição atômica)
 -- Execute no Supabase SQL Editor
 -- ============================================================
--- Função usada pela janela "Atualizador Global de Tabelas MSM": apaga todos
--- os registros de uma tabela e recarrega a partir de um CSV oficial, em uma
--- única transação — se o INSERT falhar (coluna obrigatória faltando, tipo
--- inválido, etc.), o DELETE também é desfeito e a tabela volta ao estado
--- original. Não usa src/lib/sqlAudit.ts — não gera entradas em audit_log.
+-- Função usada pela janela "Atualizador Global de Tabelas MSM": monta os
+-- dados novos numa tabela temporária isolada PRIMEIRO, confere se a
+-- quantidade bate com o esperado, e só então apaga e recarrega a tabela
+-- real — se qualquer coisa falhar antes disso, a tabela real nunca chega a
+-- ser tocada. Não usa src/lib/sqlAudit.ts — não gera entradas em audit_log.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION global_table_replace(target_table TEXT, new_rows JSONB)
@@ -18,35 +18,36 @@ AS $$
 DECLARE
   inserted_count INTEGER;
   expected_count INTEGER;
+  staging_table TEXT := 'stg_' || replace(gen_random_uuid()::text, '-', '');
 BEGIN
-  -- Refuse to touch the table at all unless there is real data to reload —
-  -- checked BEFORE the delete. Previously the delete ran first and an empty/
-  -- missing new_rows just returned 0 with no error, silently wiping the
-  -- table with nothing to replace it.
   IF new_rows IS NULL OR jsonb_typeof(new_rows) <> 'array' OR jsonb_array_length(new_rows) = 0 THEN
     RAISE EXCEPTION 'Nenhuma linha válida recebida para importar — nada foi apagado.';
   END IF;
   expected_count := jsonb_array_length(new_rows);
 
-  -- "WHERE true" is required — some Postgres setups (including Supabase)
-  -- install a safety extension that rejects any DELETE/UPDATE without a
-  -- WHERE clause, even inside a SECURITY DEFINER function.
-  EXECUTE format('DELETE FROM %I WHERE true', target_table);
+  -- Build the new data set in an isolated temp table first (same columns,
+  -- constraints and defaults as the real table) — the real table is not
+  -- touched until this succeeds and the row count is verified.
+  EXECUTE format('CREATE TEMP TABLE %I (LIKE %I INCLUDING ALL) ON COMMIT DROP', staging_table, target_table);
 
   EXECUTE format(
     'INSERT INTO %I SELECT * FROM jsonb_populate_recordset(NULL::%I, $1)',
-    target_table, target_table
+    staging_table, target_table
   ) USING new_rows;
 
   GET DIAGNOSTICS inserted_count = ROW_COUNT;
 
-  -- Extra integrity check: if the insert somehow didn't produce exactly the
-  -- rows we expected, abort and roll back the delete too, rather than leave
-  -- the table half-loaded.
   IF inserted_count <> expected_count THEN
-    RAISE EXCEPTION 'Esperava gravar % linha(s), mas % foram gravadas — operação cancelada, nada foi alterado.',
+    RAISE EXCEPTION 'Esperava preparar % linha(s), mas % foram preparadas — operação cancelada, a tabela real não foi tocada.',
       expected_count, inserted_count;
   END IF;
+
+  -- Only now touch the real table — delete + reload from the verified
+  -- staging data. "WHERE true" is required because some Postgres setups
+  -- (including Supabase) reject any DELETE/UPDATE without a WHERE clause,
+  -- even inside a SECURITY DEFINER function.
+  EXECUTE format('DELETE FROM %I WHERE true', target_table);
+  EXECUTE format('INSERT INTO %I SELECT * FROM %I', target_table, staging_table);
 
   RETURN inserted_count;
 END;
