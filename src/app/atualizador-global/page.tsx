@@ -199,8 +199,9 @@ export default function AtualizadorGlobalPage() {
       })
       const json = await res.json()
       if (!res.ok) {
+        const parts = [json.error, json.details, json.hint, json.code ? `(código ${json.code})` : null].filter(Boolean)
         setFiles(prev => prev.map(f => f.id === file.id
-          ? { ...f, status: 'error', resultMessage: json.error || 'Falha ao substituir a tabela' }
+          ? { ...f, status: 'error', resultMessage: parts.join(' — ') || 'Falha ao substituir a tabela' }
           : f))
         return
       }

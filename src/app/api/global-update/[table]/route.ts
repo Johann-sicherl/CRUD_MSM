@@ -52,7 +52,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     new_rows: insertRows,
   })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) {
+    return NextResponse.json({
+      error: error.message,
+      details: error.details || undefined,
+      hint: error.hint || undefined,
+      code: error.code || undefined,
+    }, { status: 400 })
+  }
 
   return NextResponse.json({ inserted: data ?? insertRows.length })
 }
