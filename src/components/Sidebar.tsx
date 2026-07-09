@@ -89,6 +89,16 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           >
             <span className="truncate">Janela de Pesquisa Avançada</span>
           </Link>
+          <Link
+            href="/atualizador-global"
+            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+              pathname === '/atualizador-global'
+                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+            }`}
+          >
+            <span className="truncate">Atualizador Global de Tabelas MSM</span>
+          </Link>
 
           {byDomain.map(({ domain, items }) => (
             <div key={domain} className="mt-5">
@@ -141,7 +151,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
               }`}
             >
-              <span className="truncate">Listas de Opções</span>
+              <span className="truncate">Lista Itens de Série</span>
             </Link>
             <Link
               href="/auditoria"
@@ -151,7 +161,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
               }`}
             >
-              <span className="truncate">Auditoria</span>
+              <span className="truncate">Desenvolvedor de Queries</span>
             </Link>
             <Link
               href="/parametros-estrutura"
@@ -161,17 +171,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
               }`}
             >
-              <span className="truncate">Parâmetros de Estrutura</span>
-            </Link>
-            <Link
-              href="/atualizador-global"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/atualizador-global'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Atualizador Global de Tabelas MSM</span>
+              <span className="truncate">Param. Itens de Série</span>
             </Link>
             <Link
               href="/analisador-estruturas"
