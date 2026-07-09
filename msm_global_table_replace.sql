@@ -58,6 +58,12 @@ BEGIN
   EXECUTE format('ALTER TABLE %I RENAME TO %I', target_table, backup_table);
   EXECUTE format('ALTER TABLE %I RENAME TO %I', staging_table, target_table);
 
+  -- Renaming tables is DDL — PostgREST caches the database schema and won't
+  -- notice on its own, so every other screen in the app (which reads through
+  -- PostgREST) would keep seeing the old table until its cache happened to
+  -- refresh. Force an immediate reload so the new data is visible right away.
+  NOTIFY pgrst, 'reload schema';
+
   RETURN inserted_count;
 END;
 $$;
