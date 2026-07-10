@@ -71,9 +71,9 @@ export default function OptionsPage() {
     <div className="p-6 max-w-[1400px]">
       {/* Header */}
       <div className="mb-6">
-        <div className="text-[10px] font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
-        <h1 className="text-2xl font-bold text-on-surface">Listas de Opções</h1>
-        <p className="text-on-surface-variant text-sm mt-1">
+        <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
+        <h1 className="text-3xl font-bold text-on-surface">Listas de Opções</h1>
+        <p className="text-on-surface-variant text-base mt-1">
           Gerencie os valores disponíveis para campos do tipo lista. Novos valores são salvos automaticamente em maiúsculo.
         </p>
       </div>
@@ -81,7 +81,7 @@ export default function OptionsPage() {
       {loading ? (
         <div className="flex items-center gap-3 py-16 text-outline">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-mono">Carregando...</span>
+          <span className="text-base font-mono">Carregando...</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -91,19 +91,19 @@ export default function OptionsPage() {
               <div key={key} className="bg-surface-container rounded border border-outline-variant p-4 flex flex-col gap-3">
                 {/* Card header */}
                 <div>
-                  <h3 className="text-sm font-semibold text-on-surface">{label}</h3>
-                  <div className="text-[10px] font-mono text-outline mt-0.5">{key}</div>
+                  <h3 className="text-base font-semibold text-on-surface">{label}</h3>
+                  <div className="text-xs font-mono text-outline mt-0.5">{key}</div>
                 </div>
 
                 {/* Values */}
                 <div className="flex flex-wrap gap-1.5 min-h-[28px]">
                   {values.length === 0 ? (
-                    <span className="text-xs text-outline italic">Nenhum valor cadastrado</span>
+                    <span className="text-sm text-outline italic">Nenhum valor cadastrado</span>
                   ) : (
                     values.map(val => (
                       <span
                         key={val}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-high border border-outline-variant rounded text-xs font-mono text-on-surface-variant group"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-high border border-outline-variant rounded text-sm font-mono text-on-surface-variant group"
                       >
                         {val}
                         <button
@@ -126,12 +126,12 @@ export default function OptionsPage() {
                     onChange={e => setInputs(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }))}
                     onKeyDown={e => e.key === 'Enter' && addValue(key)}
                     placeholder="NOVO VALOR..."
-                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-xs font-mono text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 uppercase"
+                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-sm font-mono text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 uppercase"
                   />
                   <button
                     onClick={() => addValue(key)}
                     disabled={busy[key] || !(inputs[key] || '').trim()}
-                    className="px-3 py-1.5 bg-primary text-on-primary rounded text-xs font-bold hover:shadow-neon disabled:opacity-40 transition-all"
+                    className="px-3 py-1.5 bg-primary text-on-primary rounded text-sm font-bold hover:shadow-neon disabled:opacity-40 transition-all"
                     title="Adicionar (Enter)"
                   >
                     {busy[key] ? '…' : '+'}
@@ -145,7 +145,7 @@ export default function OptionsPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-5 py-3 bg-surface-container-highest border border-outline-variant rounded-lg shadow-lg text-sm text-on-surface animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 px-5 py-3 bg-surface-container-highest border border-outline-variant rounded-lg shadow-lg text-base text-on-surface animate-fade-in">
           ✓ {toast}
         </div>
       )}
