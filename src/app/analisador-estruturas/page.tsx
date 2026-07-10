@@ -1,6 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+const STORAGE_KEY = 'analisador-estruturas-state'
 
 interface PropertyResult {
   field: string
@@ -81,6 +83,28 @@ export default function AnalisadorEstruturasPage() {
   const [files, setFiles] = useState<AnalysisFile[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const hydrated = useRef(false)
+
+  // Restore previously analyzed files when returning to this page.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { files: AnalysisFile[]; expandedId: string | null }
+        setFiles(parsed.files || [])
+        setExpandedId(parsed.expandedId ?? null)
+      }
+    } catch {
+      // ignore corrupt storage
+    }
+    hydrated.current = true
+  }, [])
+
+  // Persist on every change, so navigating away and back keeps the results.
+  useEffect(() => {
+    if (!hydrated.current) return
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ files, expandedId }))
+  }, [files, expandedId])
 
   const handleFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
