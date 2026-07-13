@@ -161,10 +161,11 @@ interface EquipmentCodeOption {
   legacyEquipmentId: number
 }
 
-function EquipmentPickerModal({ onClose, onPick, onPickGroup }: {
+function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
   onClose: () => void
   onPick: (code: string) => void
   onPickGroup: (legacyId: number, name: string) => void
+  onPickAll: () => void
 }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -230,15 +231,22 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup }: {
           <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
         </div>
 
-        <div className="px-5 py-3 border-b border-outline-variant shrink-0">
+        <div className="px-5 py-3 border-b border-outline-variant shrink-0 flex items-center gap-2">
           <input
             type="text"
             autoFocus
             value={filter}
             onChange={e => setFilter(e.target.value)}
             placeholder="Filtrar por código ou nome…"
-            className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
           />
+          <button
+            onClick={onPickAll}
+            title="Gera e analisa a estrutura de todo equipamento cadastrado em Cadastro de Equipamentos"
+            className="shrink-0 px-3 py-2 bg-primary/10 border border-primary/40 text-primary rounded text-xs font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+          >
+            🗂️ Analisar TODOS ({codes.length})
+          </button>
         </div>
 
         {loading ? (
@@ -443,6 +451,16 @@ export default function AnalisadorEstruturasPage() {
     })()
   }
 
+  const handlePickAll = () => {
+    setPickerOpen(false)
+    if (!dbCreds) return
+    ;(async () => {
+      for (const c of groupCodes) {
+        await runDbStructureAnalysis(c.code, dbCreds)
+      }
+    })()
+  }
+
   const removeFile = (id: string) => {
     setFiles(prev => prev.filter(f => f.id !== id))
     setExpandedId(prev => (prev === id ? null : prev))
@@ -531,6 +549,7 @@ export default function AnalisadorEstruturasPage() {
           onClose={() => setPickerOpen(false)}
           onPick={handlePickCode}
           onPickGroup={handlePickGroup}
+          onPickAll={handlePickAll}
         />
       )}
 
