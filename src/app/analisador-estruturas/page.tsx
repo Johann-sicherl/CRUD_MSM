@@ -151,7 +151,7 @@ export default function AnalisadorEstruturasPage() {
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
           Sistema · analisador de estruturas
         </div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Analisador de Estruturas</h1>
+        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Itens Série Estrut.</h1>
         <p className="text-on-surface-variant text-base mt-1">
           Envie um ou mais arquivos .xlsx de estrutura (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot;) —
           o nome do arquivo deve ser o código Protheus do equipamento. Cada código da estrutura é

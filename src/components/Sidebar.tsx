@@ -181,7 +181,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
               }`}
             >
-              <span className="truncate">Analisador de Estruturas</span>
+              <span className="truncate">Busc. Itens Série Estrut.</span>
             </Link>
           </div>
         </nav>

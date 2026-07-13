@@ -209,7 +209,7 @@ export default function ParametrosEstruturaPage() {
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
         <h1 className="text-3xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Regras usadas pelo Analisador de Estruturas, na mesma disposição da planilha original —
+          Regras usadas pelo Busc. Itens Série Estrut., na mesma disposição da planilha original —
           edite qualquer célula diretamente e clique em Salvar, ou importe/exporte um Excel com as
           colunas GRUPO_ACESSORIOS, CODIGO_ACESSORIO_PROTHEUS e OUTPUT. Guardado em{' '}
           <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
