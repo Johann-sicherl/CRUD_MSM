@@ -21,20 +21,35 @@ export async function POST(request: NextRequest) {
     supabaseAdmin.from('standard_equipment_items').select('*').ilike('protheus_code', protheusCode).maybeSingle(),
   ])
 
-  const rules: StructurePropertyRule[] = allRules.filter(r => uniqueCodes.has(r.component_code))
   const equipment: Row | null = equipRes.data
 
+  // Group by EVERY property registered in Parâmetros de Estrutura — not just
+  // the ones a code happened to match — so a property whose code is missing
+  // from this structure is flagged instead of silently disappearing from
+  // the report.
   const byProperty = new Map<string, StructurePropertyRule[]>()
-  for (const r of rules) {
+  for (const r of allRules) {
     if (!byProperty.has(r.property_field)) byProperty.set(r.property_field, [])
     byProperty.get(r.property_field)!.push(r)
   }
 
-  const properties = Array.from(byProperty.entries()).map(([field, matched]) => {
+  const properties = Array.from(byProperty.entries()).map(([field, groupRules]) => {
+    const matched = groupRules.filter(r => uniqueCodes.has(r.component_code))
+    const dbValue = equipment ? (equipment[field] ?? null) : null
+
+    if (matched.length === 0) {
+      return {
+        field,
+        matched: [],
+        computedValue: null,
+        dbValue,
+        status: 'missing' as const,
+      }
+    }
+
     const distinctValues = Array.from(new Set(matched.map(m => norm(m.expected_value))))
     const isDuplicate = distinctValues.length > 1
     const computedValue = isDuplicate ? null : matched[0].expected_value
-    const dbValue = equipment ? (equipment[field] ?? null) : null
     const mismatch = !isDuplicate && !!equipment && computedValue !== null && norm(dbValue) !== norm(computedValue)
 
     return {
@@ -42,7 +57,7 @@ export async function POST(request: NextRequest) {
       matched: matched.map(m => ({ code: m.component_code, value: m.expected_value })),
       computedValue,
       dbValue,
-      status: isDuplicate ? 'duplicate' : (mismatch ? 'mismatch' : 'ok'),
+      status: isDuplicate ? 'duplicate' as const : (mismatch ? 'mismatch' as const : 'ok' as const),
     }
   }).sort((a, b) => a.field.localeCompare(b.field))
 

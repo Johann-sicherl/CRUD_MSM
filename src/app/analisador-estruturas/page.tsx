@@ -9,7 +9,7 @@ interface PropertyResult {
   matched: { code: string; value: string }[]
   computedValue: string | null
   dbValue: string | null
-  status: 'ok' | 'mismatch' | 'duplicate'
+  status: 'ok' | 'mismatch' | 'duplicate' | 'missing'
 }
 
 interface AnalysisFile {
@@ -486,8 +486,10 @@ export default function AnalisadorEstruturasPage() {
           (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot; — nome do arquivo = código Protheus). Cada código da
           estrutura é comparado com as regras cadastradas em{' '}
           <a href="/parametros-estrutura" className="text-primary hover:underline">Parâmetros de Estrutura</a>
-          : se dois códigos do mesmo grupo indicarem valores diferentes, gera alerta de duplicidade;
-          se o valor não bater com o cadastro do equipamento em Cadastro de Equipamentos, gera alerta de erro.
+          — todas as propriedades cadastradas são analisadas, não só as que tiveram código encontrado: se dois
+          códigos do mesmo grupo indicarem valores diferentes, gera alerta de duplicidade; se o valor não bater
+          com o cadastro do equipamento em Cadastro de Equipamentos, gera alerta de erro; se nenhum código do
+          grupo aparecer na estrutura, a propriedade é sinalizada como não encontrada.
         </p>
       </div>
 
@@ -570,6 +572,7 @@ export default function AnalisadorEstruturasPage() {
             const props = file.properties || []
             const errorCount = props.filter(p => p.status === 'mismatch').length
             const duplicateCount = props.filter(p => p.status === 'duplicate').length
+            const missingCount = props.filter(p => p.status === 'missing').length
             return (
               <div key={file.id} className="rounded-xl border border-outline-variant bg-surface-container overflow-hidden">
                 <div
@@ -589,7 +592,8 @@ export default function AnalisadorEstruturasPage() {
                           : <Badge tone="error">Equipamento não encontrado</Badge>}
                         {errorCount > 0 && <Badge tone="error">{errorCount} erro(s)</Badge>}
                         {duplicateCount > 0 && <Badge tone="amber">{duplicateCount} duplicidade(s)</Badge>}
-                        {errorCount === 0 && duplicateCount === 0 && <Badge tone="success">Tudo OK</Badge>}
+                        {missingCount > 0 && <Badge tone="amber">{missingCount} propriedade(s) sem código</Badge>}
+                        {errorCount === 0 && duplicateCount === 0 && missingCount === 0 && <Badge tone="success">Tudo OK</Badge>}
                       </>
                     )}
                   </div>
@@ -608,7 +612,7 @@ export default function AnalisadorEstruturasPage() {
                 {isOpen && file.status === 'done' && (
                   <div className="border-t border-outline-variant p-5">
                     {props.length === 0 ? (
-                      <div className="text-sm text-outline italic">Nenhum código da estrutura corresponde a alguma regra cadastrada.</div>
+                      <div className="text-sm text-outline italic">Nenhum parâmetro cadastrado em Parâmetros de Estrutura ainda.</div>
                     ) : (
                       <div className="overflow-auto border border-outline-variant rounded-lg">
                         <table className="text-xs w-full">
@@ -624,22 +628,27 @@ export default function AnalisadorEstruturasPage() {
                           <tbody>
                             {props.map((p: PropertyResult) => (
                               <tr key={p.field} className={`border-t border-outline-variant/50 ${
-                                p.status === 'mismatch' ? 'bg-error-container/10' : p.status === 'duplicate' ? 'bg-amber-500/5' : ''
+                                p.status === 'mismatch' ? 'bg-error-container/10' : (p.status === 'duplicate' || p.status === 'missing') ? 'bg-amber-500/5' : ''
                               }`}>
                                 <td className="px-3 py-2 font-semibold text-on-surface whitespace-nowrap">
                                   {FIELD_LABELS[p.field] || p.field}
                                 </td>
                                 <td className="px-3 py-2 text-on-surface">
-                                  {p.status === 'duplicate' ? <span className="text-amber-400 italic">valores conflitantes</span> : (p.computedValue ?? '—')}
+                                  {p.status === 'duplicate'
+                                    ? <span className="text-amber-400 italic">valores conflitantes</span>
+                                    : p.status === 'missing'
+                                    ? <span className="text-amber-400 italic">nenhum código encontrado</span>
+                                    : (p.computedValue ?? '—')}
                                 </td>
                                 <td className="px-3 py-2 text-outline font-mono">
-                                  {p.matched.map(m => `${m.code} → ${m.value}`).join(' · ')}
+                                  {p.matched.length > 0 ? p.matched.map(m => `${m.code} → ${m.value}`).join(' · ') : '—'}
                                 </td>
                                 <td className="px-3 py-2 text-on-surface">{p.dbValue ?? '—'}</td>
                                 <td className="px-3 py-2">
                                   {p.status === 'ok' && <Badge tone="success">OK</Badge>}
                                   {p.status === 'mismatch' && <Badge tone="error">Erro — diverge do banco</Badge>}
                                   {p.status === 'duplicate' && <Badge tone="amber">Duplicidade</Badge>}
+                                  {p.status === 'missing' && <Badge tone="amber">Não encontrado na estrutura</Badge>}
                                 </td>
                               </tr>
                             ))}
