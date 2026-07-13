@@ -197,6 +197,8 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
         )
         setCodes(
           (eqJson.data || [])
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .filter((r: any) => r.status === 'active')
             .slice()
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .sort((a: any, b: any) => (a.legacy_equipment_id ?? 0) - (b.legacy_equipment_id ?? 0))
@@ -280,7 +282,7 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
             </div>
             <div className="p-4">
               <div className="text-xs font-bold text-blue-400 uppercase tracking-wide mb-2">
-                Cadastro de Equipamentos <span className="text-outline font-normal">({filteredCodes.length})</span>
+                Cadastro de Equipamentos <span className="text-outline font-normal">({filteredCodes.length} · apenas ativos)</span>
               </div>
               <div className="flex flex-col gap-1">
                 {filteredCodes.length === 0 ? (
@@ -339,16 +341,22 @@ export default function AnalisadorEstruturasPage() {
   }, [files, expandedId])
 
   // Load the equipment-group membership once, so picking a group can run
-  // the DB search for every equipment code inside it.
+  // the DB search for every equipment code inside it. Only active items —
+  // deactivated equipment shouldn't be re-analyzed.
   useEffect(() => {
     fetch('/api/standard_equipment_items?limit=25000')
       .then(r => r.json())
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .then(json => setGroupCodes((json.data || []).map((r: any) => ({
-        code: r.protheus_code,
-        label: r.protheus_code,
-        legacyEquipmentId: r.legacy_equipment_id,
-      }))))
+      .then(json => setGroupCodes(
+        (json.data || [])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .filter((r: any) => r.status === 'active')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((r: any) => ({
+            code: r.protheus_code,
+            label: r.protheus_code,
+            legacyEquipmentId: r.legacy_equipment_id,
+          }))
+      ))
       .catch(() => {})
   }, [])
 
