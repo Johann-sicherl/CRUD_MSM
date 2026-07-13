@@ -40,25 +40,35 @@ async function parseImportFile(file: File): Promise<Rule[]> {
   return rows
 }
 
-// Group-name header input — commits on blur/Enter instead of every keystroke,
-// so mid-typing edits don't cause boxes to merge/reorder while the user is
-// still typing the new name.
-function GroupNameInput({ value, onCommit }: { value: string; onCommit: (newValue: string) => void }) {
+// Group-name edit field — only mounted while a group is in "editing" mode
+// (triggered by the ✎ button), so normal clicks on the header just
+// collapse/expand the box instead of accidentally starting a text edit.
+// Commits on blur/Enter, cancels on Escape.
+function GroupNameInput({ value, onCommit, onDone }: {
+  value: string
+  onCommit: (newValue: string) => void
+  onDone: () => void
+}) {
   const [draft, setDraft] = useState(value)
-  useEffect(() => { setDraft(value) }, [value])
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
   const commit = () => {
     const trimmed = draft.trim()
     if (trimmed && trimmed !== value) onCommit(trimmed)
-    else setDraft(value)
+    onDone()
   }
   return (
     <input
+      ref={inputRef}
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        else if (e.key === 'Escape') onDone()
+      }}
       placeholder="Nome do grupo..."
-      className="flex-1 min-w-[140px] bg-transparent font-bold text-lg text-on-surface focus:outline-none focus:bg-surface-container-highest rounded px-2 py-1"
+      className="flex-1 min-w-[140px] bg-surface-container-highest border border-primary/40 rounded px-2 py-1 font-bold text-lg text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30"
     />
   )
 }
@@ -72,7 +82,8 @@ export default function ParametrosEstruturaPage() {
   const [successMsg, setSuccessMsg] = useState('')
   const [filter, setFilter] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [pendingImport, setPendingImport] = useState<Rule[] | null>(null)
   const [importFileName, setImportFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -106,6 +117,7 @@ export default function ParametrosEstruturaPage() {
   const addRowToGroup = (groupKey: string) => {
     setFilter('')
     setRows(prev => [...prev, { property_field: groupKey, component_code: '', expected_value: '' }])
+    setExpanded(prev => new Set(prev).add(groupKey))
   }
 
   const removeRow = (index: number) => {
@@ -115,7 +127,7 @@ export default function ParametrosEstruturaPage() {
   const renameGroup = (oldKey: string, newKey: string) => {
     setRows(prev => prev.map(r => r.property_field === oldKey ? { ...r, property_field: newKey } : r))
     setGroupOrder(prev => Array.from(new Set(prev.map(k => k === oldKey ? newKey : k))))
-    setCollapsed(prev => {
+    setExpanded(prev => {
       if (!prev.has(oldKey)) return prev
       const next = new Set(prev)
       next.delete(oldKey)
@@ -125,7 +137,7 @@ export default function ParametrosEstruturaPage() {
   }
 
   const toggleGroup = (key: string) => {
-    setCollapsed(prev => {
+    setExpanded(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
@@ -139,13 +151,14 @@ export default function ParametrosEstruturaPage() {
     setFilter('')
     if (!groupOrder.includes(name)) setGroupOrder(prev => [...prev, name])
     setRows(prev => [...prev, { property_field: name, component_code: '', expected_value: '' }])
+    setExpanded(prev => new Set(prev).add(name))
     setNewGroupName('')
   }
 
   const removeGroup = (key: string) => {
     setRows(prev => prev.filter(r => r.property_field !== key))
     setGroupOrder(prev => prev.filter(k => k !== key))
-    setCollapsed(prev => {
+    setExpanded(prev => {
       if (!prev.has(key)) return prev
       const next = new Set(prev)
       next.delete(key)
@@ -379,27 +392,50 @@ export default function ParametrosEstruturaPage() {
               <div className="text-base text-outline italic">Nenhum grupo encontrado.</div>
             ) : visibleGroups.map(key => {
               const indices = groupIndices.get(key) || []
-              const isOpen = isFiltering || !collapsed.has(key)
+              const isOpen = isFiltering || expanded.has(key)
               return (
                 <div key={key} className="border border-outline-variant rounded-xl bg-surface-container overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-surface-container-high border-b border-outline-variant">
-                    <button
-                      onClick={() => toggleGroup(key)}
+                  <div
+                    onClick={() => toggleGroup(key)}
+                    className="flex items-center gap-3 px-4 py-3 bg-surface-container-high border-b border-outline-variant cursor-pointer select-none"
+                  >
+                    <span
                       title={isOpen ? 'Recolher grupo' : 'Expandir grupo'}
-                      className={`text-outline hover:text-primary text-lg leading-none transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}
+                      className={`text-outline text-lg leading-none transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}
                     >
                       ›
-                    </button>
-                    <GroupNameInput value={key} onCommit={newKey => renameGroup(key, newKey)} />
+                    </span>
+                    <div className="flex items-center gap-2 flex-1 min-w-0" onClick={e => e.stopPropagation()}>
+                      {editingGroup === key ? (
+                        <GroupNameInput
+                          value={key}
+                          onCommit={newKey => renameGroup(key, newKey)}
+                          onDone={() => setEditingGroup(null)}
+                        />
+                      ) : (
+                        <>
+                          <span className="font-bold text-lg text-on-surface truncate">
+                            {key || <span className="text-outline italic font-normal">(sem nome)</span>}
+                          </span>
+                          <button
+                            onClick={() => setEditingGroup(key)}
+                            title="Editar nome do grupo"
+                            className="text-outline hover:text-primary transition-colors text-sm shrink-0"
+                          >
+                            ✎
+                          </button>
+                        </>
+                      )}
+                    </div>
                     <span className="text-sm text-outline font-mono whitespace-nowrap">{indices.length} código(s)</span>
                     <button
-                      onClick={() => addRowToGroup(key)}
+                      onClick={e => { e.stopPropagation(); addRowToGroup(key) }}
                       className="px-3 py-1.5 bg-primary/10 border border-primary/40 text-primary rounded text-sm font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
                     >
                       + Código
                     </button>
                     <button
-                      onClick={() => removeGroup(key)}
+                      onClick={e => { e.stopPropagation(); removeGroup(key) }}
                       title="Remover grupo inteiro"
                       className="text-outline hover:text-error transition-colors text-lg px-1"
                     >
