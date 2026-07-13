@@ -277,7 +277,6 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
                   >
                     <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">ID {g.legacyId}</span>
                     <span className="ml-2 text-xs text-on-surface-variant">{g.name}</span>
-                    {g.commercialName && <span className="ml-2 text-xs text-outline">/ {g.commercialName}</span>}
                     <span className="ml-2 text-xs text-outline font-mono">
                       ({countByGroup.get(g.legacyId) || 0} equipamento{(countByGroup.get(g.legacyId) || 0) === 1 ? '' : 's'})
                     </span>
