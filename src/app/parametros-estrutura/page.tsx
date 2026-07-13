@@ -405,20 +405,22 @@ export default function ParametrosEstruturaPage() {
                     >
                       ›
                     </span>
-                    <div className="flex items-center gap-2 flex-1 min-w-0" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                       {editingGroup === key ? (
-                        <GroupNameInput
-                          value={key}
-                          onCommit={newKey => renameGroup(key, newKey)}
-                          onDone={() => setEditingGroup(null)}
-                        />
+                        <div className="flex-1 min-w-0" onClick={e => e.stopPropagation()}>
+                          <GroupNameInput
+                            value={key}
+                            onCommit={newKey => renameGroup(key, newKey)}
+                            onDone={() => setEditingGroup(null)}
+                          />
+                        </div>
                       ) : (
                         <>
                           <span className="font-bold text-lg text-on-surface truncate">
                             {key || <span className="text-outline italic font-normal">(sem nome)</span>}
                           </span>
                           <button
-                            onClick={() => setEditingGroup(key)}
+                            onClick={e => { e.stopPropagation(); setEditingGroup(key) }}
                             title="Editar nome do grupo"
                             className="text-outline hover:text-primary transition-colors text-sm shrink-0"
                           >
