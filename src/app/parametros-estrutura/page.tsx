@@ -72,6 +72,7 @@ export default function ParametrosEstruturaPage() {
   const [successMsg, setSuccessMsg] = useState('')
   const [filter, setFilter] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [pendingImport, setPendingImport] = useState<Rule[] | null>(null)
   const [importFileName, setImportFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -114,6 +115,22 @@ export default function ParametrosEstruturaPage() {
   const renameGroup = (oldKey: string, newKey: string) => {
     setRows(prev => prev.map(r => r.property_field === oldKey ? { ...r, property_field: newKey } : r))
     setGroupOrder(prev => Array.from(new Set(prev.map(k => k === oldKey ? newKey : k))))
+    setCollapsed(prev => {
+      if (!prev.has(oldKey)) return prev
+      const next = new Set(prev)
+      next.delete(oldKey)
+      next.add(newKey)
+      return next
+    })
+  }
+
+  const toggleGroup = (key: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const addGroup = () => {
@@ -128,6 +145,12 @@ export default function ParametrosEstruturaPage() {
   const removeGroup = (key: string) => {
     setRows(prev => prev.filter(r => r.property_field !== key))
     setGroupOrder(prev => prev.filter(k => k !== key))
+    setCollapsed(prev => {
+      if (!prev.has(key)) return prev
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
   }
 
   const saveRows = async (list: Rule[], message: string) => {
@@ -356,9 +379,17 @@ export default function ParametrosEstruturaPage() {
               <div className="text-base text-outline italic">Nenhum grupo encontrado.</div>
             ) : visibleGroups.map(key => {
               const indices = groupIndices.get(key) || []
+              const isOpen = isFiltering || !collapsed.has(key)
               return (
                 <div key={key} className="border border-outline-variant rounded-xl bg-surface-container overflow-hidden">
                   <div className="flex items-center gap-3 px-4 py-3 bg-surface-container-high border-b border-outline-variant">
+                    <button
+                      onClick={() => toggleGroup(key)}
+                      title={isOpen ? 'Recolher grupo' : 'Expandir grupo'}
+                      className={`text-outline hover:text-primary text-lg leading-none transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}
+                    >
+                      ›
+                    </button>
                     <GroupNameInput value={key} onCommit={newKey => renameGroup(key, newKey)} />
                     <span className="text-sm text-outline font-mono whitespace-nowrap">{indices.length} código(s)</span>
                     <button
@@ -375,50 +406,52 @@ export default function ParametrosEstruturaPage() {
                       ✕
                     </button>
                   </div>
-                  <div className="overflow-auto">
-                    <table className="text-base w-full">
-                      <thead className="bg-surface-container-highest/60">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código Acessório Protheus</th>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Output</th>
-                          <th className="w-8"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {indices.length === 0 ? (
+                  {isOpen && (
+                    <div className="overflow-auto">
+                      <table className="text-base w-full">
+                        <thead className="bg-surface-container-highest/60">
                           <tr>
-                            <td colSpan={3} className="px-3 py-3 text-sm text-outline italic">Nenhum código neste grupo ainda.</td>
+                            <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código Acessório Protheus</th>
+                            <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Output</th>
+                            <th className="w-8"></th>
                           </tr>
-                        ) : indices.map(i => (
-                          <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
-                            <td className="p-1">
-                              <input
-                                value={rows[i].component_code}
-                                onChange={e => updateCell(i, 'component_code', e.target.value)}
-                                className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
-                              />
-                            </td>
-                            <td className="p-1">
-                              <input
-                                value={rows[i].expected_value}
-                                onChange={e => updateCell(i, 'expected_value', e.target.value)}
-                                className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
-                              />
-                            </td>
-                            <td className="p-1 text-center">
-                              <button
-                                onClick={() => removeRow(i)}
-                                className="text-outline hover:text-error transition-colors text-lg"
-                                title="Remover código"
-                              >
-                                ✕
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {indices.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="px-3 py-3 text-sm text-outline italic">Nenhum código neste grupo ainda.</td>
+                            </tr>
+                          ) : indices.map(i => (
+                            <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
+                              <td className="p-1">
+                                <input
+                                  value={rows[i].component_code}
+                                  onChange={e => updateCell(i, 'component_code', e.target.value)}
+                                  className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
+                                />
+                              </td>
+                              <td className="p-1">
+                                <input
+                                  value={rows[i].expected_value}
+                                  onChange={e => updateCell(i, 'expected_value', e.target.value)}
+                                  className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
+                                />
+                              </td>
+                              <td className="p-1 text-center">
+                                <button
+                                  onClick={() => removeRow(i)}
+                                  className="text-outline hover:text-error transition-colors text-lg"
+                                  title="Remover código"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )
             })}
