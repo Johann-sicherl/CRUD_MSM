@@ -10,6 +10,9 @@ interface Rule {
 
 const keyOf = (r: Rule) => `${r.property_field.trim().toLowerCase()}::${r.component_code.trim().toLowerCase()}`
 
+const computeGroupOrder = (list: Rule[]): string[] =>
+  Array.from(new Set(list.map(r => r.property_field))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
 // Reads the same three-column layout the user's original spreadsheet uses
 // (GRUPO_ACESSORIOS / CODIGO_ACESSORIO_PROTHEUS / OUTPUT), matching headers
 // case/spacing-insensitively so an export from this page round-trips too.
@@ -37,13 +40,38 @@ async function parseImportFile(file: File): Promise<Rule[]> {
   return rows
 }
 
+// Group-name header input — commits on blur/Enter instead of every keystroke,
+// so mid-typing edits don't cause boxes to merge/reorder while the user is
+// still typing the new name.
+function GroupNameInput({ value, onCommit }: { value: string; onCommit: (newValue: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => { setDraft(value) }, [value])
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== value) onCommit(trimmed)
+    else setDraft(value)
+  }
+  return (
+    <input
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      placeholder="Nome do grupo..."
+      className="flex-1 min-w-[140px] bg-transparent font-bold text-lg text-on-surface focus:outline-none focus:bg-surface-container-highest rounded px-2 py-1"
+    />
+  )
+}
+
 export default function ParametrosEstruturaPage() {
   const [rows, setRows] = useState<Rule[]>([])
+  const [groupOrder, setGroupOrder] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [filter, setFilter] = useState('')
+  const [newGroupName, setNewGroupName] = useState('')
   const [pendingImport, setPendingImport] = useState<Rule[] | null>(null)
   const [importFileName, setImportFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -57,9 +85,10 @@ export default function ParametrosEstruturaPage() {
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Falha ao carregar parâmetros'); return }
       const sorted = (json as Rule[]).slice().sort((a, b) =>
-        a.property_field.localeCompare(b.property_field) || a.component_code.localeCompare(b.component_code)
+        a.property_field.localeCompare(b.property_field, 'pt-BR') || a.component_code.localeCompare(b.component_code)
       )
       setRows(sorted)
+      setGroupOrder(computeGroupOrder(sorted))
     } catch {
       setError('Falha de rede ao carregar parâmetros')
     } finally {
@@ -69,17 +98,36 @@ export default function ParametrosEstruturaPage() {
 
   useEffect(() => { load() }, [])
 
-  const updateCell = (index: number, field: keyof Rule, value: string) => {
+  const updateCell = (index: number, field: 'component_code' | 'expected_value', value: string) => {
     setRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r))
   }
 
-  const addRow = () => {
+  const addRowToGroup = (groupKey: string) => {
     setFilter('')
-    setRows(prev => [...prev, { property_field: '', component_code: '', expected_value: '' }])
+    setRows(prev => [...prev, { property_field: groupKey, component_code: '', expected_value: '' }])
   }
 
   const removeRow = (index: number) => {
     setRows(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const renameGroup = (oldKey: string, newKey: string) => {
+    setRows(prev => prev.map(r => r.property_field === oldKey ? { ...r, property_field: newKey } : r))
+    setGroupOrder(prev => Array.from(new Set(prev.map(k => k === oldKey ? newKey : k))))
+  }
+
+  const addGroup = () => {
+    const name = newGroupName.trim()
+    if (!name) return
+    setFilter('')
+    if (!groupOrder.includes(name)) setGroupOrder(prev => [...prev, name])
+    setRows(prev => [...prev, { property_field: name, component_code: '', expected_value: '' }])
+    setNewGroupName('')
+  }
+
+  const removeGroup = (key: string) => {
+    setRows(prev => prev.filter(r => r.property_field !== key))
+    setGroupOrder(prev => prev.filter(k => k !== key))
   }
 
   const saveRows = async (list: Rule[], message: string) => {
@@ -95,7 +143,11 @@ export default function ParametrosEstruturaPage() {
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Falha ao salvar parâmetros'); return }
       setSuccessMsg(message)
-      setRows(list.slice().sort((a, b) => a.property_field.localeCompare(b.property_field) || a.component_code.localeCompare(b.component_code)))
+      const sorted = list.slice().sort((a, b) =>
+        a.property_field.localeCompare(b.property_field, 'pt-BR') || a.component_code.localeCompare(b.component_code)
+      )
+      setRows(sorted)
+      setGroupOrder(computeGroupOrder(sorted))
     } catch {
       setError('Falha de rede ao salvar parâmetros')
     } finally {
@@ -203,14 +255,24 @@ export default function ParametrosEstruturaPage() {
       || r.expected_value.toLowerCase().includes(f)
   })
 
+  const groupIndices = new Map<string, number[]>()
+  for (const i of filteredIndices) {
+    const key = rows[i].property_field
+    const arr = groupIndices.get(key)
+    if (arr) arr.push(i)
+    else groupIndices.set(key, [i])
+  }
+  const isFiltering = filter.trim() !== ''
+  const visibleGroups = groupOrder.filter(key => !isFiltering || (groupIndices.get(key) || []).length > 0)
+
   return (
     <div className="p-6 max-w-5xl">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
         <h1 className="text-3xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Regras usadas pelo Busc. Itens Série Estrut., na mesma disposição da planilha original —
-          edite qualquer célula diretamente e clique em Salvar, ou importe/exporte um Excel com as
+          Regras usadas pelo Busc. Itens Série Estrut., separadas em uma caixa por Grupo Acessórios —
+          edite os códigos e o output diretamente e clique em Salvar, ou importe/exporte um Excel com as
           colunas GRUPO_ACESSORIOS, CODIGO_ACESSORIO_PROTHEUS e OUTPUT. Guardado em{' '}
           <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
         </p>
@@ -289,53 +351,77 @@ export default function ParametrosEstruturaPage() {
             </div>
           )}
 
-          <div className="overflow-auto border border-outline-variant rounded-lg max-h-[65vh]">
-            <table className="text-base w-full">
-              <thead className="sticky top-0 bg-surface-container-highest">
-                <tr>
-                  <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Grupo Acessórios</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Código Acessório Protheus</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Output</th>
-                  <th className="w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredIndices.map(i => (
-                  <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
-                    <td className="p-1">
-                      <input
-                        value={rows[i].property_field}
-                        onChange={e => updateCell(i, 'property_field', e.target.value)}
-                        className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
-                      />
-                    </td>
-                    <td className="p-1">
-                      <input
-                        value={rows[i].component_code}
-                        onChange={e => updateCell(i, 'component_code', e.target.value)}
-                        className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
-                      />
-                    </td>
-                    <td className="p-1">
-                      <input
-                        value={rows[i].expected_value}
-                        onChange={e => updateCell(i, 'expected_value', e.target.value)}
-                        className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
-                      />
-                    </td>
-                    <td className="p-1 text-center">
-                      <button
-                        onClick={() => removeRow(i)}
-                        className="text-outline hover:text-error transition-colors text-lg"
-                        title="Remover linha"
-                      >
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-col gap-4">
+            {visibleGroups.length === 0 ? (
+              <div className="text-base text-outline italic">Nenhum grupo encontrado.</div>
+            ) : visibleGroups.map(key => {
+              const indices = groupIndices.get(key) || []
+              return (
+                <div key={key} className="border border-outline-variant rounded-xl bg-surface-container overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-surface-container-high border-b border-outline-variant">
+                    <GroupNameInput value={key} onCommit={newKey => renameGroup(key, newKey)} />
+                    <span className="text-sm text-outline font-mono whitespace-nowrap">{indices.length} código(s)</span>
+                    <button
+                      onClick={() => addRowToGroup(key)}
+                      className="px-3 py-1.5 bg-primary/10 border border-primary/40 text-primary rounded text-sm font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+                    >
+                      + Código
+                    </button>
+                    <button
+                      onClick={() => removeGroup(key)}
+                      title="Remover grupo inteiro"
+                      className="text-outline hover:text-error transition-colors text-lg px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="overflow-auto">
+                    <table className="text-base w-full">
+                      <thead className="bg-surface-container-highest/60">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código Acessório Protheus</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Output</th>
+                          <th className="w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {indices.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-3 py-3 text-sm text-outline italic">Nenhum código neste grupo ainda.</td>
+                          </tr>
+                        ) : indices.map(i => (
+                          <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
+                            <td className="p-1">
+                              <input
+                                value={rows[i].component_code}
+                                onChange={e => updateCell(i, 'component_code', e.target.value)}
+                                className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
+                              />
+                            </td>
+                            <td className="p-1">
+                              <input
+                                value={rows[i].expected_value}
+                                onChange={e => updateCell(i, 'expected_value', e.target.value)}
+                                className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
+                              />
+                            </td>
+                            <td className="p-1 text-center">
+                              <button
+                                onClick={() => removeRow(i)}
+                                className="text-outline hover:text-error transition-colors text-lg"
+                                title="Remover código"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
           {error && (
@@ -349,12 +435,21 @@ export default function ParametrosEstruturaPage() {
             </div>
           )}
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-3 flex-wrap">
+            <input
+              type="text"
+              value={newGroupName}
+              onChange={e => setNewGroupName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addGroup()}
+              placeholder="NOME DO NOVO GRUPO..."
+              className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-base text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
             <button
-              onClick={addRow}
-              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-base text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+              onClick={addGroup}
+              disabled={!newGroupName.trim()}
+              className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-base text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-40 whitespace-nowrap"
             >
-              + Adicionar linha
+              + Novo Grupo
             </button>
             <button
               onClick={handleSave}
