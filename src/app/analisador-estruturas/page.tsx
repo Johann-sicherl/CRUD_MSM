@@ -224,6 +224,8 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
   const filteredCodes = codes.filter(o =>
     !f || o.code.toLowerCase().includes(f) || o.label.toLowerCase().includes(f)
   )
+  const countByGroup = new Map<number, number>()
+  for (const c of codes) countByGroup.set(c.legacyEquipmentId, (countByGroup.get(c.legacyEquipmentId) || 0) + 1)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -276,6 +278,9 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
                     <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">ID {g.legacyId}</span>
                     <span className="ml-2 text-xs text-on-surface-variant">{g.name}</span>
                     {g.commercialName && <span className="ml-2 text-xs text-outline">/ {g.commercialName}</span>}
+                    <span className="ml-2 text-xs text-outline font-mono">
+                      ({countByGroup.get(g.legacyId) || 0} equipamento{(countByGroup.get(g.legacyId) || 0) === 1 ? '' : 's'})
+                    </span>
                   </button>
                 ))}
               </div>
