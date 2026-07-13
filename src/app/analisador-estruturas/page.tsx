@@ -16,6 +16,7 @@ interface AnalysisFile {
   id: string
   name: string
   protheusCode: string
+  source: 'excel' | 'db'
   status: 'analyzing' | 'done' | 'error'
   errorMessage?: string
   equipmentFound?: boolean
@@ -70,7 +71,7 @@ function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline' | 'succ
     : tone === 'amber'
     ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
     : tone === 'success'
-    ? 'text-green-400 border-green-500/30 bg-green-500/10'
+    ? 'text-green-400 border-green-500/40 bg-green-500/10'
     : 'text-outline border-outline-variant bg-surface-container'
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${cls}`}>
@@ -79,11 +80,234 @@ function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline' | 'succ
   )
 }
 
+// ─── Protheus DB login popup ────────────────────────────────────────────
+// Credentials never touch localStorage/sessionStorage — kept only in React
+// state for the current page visit, and sent per-request to the backend,
+// which opens a short-lived connection and closes it right away. Leaving
+// this page (or refreshing) drops the credentials — reconnect any time.
+function DbLoginModal({ onClose, onConnect, connecting, error }: {
+  onClose: () => void
+  onConnect: (user: string, password: string) => void
+  connecting: boolean
+  error: string
+}) {
+  const [user, setUser] = useState('')
+  const [password, setPassword] = useState('')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-sm animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant">
+          <h2 className="text-base font-semibold text-on-surface">Conectar ao Banco Protheus</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+        <form
+          className="p-5 flex flex-col gap-3"
+          onSubmit={e => { e.preventDefault(); onConnect(user, password) }}
+        >
+          <p className="text-sm text-on-surface-variant">
+            Informe seu usuário e senha do SQL Server (PROTHEUS12). A conexão é aberta só para esta consulta e
+            fechada em seguida — nada fica salvo.
+          </p>
+          <label className="text-xs font-semibold text-on-surface-variant">
+            Usuário
+            <input
+              type="text"
+              autoFocus
+              value={user}
+              onChange={e => setUser(e.target.value)}
+              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+          </label>
+          <label className="text-xs font-semibold text-on-surface-variant">
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+          </label>
+          {error && <div className="text-error text-xs">⚠ {error}</div>}
+          <div className="flex items-center justify-end gap-2 mt-2">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+              Usar apenas upload de Excel
+            </button>
+            <button
+              type="submit"
+              disabled={connecting || !user.trim() || !password}
+              className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
+            >
+              {connecting ? 'Conectando…' : 'Conectar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Reduced code picker — only Grupo de Equipamentos + Cadastro de ────
+// Equipamentos, since this tool only ever needs an equipment protheus_code
+// to run the recursive BOM query against.
+interface EquipmentGroupOption {
+  legacyId: number
+  name: string
+  commercialName: string | null
+}
+interface EquipmentCodeOption {
+  code: string
+  label: string
+  legacyEquipmentId: number
+}
+
+function EquipmentPickerModal({ onClose, onPick, onPickGroup }: {
+  onClose: () => void
+  onPick: (code: string) => void
+  onPickGroup: (legacyId: number, name: string) => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState('')
+  const [groups, setGroups] = useState<EquipmentGroupOption[]>([])
+  const [codes, setCodes] = useState<EquipmentCodeOption[]>([])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [eqRes, groupRes] = await Promise.all([
+          fetch('/api/standard_equipment_items?limit=25000'),
+          fetch('/api/equipments?limit=25000'),
+        ])
+        if (!eqRes.ok || !groupRes.ok) { setError('Erro ao carregar códigos'); setLoading(false); return }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const [eqJson, groupJson] = await Promise.all([eqRes.json(), groupRes.json()]) as any[]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nameByLegacyId: Record<number, string> = {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const g of (groupJson.data || [])) nameByLegacyId[g.legacy_id] = g.name
+        setGroups(
+          (groupJson.data || [])
+            .slice()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .sort((a: any, b: any) => (a.legacy_id ?? 0) - (b.legacy_id ?? 0))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((r: any) => ({ legacyId: r.legacy_id, name: r.name || 'N/A', commercialName: r.commercial_name || null }))
+        )
+        setCodes(
+          (eqJson.data || [])
+            .slice()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .sort((a: any, b: any) => (a.legacy_equipment_id ?? 0) - (b.legacy_equipment_id ?? 0))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((r: any) => ({
+              code: r.protheus_code,
+              label: nameByLegacyId[r.legacy_equipment_id] || 'N/A',
+              legacyEquipmentId: r.legacy_equipment_id,
+            }))
+        )
+      } catch {
+        setError('Erro ao carregar códigos')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  const f = filter.trim().toLowerCase()
+  const filteredGroups = groups.filter(g =>
+    !f || String(g.legacyId).includes(f) || g.name.toLowerCase().includes(f) || (g.commercialName?.toLowerCase().includes(f) ?? false)
+  )
+  const filteredCodes = codes.filter(o =>
+    !f || o.code.toLowerCase().includes(f) || o.label.toLowerCase().includes(f)
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
+          <h2 className="text-base font-semibold text-on-surface">Buscar código</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-outline-variant shrink-0">
+          <input
+            type="text"
+            autoFocus
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Filtrar por código ou nome…"
+            className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-outline gap-3">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-mono">Carregando…</span>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-16 text-error text-sm">⚠ {error}</div>
+        ) : (
+          <div className="flex-1 overflow-auto grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-outline-variant">
+            <div className="p-4">
+              <div className="text-xs font-bold text-primary uppercase tracking-wide mb-2">
+                Grupo de Equipamentos <span className="text-outline font-normal">({filteredGroups.length})</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {filteredGroups.length === 0 ? (
+                  <div className="text-xs text-outline italic">Nenhum grupo encontrado</div>
+                ) : filteredGroups.map(g => (
+                  <button
+                    key={g.legacyId}
+                    onClick={() => onPickGroup(g.legacyId, g.name)}
+                    className="text-left px-2 py-1.5 rounded hover:bg-surface-container-high transition-colors"
+                  >
+                    <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary">ID {g.legacyId}</span>
+                    <span className="ml-2 text-xs text-on-surface-variant">{g.name}</span>
+                    {g.commercialName && <span className="ml-2 text-xs text-outline">/ {g.commercialName}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs font-bold text-blue-400 uppercase tracking-wide mb-2">
+                Cadastro de Equipamentos <span className="text-outline font-normal">({filteredCodes.length})</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {filteredCodes.length === 0 ? (
+                  <div className="text-xs text-outline italic">Nenhum código encontrado</div>
+                ) : filteredCodes.map(o => (
+                  <button
+                    key={o.code}
+                    onClick={() => onPick(o.code)}
+                    className="text-left px-2 py-1.5 rounded hover:bg-surface-container-high transition-colors"
+                  >
+                    <span className="font-mono text-xs text-primary">{o.code}</span>
+                    <span className="ml-2 text-xs text-on-surface-variant">{o.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AnalisadorEstruturasPage() {
   const [files, setFiles] = useState<AnalysisFile[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const hydrated = useRef(false)
+
+  const [dbCreds, setDbCreds] = useState<{ user: string; password: string } | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(true)
+  const [loginError, setLoginError] = useState('')
+  const [connecting, setConnecting] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [groupCodes, setGroupCodes] = useState<EquipmentCodeOption[]>([])
 
   // Restore previously analyzed files when returning to this page.
   useEffect(() => {
@@ -106,12 +330,26 @@ export default function AnalisadorEstruturasPage() {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ files, expandedId }))
   }, [files, expandedId])
 
+  // Load the equipment-group membership once, so picking a group can run
+  // the DB search for every equipment code inside it.
+  useEffect(() => {
+    fetch('/api/standard_equipment_items?limit=25000')
+      .then(r => r.json())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(json => setGroupCodes((json.data || []).map((r: any) => ({
+        code: r.protheus_code,
+        label: r.protheus_code,
+        legacyEquipmentId: r.legacy_equipment_id,
+      }))))
+      .catch(() => {})
+  }, [])
+
   const handleFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
     for (const file of Array.from(fileList)) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       const protheusCode = file.name.replace(/\.xlsx?$/i, '').trim()
-      setFiles(prev => [...prev, { id, name: file.name, protheusCode, status: 'analyzing' }])
+      setFiles(prev => [...prev, { id, name: file.name, protheusCode, source: 'excel', status: 'analyzing' }])
       setExpandedId(prevId => prevId ?? id)
 
       try {
@@ -140,6 +378,71 @@ export default function AnalisadorEstruturasPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const runDbStructureAnalysis = async (protheusCode: string, creds: { user: string; password: string }) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    setFiles(prev => [...prev, { id, name: `Banco · ${protheusCode}`, protheusCode, source: 'db', status: 'analyzing' }])
+    setExpandedId(prevId => prevId ?? id)
+
+    try {
+      const codesRes = await fetch('/api/protheus-estrutura', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: creds.user, password: creds.password, protheusCode }),
+      })
+      const codesJson = await codesRes.json()
+      if (!codesRes.ok) {
+        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: codesJson.error || 'Falha ao consultar o banco Protheus' } : f))
+        return
+      }
+
+      const res = await fetch('/api/analisador-estruturas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protheusCode, codes: codesJson.codes }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: json.error || 'Falha ao analisar' } : f))
+        return
+      }
+      setFiles(prev => prev.map(f => f.id === id ? {
+        ...f,
+        status: 'done',
+        equipmentFound: json.equipmentFound,
+        codesAnalyzed: json.codesAnalyzed,
+        properties: json.properties,
+      } : f))
+    } catch {
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: 'Erro de comunicação com o banco Protheus' } : f))
+    }
+  }
+
+  const handleConnect = (user: string, password: string) => {
+    setConnecting(true)
+    setLoginError('')
+    // The connection itself is only opened/validated on the first real
+    // query — nothing to test upfront without a protheus_code.
+    setDbCreds({ user, password })
+    setConnecting(false)
+    setShowLoginModal(false)
+  }
+
+  const handlePickCode = (code: string) => {
+    setPickerOpen(false)
+    if (dbCreds) runDbStructureAnalysis(code, dbCreds)
+  }
+
+  const handlePickGroup = (legacyId: number) => {
+    setPickerOpen(false)
+    if (!dbCreds) return
+    const codesInGroup = groupCodes.filter(c => c.legacyEquipmentId === legacyId)
+    ;(async () => {
+      for (const c of codesInGroup) {
+        await runDbStructureAnalysis(c.code, dbCreds)
+      }
+    })()
+  }
+
   const removeFile = (id: string) => {
     setFiles(prev => prev.filter(f => f.id !== id))
     setExpandedId(prev => (prev === id ? null : prev))
@@ -149,19 +452,48 @@ export default function AnalisadorEstruturasPage() {
     <div className="p-8 max-w-[108rem]">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
-          Sistema · analisador de estruturas
+          Sistema · busc. itens série estrut.
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Itens Série Estrut.</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Envie um ou mais arquivos .xlsx de estrutura (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot;) —
-          o nome do arquivo deve ser o código Protheus do equipamento. Cada código da estrutura é
-          comparado com as regras cadastradas em{' '}
+          Busque a estrutura direto no banco Protheus (recomendado) ou envie um ou mais arquivos .xlsx de estrutura
+          (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot; — nome do arquivo = código Protheus). Cada código da
+          estrutura é comparado com as regras cadastradas em{' '}
           <a href="/parametros-estrutura" className="text-primary hover:underline">Parâmetros de Estrutura</a>
           : se dois códigos do mesmo grupo indicarem valores diferentes, gera alerta de duplicidade;
           se o valor não bater com o cadastro do equipamento em Cadastro de Equipamentos, gera alerta de erro.
         </p>
       </div>
 
+      {/* Live DB search */}
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        {dbCreds ? (
+          <>
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:shadow-neon transition-all"
+            >
+              🔍 Buscar equipamento no banco Protheus
+            </button>
+            <Badge tone="success">Conectado ao Protheus</Badge>
+            <button
+              onClick={() => { setDbCreds(null); setShowLoginModal(true) }}
+              className="text-xs text-outline hover:text-error"
+            >
+              desconectar
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary cursor-pointer transition-colors text-sm font-semibold"
+          >
+            🔌 Conectar ao Banco Protheus
+          </button>
+        )}
+      </div>
+
+      {/* Manual Excel upload — kept as a fallback */}
       <div className="mb-6">
         <input
           ref={fileInputRef}
@@ -180,8 +512,24 @@ export default function AnalisadorEstruturasPage() {
         </label>
       </div>
 
+      {showLoginModal && (
+        <DbLoginModal
+          onClose={() => setShowLoginModal(false)}
+          onConnect={handleConnect}
+          connecting={connecting}
+          error={loginError}
+        />
+      )}
+      {pickerOpen && (
+        <EquipmentPickerModal
+          onClose={() => setPickerOpen(false)}
+          onPick={handlePickCode}
+          onPickGroup={handlePickGroup}
+        />
+      )}
+
       {files.length === 0 ? (
-        <div className="text-sm text-outline italic">Nenhum arquivo carregado ainda.</div>
+        <div className="text-sm text-outline italic">Nenhum equipamento analisado ainda.</div>
       ) : (
         <div className="flex flex-col gap-3">
           {files.map(file => {
@@ -197,6 +545,7 @@ export default function AnalisadorEstruturasPage() {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="font-mono text-sm text-on-surface truncate">{file.name}</span>
+                    <Badge tone="outline">{file.source === 'db' ? 'Banco' : 'Excel'}</Badge>
                     <Badge tone="outline">Cód. {file.protheusCode}</Badge>
                     {file.status === 'analyzing' && <Badge tone="outline">Analisando…</Badge>}
                     {file.status === 'error' && <Badge tone="error">{file.errorMessage}</Badge>}
