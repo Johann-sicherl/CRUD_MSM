@@ -24,47 +24,86 @@ const CONNECTION_BASE = {
   requestTimeout: 20000,
 }
 
+// One ESTRUTURA→COMPONENTE query per BOM node meant hundreds of sequential
+// round trips over the WAN link to the Protheus server — the whole analysis
+// could take minutes and individual nodes were timing out at 20s. Instead,
+// the whole ESTRUTURAS table is pulled ONCE (a single, longer-running query)
+// into an in-memory adjacency map, cached for a while, and every structure
+// resolution afterwards walks that map in memory — zero further DB round
+// trips per analysis.
+interface AdjacencyCache {
+  adjacency: Map<string, string[]>
+  fetchedAt: number
+}
+
+let cache: AdjacencyCache | null = null
+let inFlight: Promise<Map<string, string[]>> | null = null
+
+const CACHE_TTL_MS = 30 * 60 * 1000 // BOM data changes rarely enough that a 30min-old cache is still safe to reuse.
+const BULK_LOAD_TIMEOUT_MS = 120000 // the one full-table pull is allowed to run much longer than a normal query.
+
+async function loadAdjacency(creds: ProtheusCredentials): Promise<Map<string, string[]>> {
+  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache.adjacency
+  if (inFlight) return inFlight
+
+  inFlight = (async () => {
+    const pool = new sql.ConnectionPool({
+      ...CONNECTION_BASE,
+      user: creds.user,
+      password: creds.password,
+      requestTimeout: BULK_LOAD_TIMEOUT_MS,
+    })
+    try {
+      await pool.connect()
+      const result = await pool.request()
+        .query('SELECT ESTRUTURA, COMPONENTE FROM ESTRUTURAS')
+
+      const adjacency = new Map<string, string[]>()
+      for (const row of result.recordset as { ESTRUTURA: unknown; COMPONENTE: unknown }[]) {
+        const estrutura = String(row.ESTRUTURA ?? '').trim()
+        const componente = String(row.COMPONENTE ?? '').trim()
+        if (!estrutura || !componente) continue
+        const children = adjacency.get(estrutura)
+        if (children) children.push(componente)
+        else adjacency.set(estrutura, [componente])
+      }
+
+      cache = { adjacency, fetchedAt: Date.now() }
+      return adjacency
+    } finally {
+      await pool.close()
+      inFlight = null
+    }
+  })()
+
+  return inFlight
+}
+
 /**
- * Recursively walks the ESTRUTURAS table starting from `protheusCode`:
- * for every COMPONENTE found under that ESTRUTURA, if the component is
- * itself the header of another structure, its components are pulled in
- * too — same result as the union of "2-Estruturas"/"FLAT-LIST" from the
- * manual Excel export, just fetched live. A visited-set guards against
- * cyclic BOM references.
+ * Resolves the full BOM for `protheusCode`: for every COMPONENTE under that
+ * ESTRUTURA, if the component is itself the header of another structure,
+ * its components are pulled in too — same result as the union of
+ * "2-Estruturas"/"FLAT-LIST" from the manual Excel export. Runs entirely
+ * against the in-memory adjacency map (see loadAdjacency above); a
+ * visited-set guards against cyclic BOM references.
  */
 export async function fetchStructureCodes(protheusCode: string, creds: ProtheusCredentials): Promise<string[]> {
-  const pool = new sql.ConnectionPool({
-    ...CONNECTION_BASE,
-    user: creds.user,
-    password: creds.password,
-  })
+  const adjacency = await loadAdjacency(creds)
 
-  try {
-    await pool.connect()
+  const visited = new Set<string>()
+  const collected = new Set<string>()
+  const queue: string[] = [protheusCode.trim()]
 
-    const visited = new Set<string>()
-    const collected = new Set<string>()
-    const queue: string[] = [protheusCode.trim()]
+  while (queue.length > 0) {
+    const current = (queue.shift() as string).trim()
+    if (!current || visited.has(current)) continue
+    visited.add(current)
 
-    while (queue.length > 0) {
-      const current = (queue.shift() as string).trim()
-      if (!current || visited.has(current)) continue
-      visited.add(current)
-
-      const result = await pool.request()
-        .input('estrutura', sql.VarChar, current)
-        .query('SELECT COMPONENTE FROM ESTRUTURAS WHERE ESTRUTURA = @estrutura')
-
-      for (const row of result.recordset as { COMPONENTE: unknown }[]) {
-        const componente = String(row.COMPONENTE ?? '').trim()
-        if (!componente) continue
-        collected.add(componente)
-        if (!visited.has(componente)) queue.push(componente)
-      }
+    for (const componente of adjacency.get(current) || []) {
+      collected.add(componente)
+      if (!visited.has(componente)) queue.push(componente)
     }
-
-    return Array.from(collected)
-  } finally {
-    await pool.close()
   }
+
+  return Array.from(collected)
 }

@@ -466,7 +466,7 @@ export default function AnalisadorEstruturasPage() {
       </div>
 
       {/* Live DB search */}
-      <div className="mb-4 flex items-center gap-3 flex-wrap">
+      <div className="mb-1 flex items-center gap-3 flex-wrap">
         {dbCreds ? (
           <>
             <button
@@ -492,6 +492,12 @@ export default function AnalisadorEstruturasPage() {
           </button>
         )}
       </div>
+      {dbCreds && (
+        <p className="text-xs text-outline mb-5">
+          A primeira busca carrega a tabela ESTRUTURAS inteira para a memória (pode levar até 1–2 min); as buscas
+          seguintes usam esse cache e ficam quase instantâneas.
+        </p>
+      )}
 
       {/* Manual Excel upload — kept as a fallback */}
       <div className="mb-6">
