@@ -161,17 +161,65 @@ interface EquipmentCodeOption {
   legacyEquipmentId: number
 }
 
-function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
+interface ReverseResult {
+  code: string
+  internal: boolean
+}
+
+function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds, onAnalyze }: {
   onClose: () => void
   onPick: (code: string) => void
   onPickGroup: (legacyId: number, name: string) => void
   onPickAll: () => void
+  dbCreds: { user: string; password: string }
+  onAnalyze: (codes: string[]) => void
 }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('')
   const [groups, setGroups] = useState<EquipmentGroupOption[]>([])
   const [codes, setCodes] = useState<EquipmentCodeOption[]>([])
+
+  const [reversePrefixInput, setReversePrefixInput] = useState('27.04, 27.03')
+  const [reverseLoading, setReverseLoading] = useState(false)
+  const [reverseError, setReverseError] = useState('')
+  const [reverseResults, setReverseResults] = useState<ReverseResult[] | null>(null)
+
+  const runReverseSearch = async () => {
+    const prefixes = reversePrefixInput.split(',').map(p => p.trim()).filter(Boolean)
+    if (prefixes.length === 0) { setReverseError('Informe ao menos um prefixo'); return }
+    setReverseLoading(true)
+    setReverseError('')
+    setReverseResults(null)
+    try {
+      // Checks presence against EVERY internal record (active or not) —
+      // deactivated equipment still counts as "already registered".
+      const [headersRes, internalRes] = await Promise.all([
+        fetch('/api/protheus-estrutura-reversa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, prefixes }),
+        }),
+        fetch('/api/standard_equipment_items?limit=25000'),
+      ])
+      const headersJson = await headersRes.json()
+      if (!headersRes.ok) { setReverseError(headersJson.error || 'Falha ao consultar o banco Protheus'); return }
+      const internalJson = await internalRes.json()
+      const internalSet = new Set(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (internalJson.data || []).map((r: any) => String(r.protheus_code ?? '').trim().toUpperCase())
+      )
+      const rows: ReverseResult[] = (headersJson.headers as string[]).map(code => ({
+        code,
+        internal: internalSet.has(code.trim().toUpperCase()),
+      }))
+      setReverseResults(rows)
+    } catch {
+      setReverseError('Erro de comunicação com o banco Protheus')
+    } finally {
+      setReverseLoading(false)
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -229,7 +277,7 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-fade-in">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-6xl max-h-[85vh] flex flex-col animate-fade-in">
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
           <h2 className="text-base font-semibold text-on-surface">Buscar código</h2>
           <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
@@ -261,7 +309,7 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
         ) : error ? (
           <div className="flex items-center justify-center py-16 text-error text-sm">⚠ {error}</div>
         ) : (
-          <div className="flex-1 overflow-auto grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-outline-variant">
+          <div className="flex-1 overflow-auto grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-outline-variant">
             <div className="p-4">
               <div className="text-xs font-bold text-primary uppercase tracking-wide mb-2">
                 Grupo de Equipamentos <span className="text-outline font-normal">({filteredGroups.length})</span>
@@ -303,144 +351,71 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll }: {
                 ))}
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-interface ReverseResult {
-  code: string
-  internal: boolean
-}
-
-// Reverse search: instead of starting from a code we already have
-// registered, this asks the live Protheus database for every structure
-// header (ESTRUTURA) whose code starts with a given prefix — regardless of
-// whether it's registered internally — and flags which ones are missing
-// from Cadastro de Equipamentos. Analyzing a result reuses the exact same
-// pipeline as the normal search (runDbStructureAnalysis), so the usual
-// duplicidade/erro/não-encontrado checks against Parâmetros de Estrutura
-// apply identically.
-function ReverseSearchModal({ dbCreds, onClose, onAnalyze }: {
-  dbCreds: { user: string; password: string }
-  onClose: () => void
-  onAnalyze: (codes: string[]) => void
-}) {
-  const [prefixInput, setPrefixInput] = useState('27.04, 27.03')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [results, setResults] = useState<ReverseResult[] | null>(null)
-
-  const runSearch = async () => {
-    const prefixes = prefixInput.split(',').map(p => p.trim()).filter(Boolean)
-    if (prefixes.length === 0) { setError('Informe ao menos um prefixo'); return }
-    setLoading(true)
-    setError('')
-    setResults(null)
-    try {
-      const [headersRes, internalRes] = await Promise.all([
-        fetch('/api/protheus-estrutura-reversa', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, prefixes }),
-        }),
-        fetch('/api/standard_equipment_items?limit=25000'),
-      ])
-      const headersJson = await headersRes.json()
-      if (!headersRes.ok) { setError(headersJson.error || 'Falha ao consultar o banco Protheus'); return }
-      const internalJson = await internalRes.json()
-      const internalSet = new Set(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (internalJson.data || []).map((r: any) => String(r.protheus_code ?? '').trim().toUpperCase())
-      )
-      const rows: ReverseResult[] = (headersJson.headers as string[]).map(code => ({
-        code,
-        internal: internalSet.has(code.trim().toUpperCase()),
-      }))
-      setResults(rows)
-    } catch {
-      setError('Erro de comunicação com o banco Protheus')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const missingCount = results ? results.filter(r => !r.internal).length : 0
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
-          <h2 className="text-base font-semibold text-on-surface">Busca Reversa — Estruturas no Protheus</h2>
-          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
-        </div>
-
-        <div className="px-5 py-3 border-b border-outline-variant shrink-0 flex items-center gap-2">
-          <input
-            type="text"
-            autoFocus
-            value={prefixInput}
-            onChange={e => setPrefixInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && runSearch()}
-            placeholder="Prefixos separados por vírgula, ex: 27.04, 27.03"
-            className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 font-mono"
-          />
-          <button
-            onClick={runSearch}
-            disabled={loading}
-            className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all whitespace-nowrap"
-          >
-            {loading ? 'Buscando…' : 'Buscar'}
-          </button>
-        </div>
-
-        <p className="px-5 pt-3 text-xs text-outline">
-          Lista toda estrutura (ESTRUTURA) do banco Protheus cujo código comece com um dos prefixos acima,
-          indicando quais já existem em Cadastro de Equipamentos e quais não — a mesma análise de
-          Parâmetros de Estrutura usada na busca normal roda para cada uma.
-        </p>
-
-        <div className="flex-1 overflow-auto px-5 py-3">
-          {error && <div className="text-error text-sm mb-2">⚠ {error}</div>}
-          {results && (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-outline font-mono">
-                  {results.length} estrutura(s) encontrada(s) · {missingCount} fora do banco interno
-                </span>
+            <div className="p-4">
+              <div className="text-xs font-bold text-amber-400 uppercase tracking-wide mb-2">
+                Busca Reversa (Protheus)
+              </div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <input
+                  type="text"
+                  value={reversePrefixInput}
+                  onChange={e => setReversePrefixInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && runReverseSearch()}
+                  placeholder="Prefixos, ex: 27.04, 27.03"
+                  className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant rounded px-2 py-1.5 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 font-mono"
+                />
                 <button
-                  onClick={() => { onAnalyze(results.map(r => r.code)); onClose() }}
-                  disabled={results.length === 0}
-                  className="px-3 py-1.5 bg-primary/10 border border-primary/40 text-primary rounded text-xs font-semibold hover:bg-primary/20 transition-colors disabled:opacity-40"
+                  onClick={runReverseSearch}
+                  disabled={reverseLoading}
+                  className="shrink-0 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/40 text-amber-400 rounded text-xs font-semibold hover:bg-amber-500/20 disabled:opacity-50 transition-colors"
                 >
-                  Analisar todas ({results.length})
+                  {reverseLoading ? '…' : 'Buscar'}
                 </button>
               </div>
-              <div className="flex flex-col gap-1">
-                {results.length === 0 ? (
-                  <div className="text-xs text-outline italic">Nenhuma estrutura encontrada com esse(s) prefixo(s).</div>
-                ) : results.map(r => (
-                  <div key={r.code} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-surface-container-high">
-                    <span className="font-mono text-xs text-on-surface">{r.code}</span>
-                    <div className="flex items-center gap-2">
-                      {r.internal
-                        ? <Badge tone="success">No banco interno</Badge>
-                        : <Badge tone="amber">Fora do banco interno</Badge>}
+              <p className="text-[11px] text-outline mb-2">
+                Lista toda estrutura do Protheus com esse prefixo, cadastrada internamente ou não.
+              </p>
+              {reverseError && <div className="text-error text-xs mb-2">⚠ {reverseError}</div>}
+              {reverseResults && (
+                <>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] text-outline font-mono">
+                      {reverseResults.length} encontrada(s) · {reverseResults.filter(r => !r.internal).length} fora do banco
+                    </span>
+                    {reverseResults.length > 0 && (
                       <button
-                        onClick={() => { onAnalyze([r.code]); onClose() }}
-                        className="text-xs text-primary hover:underline whitespace-nowrap"
+                        onClick={() => { onAnalyze(reverseResults.map(r => r.code)); onClose() }}
+                        className="text-[11px] text-primary hover:underline whitespace-nowrap"
                       >
-                        Analisar
+                        Analisar todas
                       </button>
-                    </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+                  <div className="flex flex-col gap-1">
+                    {reverseResults.length === 0 ? (
+                      <div className="text-xs text-outline italic">Nenhuma estrutura encontrada com esse(s) prefixo(s).</div>
+                    ) : reverseResults.map(r => (
+                      <div key={r.code} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-surface-container-high">
+                        <span className="font-mono text-xs text-on-surface truncate">{r.code}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {r.internal
+                            ? <Badge tone="success">No banco</Badge>
+                            : <Badge tone="amber">Fora do banco</Badge>}
+                          <button
+                            onClick={() => { onAnalyze([r.code]); onClose() }}
+                            className="text-[11px] text-primary hover:underline"
+                          >
+                            Analisar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -458,7 +433,6 @@ export default function AnalisadorEstruturasPage() {
   const [connecting, setConnecting] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [groupCodes, setGroupCodes] = useState<EquipmentCodeOption[]>([])
-  const [reverseOpen, setReverseOpen] = useState(false)
 
   // Restore previously analyzed files when returning to this page.
   useEffect(() => {
@@ -653,13 +627,6 @@ export default function AnalisadorEstruturasPage() {
             >
               🔍 Buscar equipamento no banco Protheus
             </button>
-            <button
-              onClick={() => setReverseOpen(true)}
-              title="Lista toda estrutura do Protheus por prefixo de código e indica quais faltam no banco interno"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary transition-colors text-sm font-semibold"
-            >
-              🔁 Busca Reversa
-            </button>
             <Badge tone="success">Conectado ao Protheus</Badge>
             <button
               onClick={() => { setDbCreds(null); setShowLoginModal(true) }}
@@ -711,18 +678,13 @@ export default function AnalisadorEstruturasPage() {
           error={loginError}
         />
       )}
-      {pickerOpen && (
+      {pickerOpen && dbCreds && (
         <EquipmentPickerModal
           onClose={() => setPickerOpen(false)}
           onPick={handlePickCode}
           onPickGroup={handlePickGroup}
           onPickAll={handlePickAll}
-        />
-      )}
-      {reverseOpen && dbCreds && (
-        <ReverseSearchModal
           dbCreds={dbCreds}
-          onClose={() => setReverseOpen(false)}
           onAnalyze={handleAnalyzeCodes}
         />
       )}
