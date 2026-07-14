@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const codes = await fetchStructureCodes(protheusCode, { user, password })
-    return NextResponse.json({ codes })
+    const { codes, description } = await fetchStructureCodes(protheusCode, { user, password })
+    return NextResponse.json({ codes, description })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao consultar o banco Protheus'
     return NextResponse.json({ error: message }, { status: 502 })

@@ -28,22 +28,24 @@ const CONNECTION_BASE = {
 // round trips over the WAN link to the Protheus server — the whole analysis
 // could take minutes and individual nodes were timing out at 20s. Instead,
 // the whole ESTRUTURAS table is pulled ONCE (a single, longer-running query)
-// into an in-memory adjacency map, cached for a while, and every structure
-// resolution afterwards walks that map in memory — zero further DB round
-// trips per analysis.
-interface AdjacencyCache {
+// into in-memory maps, cached for a while, and every structure resolution
+// afterwards walks those maps in memory — zero further DB round trips per
+// analysis. DESC_ESTRUTURA is pulled alongside ESTRUTURA/COMPONENTE in the
+// same query so the structure's description is available with no extra cost.
+interface StructureCache {
   adjacency: Map<string, string[]>
+  descriptions: Map<string, string>
   fetchedAt: number
 }
 
-let cache: AdjacencyCache | null = null
-let inFlight: Promise<Map<string, string[]>> | null = null
+let cache: StructureCache | null = null
+let inFlight: Promise<StructureCache> | null = null
 
 const CACHE_TTL_MS = 30 * 60 * 1000 // BOM data changes rarely enough that a 30min-old cache is still safe to reuse.
 const BULK_LOAD_TIMEOUT_MS = 120000 // the one full-table pull is allowed to run much longer than a normal query.
 
-async function loadAdjacency(creds: ProtheusCredentials): Promise<Map<string, string[]>> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache.adjacency
+async function loadStructureCache(creds: ProtheusCredentials): Promise<StructureCache> {
+  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache
   if (inFlight) return inFlight
 
   inFlight = (async () => {
@@ -56,20 +58,28 @@ async function loadAdjacency(creds: ProtheusCredentials): Promise<Map<string, st
     try {
       await pool.connect()
       const result = await pool.request()
-        .query('SELECT ESTRUTURA, COMPONENTE FROM ESTRUTURAS')
+        .query('SELECT ESTRUTURA, DESC_ESTRUTURA, COMPONENTE FROM ESTRUTURAS')
 
       const adjacency = new Map<string, string[]>()
-      for (const row of result.recordset as { ESTRUTURA: unknown; COMPONENTE: unknown }[]) {
+      const descriptions = new Map<string, string>()
+      for (const row of result.recordset as { ESTRUTURA: unknown; DESC_ESTRUTURA: unknown; COMPONENTE: unknown }[]) {
         const estrutura = String(row.ESTRUTURA ?? '').trim()
         const componente = String(row.COMPONENTE ?? '').trim()
-        if (!estrutura || !componente) continue
+        if (!estrutura) continue
+
+        if (!descriptions.has(estrutura)) {
+          const desc = String(row.DESC_ESTRUTURA ?? '').trim()
+          if (desc) descriptions.set(estrutura, desc)
+        }
+
+        if (!componente) continue
         const children = adjacency.get(estrutura)
         if (children) children.push(componente)
         else adjacency.set(estrutura, [componente])
       }
 
-      cache = { adjacency, fetchedAt: Date.now() }
-      return adjacency
+      cache = { adjacency, descriptions, fetchedAt: Date.now() }
+      return cache
     } finally {
       await pool.close()
       inFlight = null
@@ -84,15 +94,17 @@ async function loadAdjacency(creds: ProtheusCredentials): Promise<Map<string, st
  * ESTRUTURA, if the component is itself the header of another structure,
  * its components are pulled in too — same result as the union of
  * "2-Estruturas"/"FLAT-LIST" from the manual Excel export. Runs entirely
- * against the in-memory adjacency map (see loadAdjacency above); a
- * visited-set guards against cyclic BOM references.
+ * against the in-memory adjacency map (see loadStructureCache above); a
+ * visited-set guards against cyclic BOM references. Also returns the
+ * structure's own DESC_ESTRUTURA, when known.
  */
-export async function fetchStructureCodes(protheusCode: string, creds: ProtheusCredentials): Promise<string[]> {
-  const adjacency = await loadAdjacency(creds)
+export async function fetchStructureCodes(protheusCode: string, creds: ProtheusCredentials): Promise<{ codes: string[]; description: string | null }> {
+  const { adjacency, descriptions } = await loadStructureCache(creds)
 
+  const root = protheusCode.trim()
   const visited = new Set<string>()
   const collected = new Set<string>()
-  const queue: string[] = [protheusCode.trim()]
+  const queue: string[] = [root]
 
   while (queue.length > 0) {
     const current = (queue.shift() as string).trim()
@@ -105,7 +117,7 @@ export async function fetchStructureCodes(protheusCode: string, creds: ProtheusC
     }
   }
 
-  return Array.from(collected)
+  return { codes: Array.from(collected), description: descriptions.get(root) ?? null }
 }
 
 /**
@@ -118,7 +130,7 @@ export async function fetchStructureCodes(protheusCode: string, creds: ProtheusC
  * cache is warm.
  */
 export async function listStructureHeaders(prefixes: string[], creds: ProtheusCredentials): Promise<string[]> {
-  const adjacency = await loadAdjacency(creds)
+  const { adjacency } = await loadStructureCache(creds)
   const normalizedPrefixes = prefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
   if (normalizedPrefixes.length === 0) return []
 
