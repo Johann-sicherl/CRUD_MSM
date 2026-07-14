@@ -161,11 +161,6 @@ interface EquipmentCodeOption {
   legacyEquipmentId: number
 }
 
-interface ReverseResult {
-  code: string
-  internal: boolean
-}
-
 function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds, onAnalyze }: {
   onClose: () => void
   onPick: (code: string) => void
@@ -183,37 +178,30 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds
   const [reversePrefixInput, setReversePrefixInput] = useState('27.04, 27.03')
   const [reverseLoading, setReverseLoading] = useState(false)
   const [reverseError, setReverseError] = useState('')
-  const [reverseResults, setReverseResults] = useState<ReverseResult[] | null>(null)
 
+  // Finds every structure header matching the prefix(es) directly in the
+  // live Protheus DB, then hands the whole list off to be analyzed exactly
+  // like any other pick — the resulting cards already show "Equipamento
+  // encontrado/não encontrado", so no separate internal/external listing
+  // is needed here; this window closes right away and the cards appear in
+  // the normal results area below.
   const runReverseSearch = async () => {
     const prefixes = reversePrefixInput.split(',').map(p => p.trim()).filter(Boolean)
     if (prefixes.length === 0) { setReverseError('Informe ao menos um prefixo'); return }
     setReverseLoading(true)
     setReverseError('')
-    setReverseResults(null)
     try {
-      // Checks presence against EVERY internal record (active or not) —
-      // deactivated equipment still counts as "already registered".
-      const [headersRes, internalRes] = await Promise.all([
-        fetch('/api/protheus-estrutura-reversa', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, prefixes }),
-        }),
-        fetch('/api/standard_equipment_items?limit=25000'),
-      ])
-      const headersJson = await headersRes.json()
-      if (!headersRes.ok) { setReverseError(headersJson.error || 'Falha ao consultar o banco Protheus'); return }
-      const internalJson = await internalRes.json()
-      const internalSet = new Set(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (internalJson.data || []).map((r: any) => String(r.protheus_code ?? '').trim().toUpperCase())
-      )
-      const rows: ReverseResult[] = (headersJson.headers as string[]).map(code => ({
-        code,
-        internal: internalSet.has(code.trim().toUpperCase()),
-      }))
-      setReverseResults(rows)
+      const res = await fetch('/api/protheus-estrutura-reversa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, prefixes }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setReverseError(json.error || 'Falha ao consultar o banco Protheus'); return }
+      const headers: string[] = json.headers || []
+      if (headers.length === 0) { setReverseError('Nenhuma estrutura encontrada com esse(s) prefixo(s)'); return }
+      onAnalyze(headers)
+      onClose()
     } catch {
       setReverseError('Erro de comunicação com o banco Protheus')
     } finally {
@@ -373,46 +361,11 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds
                 </button>
               </div>
               <p className="text-[11px] text-outline mb-2">
-                Lista toda estrutura do Protheus com esse prefixo, cadastrada internamente ou não.
+                Ao clicar em Buscar, esta janela fecha e toda estrutura do Protheus com esse prefixo é
+                analisada automaticamente — os resultados aparecem na lista abaixo, mostrando também
+                quais já estão cadastradas em Cadastro de Equipamentos.
               </p>
               {reverseError && <div className="text-error text-xs mb-2">⚠ {reverseError}</div>}
-              {reverseResults && (
-                <>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] text-outline font-mono">
-                      {reverseResults.length} encontrada(s) · {reverseResults.filter(r => !r.internal).length} fora do banco
-                    </span>
-                    {reverseResults.length > 0 && (
-                      <button
-                        onClick={() => { onAnalyze(reverseResults.map(r => r.code)); onClose() }}
-                        className="text-[11px] text-primary hover:underline whitespace-nowrap"
-                      >
-                        Analisar todas
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {reverseResults.length === 0 ? (
-                      <div className="text-xs text-outline italic">Nenhuma estrutura encontrada com esse(s) prefixo(s).</div>
-                    ) : reverseResults.map(r => (
-                      <div key={r.code} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-surface-container-high">
-                        <span className="font-mono text-xs text-on-surface truncate">{r.code}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {r.internal
-                            ? <Badge tone="success">No banco</Badge>
-                            : <Badge tone="amber">Fora do banco</Badge>}
-                          <button
-                            onClick={() => { onAnalyze([r.code]); onClose() }}
-                            className="text-[11px] text-primary hover:underline"
-                          >
-                            Analisar
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
           </div>
         )}
