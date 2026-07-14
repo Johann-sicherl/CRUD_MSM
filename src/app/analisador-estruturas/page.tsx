@@ -391,7 +391,7 @@ export default function AnalisadorEstruturasPage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [groupCodes, setGroupCodes] = useState<EquipmentCodeOption[]>([])
   const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   // Restore previously analyzed files when returning to this page.
   useEffect(() => {
@@ -443,8 +443,8 @@ export default function AnalisadorEstruturasPage() {
       .catch(() => {})
   }, [])
 
-  const toggleGroupCollapsed = (groupName: string) => {
-    setCollapsedGroups(prev => {
+  const toggleGroupExpanded = (groupName: string) => {
+    setExpandedGroups(prev => {
       const next = new Set(prev)
       if (next.has(groupName)) next.delete(groupName)
       else next.add(groupName)
@@ -692,12 +692,12 @@ export default function AnalisadorEstruturasPage() {
       ) : (
         <div className="flex flex-col gap-6">
           {groupedFileEntries.map(([groupName, groupFiles]) => {
-            const groupOpen = !collapsedGroups.has(groupName)
+            const groupOpen = expandedGroups.has(groupName)
             return (
             <div key={groupName}>
               <div
-                onClick={() => toggleGroupCollapsed(groupName)}
-                className="flex items-center gap-2 mb-2 cursor-pointer select-none"
+                onClick={() => toggleGroupExpanded(groupName)}
+                className="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl border border-outline-variant bg-surface-container-high hover:bg-surface-container-highest cursor-pointer select-none transition-colors"
               >
                 <span className={`text-outline text-sm leading-none transition-transform ${groupOpen ? 'rotate-90' : ''}`}>›</span>
                 <span className="text-xs font-bold text-primary uppercase tracking-wide">
@@ -736,6 +736,11 @@ export default function AnalisadorEstruturasPage() {
                         {file.equipmentFound
                           ? <Badge tone="success">Equipamento encontrado</Badge>
                           : <Badge tone="error">Equipamento não encontrado</Badge>}
+                        {file.source === 'db' && (
+                          file.foundInProtheus
+                            ? <Badge tone="success">Encontrado no Protheus</Badge>
+                            : <Badge tone="error">Não encontrado no Protheus</Badge>
+                        )}
                         {errorCount > 0 && <Badge tone="error">{errorCount} erro(s)</Badge>}
                         {duplicateCount > 0 && <Badge tone="amber">{duplicateCount} duplicidade(s)</Badge>}
                         {missingCount > 0 && <Badge tone="amber">{missingCount} propriedade(s) sem código</Badge>}
