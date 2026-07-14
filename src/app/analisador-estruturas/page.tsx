@@ -659,8 +659,6 @@ export default function AnalisadorEstruturasPage() {
                   onClick={() => setExpandedId(isOpen ? null : file.id)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="font-mono text-sm text-on-surface truncate">{file.name}</span>
-                    <Badge tone="outline">{file.source === 'db' ? 'Banco' : 'Excel'}</Badge>
                     <Badge tone="outline">Cód. {file.protheusCode}</Badge>
                     {file.status === 'analyzing' && <Badge tone="outline">Analisando…</Badge>}
                     {file.status === 'error' && <Badge tone="error">{file.errorMessage}</Badge>}
