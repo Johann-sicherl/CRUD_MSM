@@ -89,6 +89,12 @@ export default function DataTable({ tableName, schema }: Props) {
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  // View-only "existe no Protheus?" flag column (see schema.protheusStructureCheckField) —
+  // credentials are never stored, only used to pull the current ESTRUTURA header list once per connect.
+  const [protheusHeaders, setProtheusHeaders] = useState<Set<string> | null>(null)
+  const [protheusModalOpen, setProtheusModalOpen] = useState(false)
+  const [protheusConnecting, setProtheusConnecting] = useState(false)
+  const [protheusError, setProtheusError] = useState('')
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
 
@@ -218,11 +224,44 @@ export default function DataTable({ tableName, schema }: Props) {
     exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
   }
 
+  // null = not connected/unknown, true/false = actually checked against Protheus.
+  const isInProtheus = useCallback((row: Record<string, unknown>): boolean | null => {
+    if (!schema.protheusStructureCheckField || !protheusHeaders) return null
+    const code = String(row[schema.protheusStructureCheckField] ?? '').trim().toUpperCase()
+    if (!code) return null
+    return protheusHeaders.has(code)
+  }, [schema.protheusStructureCheckField, protheusHeaders])
+
+  const handleProtheusConnect = async (user: string, password: string) => {
+    setProtheusConnecting(true)
+    setProtheusError('')
+    try {
+      const res = await fetch('/api/protheus-estrutura-headers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, password }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setProtheusError(json.error || 'Falha ao consultar o banco Protheus'); return }
+      setProtheusHeaders(new Set((json.headers as string[]).map(h => h.trim().toUpperCase())))
+      setProtheusModalOpen(false)
+    } catch {
+      setProtheusError('Erro de comunicação com o banco Protheus')
+    } finally {
+      setProtheusConnecting(false)
+    }
+  }
+
   const handleExportVisible = () => {
-    const headers = listFields.map(f => f.label)
-    const rowData = filteredRows.map(row =>
-      listFields.map(f => getDisplayValue(row, f.name, f, lookups))
-    )
+    const includeProtheusFlag = !!schema.protheusStructureCheckField && !!protheusHeaders
+    const headers = [
+      ...(includeProtheusFlag ? ['Existe no Protheus'] : []),
+      ...listFields.map(f => f.label),
+    ]
+    const rowData = filteredRows.map(row => [
+      ...(includeProtheusFlag ? [isInProtheus(row) ? 'Sim' : 'Não'] : []),
+      ...listFields.map(f => getDisplayValue(row, f.name, f, lookups)),
+    ])
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
     exportVisibleData(headers, rowData, `${safeLabel}.xlsx`)
   }
@@ -289,6 +328,24 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const actionButtons = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
+      {schema.protheusStructureCheckField && (
+        protheusHeaders ? (
+          <button
+            onClick={() => setProtheusModalOpen(true)}
+            title="Consultar novamente o banco Protheus"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-green-400 border border-green-500/30 rounded bg-green-500/10 hover:bg-green-500/20 transition-colors whitespace-nowrap"
+          >
+            ✓ Verificado no Protheus
+          </button>
+        ) : (
+          <button
+            onClick={() => setProtheusModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
+          >
+            🔌 Verificar no Protheus
+          </button>
+        )
+      )}
       {schema.bulkEdit && selectedIds.size > 0 && (
         <button
           onClick={() => setBulkEditOpen(true)}
@@ -471,6 +528,14 @@ export default function DataTable({ tableName, schema }: Props) {
                         }}
                       />
                     </th>
+                    {schema.protheusStructureCheckField && (
+                      <th
+                        className="px-3 py-3 w-10 text-center text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono"
+                        title="Existe como estrutura (ESTRUTURA) no Protheus?"
+                      >
+                        Protheus
+                      </th>
+                    )}
                     {listFields.map(f => (
                       <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ` align-top${f.listKeepWidth ? ' min-w-[150px]' : ' min-w-[100px]'}` : ''}`}>
                         <div>{f.label}</div>
@@ -502,7 +567,7 @@ export default function DataTable({ tableName, schema }: Props) {
                 <tbody className="divide-y divide-outline-variant/30">
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={listFields.length + 2} className="px-4 py-12 text-center text-outline text-sm">
+                      <td colSpan={listFields.length + 2 + (schema.protheusStructureCheckField ? 1 : 0)} className="px-4 py-12 text-center text-outline text-sm">
                         Nenhum registro encontrado
                       </td>
                     </tr>
@@ -524,6 +589,19 @@ export default function DataTable({ tableName, schema }: Props) {
                             })}
                           />
                         </td>
+                        {schema.protheusStructureCheckField && (
+                          <td className="px-3 py-3 text-center">
+                            {(() => {
+                              const found = isInProtheus(row)
+                              if (found === null) {
+                                return <span className="inline-block w-2.5 h-2.5 rounded-full bg-outline-variant" title="Conecte ao Protheus para verificar (botão acima da tabela)" />
+                              }
+                              return found
+                                ? <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="Encontrado no Protheus" />
+                                : <span className="inline-block w-2.5 h-2.5 rounded-full bg-error" title="Não encontrado no Protheus" />
+                            })()}
+                          </td>
+                        )}
                         {listFields.map(f => {
                           let cell: React.ReactNode
                           if (f.lookupFrom && lookups[f.name]) {
@@ -577,6 +655,60 @@ export default function DataTable({ tableName, schema }: Props) {
           </>
         )}
       </div>
+
+      {/* Protheus structure-check login */}
+      {protheusModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl p-6 w-full max-w-sm animate-fade-in">
+            <h3 className="text-base font-semibold text-on-surface mb-2">Conectar ao Banco Protheus</h3>
+            <p className="text-on-surface-variant text-sm mb-4">
+              Verifica quais códigos desta lista já existem como estrutura (ESTRUTURA) no Protheus. A conexão
+              é aberta só para esta consulta e fechada em seguida — nada fica salvo.
+            </p>
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={e => {
+                e.preventDefault()
+                const form = e.target as HTMLFormElement
+                const user = (form.elements.namedItem('protheusUser') as HTMLInputElement).value
+                const password = (form.elements.namedItem('protheusPassword') as HTMLInputElement).value
+                handleProtheusConnect(user, password)
+              }}
+            >
+              <input
+                name="protheusUser"
+                type="text"
+                placeholder="Usuário"
+                autoFocus
+                className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              <input
+                name="protheusPassword"
+                type="password"
+                placeholder="Senha"
+                className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              {protheusError && <div className="text-error text-xs">⚠ {protheusError}</div>}
+              <div className="flex justify-end gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setProtheusModalOpen(false)}
+                  className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={protheusConnecting}
+                  className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
+                >
+                  {protheusConnecting ? 'Conectando…' : 'Conectar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Bulk delete confirmation */}
       {bulkDeleteOpen && (

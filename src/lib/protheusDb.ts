@@ -142,3 +142,14 @@ export async function listStructureHeaders(prefixes: string[], creds: ProtheusCr
     .filter(code => normalizedPrefixes.some(p => code.toUpperCase().startsWith(p)))
     .sort((a, b) => a.localeCompare(b))
 }
+
+/**
+ * Every distinct ESTRUTURA header code registered in the live Protheus
+ * database, unfiltered — used for a one-shot "which of my rows exist as a
+ * structure in Protheus?" check (e.g. the view-only flag column in Cadastro
+ * de Equipamentos). Reuses the same cache as the other functions above.
+ */
+export async function listAllStructureHeaders(creds: ProtheusCredentials): Promise<string[]> {
+  const { adjacency } = await loadStructureCache(creds)
+  return Array.from(adjacency.keys()).sort((a, b) => a.localeCompare(b))
+}
