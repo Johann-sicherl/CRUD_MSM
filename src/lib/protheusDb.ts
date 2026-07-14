@@ -107,3 +107,22 @@ export async function fetchStructureCodes(protheusCode: string, creds: ProtheusC
 
   return Array.from(collected)
 }
+
+/**
+ * Reverse lookup: every distinct ESTRUTURA header code registered in the
+ * live Protheus database whose code starts with one of `prefixes` (e.g.
+ * "27.04", "27.03") — regardless of whether that code exists in our
+ * internal standard_equipment_items catalog. Reuses the same cached
+ * adjacency map as fetchStructureCodes (its keys ARE the full set of
+ * structure headers), so this costs no extra DB round trip once the
+ * cache is warm.
+ */
+export async function listStructureHeaders(prefixes: string[], creds: ProtheusCredentials): Promise<string[]> {
+  const adjacency = await loadAdjacency(creds)
+  const normalizedPrefixes = prefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
+  if (normalizedPrefixes.length === 0) return []
+
+  return Array.from(adjacency.keys())
+    .filter(code => normalizedPrefixes.some(p => code.toUpperCase().startsWith(p)))
+    .sort((a, b) => a.localeCompare(b))
+}
