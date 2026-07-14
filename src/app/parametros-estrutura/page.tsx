@@ -400,14 +400,14 @@ export default function ParametrosEstruturaPage() {
 
   return (
     <div className="p-6 max-w-[100rem]">
-      <div className="mb-6">
-        <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
-        <h1 className="text-3xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
+      <div className="mb-2">
+        <div className="text-xs font-mono text-outline uppercase tracking-[0.2em]">SISTEMA</div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
       <div>
-      <p className="text-on-surface-variant text-sm mb-3">
+      <h1 className="text-3xl font-bold text-on-surface mb-1">Parâmetros de Estrutura</h1>
+      <p className="text-on-surface-variant text-base mb-3">
         Regras por Grupo Acessórios usadas pelo Busc. Itens Série Estrut. — edite e clique em Salvar, ou importe/exporte um Excel.
       </p>
       {loading ? (
@@ -638,13 +638,11 @@ export default function ParametrosEstruturaPage() {
       </div>
 
       <div>
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-on-surface">Classificação de Equipamentos</h2>
-          <p className="text-on-surface-variant text-sm mt-1">
-            Define o tipo de equipamento a partir da descrição da estrutura, usado para agrupar os resultados
-            em Busc. Itens Série Estrut. — a última regra que bater vence.
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold text-on-surface mb-1">Classificação de Equipamentos</h1>
+        <p className="text-on-surface-variant text-base mb-3">
+          Define o tipo de equipamento a partir da descrição da estrutura, usado para agrupar os resultados
+          em Busc. Itens Série Estrut. — a última regra que bater vence.
+        </p>
 
         {classLoading ? (
           <div className="flex items-center gap-3 py-16 text-outline">
@@ -661,23 +659,23 @@ export default function ParametrosEstruturaPage() {
                 placeholder="Filtrar por padrão, equipamento, família..."
                 className="flex-1 min-w-[200px] bg-surface-container border border-outline-variant rounded px-3 py-2 text-base text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
               />
-              <span className="text-sm text-outline font-mono whitespace-nowrap">{classFilteredIndices.length} de {classRows.length}</span>
+              <span className="text-base text-outline font-mono whitespace-nowrap">{classFilteredIndices.length} de {classRows.length}</span>
             </div>
 
             <div className="overflow-auto border border-outline-variant rounded-lg max-h-[65vh]">
-              <table className="text-sm w-full">
+              <table className="text-base w-full">
                 <thead className="sticky top-0 bg-surface-container-highest">
                   <tr>
-                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Padrões (vírgula = ou)</th>
-                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Condição</th>
-                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Equipamento</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Padrões (vírgula = ou)</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Condição</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Equipamento</th>
                     <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {classFilteredIndices.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-3 text-sm text-outline italic">Nenhuma regra encontrada.</td>
+                      <td colSpan={4} className="px-3 py-3 text-base text-outline italic">Nenhuma regra encontrada.</td>
                     </tr>
                   ) : classFilteredIndices.map(i => (
                     <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
@@ -686,14 +684,14 @@ export default function ParametrosEstruturaPage() {
                           value={classRows[i].patternsText}
                           onChange={e => updateClassCell(i, 'patternsText', e.target.value)}
                           placeholder="ex: GARRETT"
-                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                          className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
                         />
                       </td>
                       <td className="p-1">
                         <select
                           value={classRows[i].combinator}
                           onChange={e => updateClassCell(i, 'combinator', e.target.value as 'OR' | 'AND')}
-                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none text-on-surface text-sm"
+                          className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none text-on-surface text-base"
                         >
                           <option value="OR">Qualquer (OU)</option>
                           <option value="AND">Todas (E)</option>
@@ -703,13 +701,13 @@ export default function ParametrosEstruturaPage() {
                         <input
                           value={classRows[i].equip}
                           onChange={e => updateClassCell(i, 'equip', e.target.value)}
-                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                          className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
                         />
                       </td>
                       <td className="p-1 text-center">
                         <button
                           onClick={() => removeClassRow(i)}
-                          className="text-outline hover:text-error transition-colors text-lg"
+                          className="text-outline hover:text-error transition-colors text-xl"
                           title="Remover regra"
                         >
                           ✕
@@ -722,12 +720,12 @@ export default function ParametrosEstruturaPage() {
             </div>
 
             {classError && (
-              <div className="mt-3 flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-sm">
+              <div className="mt-3 flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-base">
                 ⚠ {classError}
               </div>
             )}
             {classSuccessMsg && (
-              <div className="mt-3 flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">
+              <div className="mt-3 flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-base">
                 ✓ {classSuccessMsg}
               </div>
             )}
@@ -735,21 +733,21 @@ export default function ParametrosEstruturaPage() {
             <div className="mt-4 flex items-center gap-3 flex-wrap">
               <button
                 onClick={addClassRow}
-                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-base text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
               >
                 + Adicionar regra
               </button>
               <button
                 onClick={handleSaveClassification}
                 disabled={classSaving}
-                className="px-5 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2 bg-primary text-on-primary rounded text-base font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {classSaving ? 'Salvando…' : 'Salvar'}
               </button>
               <button
                 onClick={loadClassification}
                 disabled={classSaving}
-                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-base text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
               >
                 Descartar alterações e recarregar
               </button>
