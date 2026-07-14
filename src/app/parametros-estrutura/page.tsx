@@ -16,27 +16,18 @@ interface ClassificationRow {
   patternsText: string
   combinator: 'OR' | 'AND'
   equip: string
-  fam: string
-  equipId: string
-  fabric: string
 }
 
 const ruleToRow = (r: EquipmentClassificationRule): ClassificationRow => ({
   patternsText: r.patterns.join(', '),
   combinator: r.combinator,
   equip: r.equip,
-  fam: r.fam,
-  equipId: r.equipId,
-  fabric: r.fabric,
 })
 
 const rowToRule = (row: ClassificationRow): EquipmentClassificationRule => ({
   patterns: row.patternsText.split(',').map(p => p.trim()).filter(Boolean),
   combinator: row.combinator,
   equip: row.equip.trim(),
-  fam: row.fam.trim(),
-  equipId: row.equipId.trim(),
-  fabric: row.fabric.trim(),
 })
 
 const keyOf = (r: Rule) => `${r.property_field.trim().toLowerCase()}::${r.component_code.trim().toLowerCase()}`
@@ -150,7 +141,7 @@ export default function ParametrosEstruturaPage() {
 
   const addClassRow = () => {
     setClassFilter('')
-    setClassRows(prev => [...prev, { patternsText: '', combinator: 'OR', equip: '', fam: '', equipId: '', fabric: '' }])
+    setClassRows(prev => [...prev, { patternsText: '', combinator: 'OR', equip: '' }])
   }
 
   const removeClassRow = (index: number) => {
@@ -158,9 +149,7 @@ export default function ParametrosEstruturaPage() {
   }
 
   const handleSaveClassification = async () => {
-    const nonBlank = classRows.filter(r =>
-      r.patternsText.trim() || r.equip.trim() || r.fam.trim() || r.equipId.trim() || r.fabric.trim()
-    )
+    const nonBlank = classRows.filter(r => r.patternsText.trim() || r.equip.trim())
     const clean = nonBlank.map(rowToRule)
     for (let i = 0; i < clean.length; i++) {
       const r = clean[i]
@@ -193,10 +182,7 @@ export default function ParametrosEstruturaPage() {
     const f = classFilter.trim().toLowerCase()
     if (!f) return true
     const r = classRows[i]
-    return r.patternsText.toLowerCase().includes(f)
-      || r.equip.toLowerCase().includes(f)
-      || r.fam.toLowerCase().includes(f)
-      || r.fabric.toLowerCase().includes(f)
+    return r.patternsText.toLowerCase().includes(f) || r.equip.toLowerCase().includes(f)
   })
 
   const load = async () => {
@@ -417,17 +403,13 @@ export default function ParametrosEstruturaPage() {
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
         <h1 className="text-3xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Regras usadas pelo Busc. Itens Série Estrut., separadas em uma caixa por Grupo Acessórios —
-          edite os códigos e o output diretamente e clique em Salvar, ou importe/exporte um Excel com as
-          colunas GRUPO_ACESSORIOS, CODIGO_ACESSORIO_PROTHEUS e OUTPUT. Guardado em{' '}
-          <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
-          À direita, a Classificação de Equipamentos usada para agrupar os resultados por tipo.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
       <div>
+      <p className="text-on-surface-variant text-sm mb-3">
+        Regras por Grupo Acessórios usadas pelo Busc. Itens Série Estrut. — edite e clique em Salvar, ou importe/exporte um Excel.
+      </p>
       {loading ? (
         <div className="flex items-center gap-3 py-16 text-outline">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -659,12 +641,8 @@ export default function ParametrosEstruturaPage() {
         <div className="mb-4">
           <h2 className="text-xl font-bold text-on-surface">Classificação de Equipamentos</h2>
           <p className="text-on-surface-variant text-sm mt-1">
-            Regras que derivam o tipo de equipamento (Equipamento/Família/ID/Fabricante) a partir da descrição
-            da estrutura (DESC_ESTRUTURA), usadas para agrupar os resultados em Busc. Itens Série Estrut. —
-            portadas do script original. Cada regra roda na ordem da lista e a ÚLTIMA que bater (contendo
-            qualquer um dos padrões, se &quot;Qualquer (OU)&quot;, ou todos eles, se &quot;Todas (E)&quot;) define o resultado.
-            Guardado em{' '}
-            <code className="bg-surface-container px-1 rounded">src/data/equipment-classification-rules.json</code>.
+            Define o tipo de equipamento a partir da descrição da estrutura, usado para agrupar os resultados
+            em Busc. Itens Série Estrut. — a última regra que bater vence.
           </p>
         </div>
 
@@ -693,16 +671,13 @@ export default function ParametrosEstruturaPage() {
                     <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Padrões (vírgula = ou)</th>
                     <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Condição</th>
                     <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Equipamento</th>
-                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Família</th>
-                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">ID</th>
-                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Fabricante</th>
                     <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {classFilteredIndices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-3 text-sm text-outline italic">Nenhuma regra encontrada.</td>
+                      <td colSpan={4} className="px-3 py-3 text-sm text-outline italic">Nenhuma regra encontrada.</td>
                     </tr>
                   ) : classFilteredIndices.map(i => (
                     <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
@@ -728,27 +703,6 @@ export default function ParametrosEstruturaPage() {
                         <input
                           value={classRows[i].equip}
                           onChange={e => updateClassCell(i, 'equip', e.target.value)}
-                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
-                        />
-                      </td>
-                      <td className="p-1">
-                        <input
-                          value={classRows[i].fam}
-                          onChange={e => updateClassCell(i, 'fam', e.target.value)}
-                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
-                        />
-                      </td>
-                      <td className="p-1">
-                        <input
-                          value={classRows[i].equipId}
-                          onChange={e => updateClassCell(i, 'equipId', e.target.value)}
-                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
-                        />
-                      </td>
-                      <td className="p-1">
-                        <input
-                          value={classRows[i].fabric}
-                          onChange={e => updateClassCell(i, 'fabric', e.target.value)}
                           className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
                         />
                       </td>

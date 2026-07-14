@@ -585,8 +585,7 @@ export default function AnalisadorEstruturasPage() {
   // without a matching rule falls into "Não classificado".
   const groupedFiles = new Map<string, AnalysisFile[]>()
   for (const file of files) {
-    const classification = classifyEquipmentType(file.description, classificationRules)
-    const groupName = classification?.equip || UNCLASSIFIED_GROUP
+    const groupName = classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
     const bucket = groupedFiles.get(groupName)
     if (bucket) bucket.push(file)
     else groupedFiles.set(groupName, [file])

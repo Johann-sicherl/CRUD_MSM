@@ -9,40 +9,30 @@ export interface EquipmentClassificationRule {
   patterns: string[]
   combinator: 'OR' | 'AND'
   equip: string
-  fam: string
-  equipId: string
-  fabric: string
-}
-
-export interface EquipmentClassification {
-  equip: string
-  fam: string
-  id: string
-  fabric: string
 }
 
 /**
  * Classifies `description` by walking `rules` in order; the LAST rule that
- * matches wins (mirrors the VBA source, which overwrites the same cells on
- * every match rather than stopping early). Returns null when nothing
- * matches or the description is empty.
+ * matches wins (mirrors the VBA source, which overwrites the same cell on
+ * every match rather than stopping early). Returns the equipment type, or
+ * null when nothing matches or the description is empty.
  */
 export function classifyEquipmentType(
   description: string | null | undefined,
   rules: EquipmentClassificationRule[]
-): EquipmentClassification | null {
+): string | null {
   if (!description) return null
   const desc = description.trim().toUpperCase()
   if (!desc) return null
 
-  let result: EquipmentClassification | null = null
+  let result: string | null = null
   for (const r of rules) {
     const patterns = r.patterns.map(p => p.trim().toUpperCase()).filter(Boolean)
     if (patterns.length === 0) continue
     const matches = r.combinator === 'AND'
       ? patterns.every(p => desc.includes(p))
       : patterns.some(p => desc.includes(p))
-    if (matches) result = { equip: r.equip, fam: r.fam, id: r.equipId, fabric: r.fabric }
+    if (matches) result = r.equip
   }
   return result
 }
