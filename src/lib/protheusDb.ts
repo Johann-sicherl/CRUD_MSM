@@ -98,7 +98,7 @@ async function loadStructureCache(creds: ProtheusCredentials): Promise<Structure
  * visited-set guards against cyclic BOM references. Also returns the
  * structure's own DESC_ESTRUTURA, when known.
  */
-export async function fetchStructureCodes(protheusCode: string, creds: ProtheusCredentials): Promise<{ codes: string[]; description: string | null }> {
+export async function fetchStructureCodes(protheusCode: string, creds: ProtheusCredentials): Promise<{ codes: string[]; description: string | null; foundInProtheus: boolean }> {
   const { adjacency, descriptions } = await loadStructureCache(creds)
 
   const root = protheusCode.trim()
@@ -117,7 +117,11 @@ export async function fetchStructureCodes(protheusCode: string, creds: ProtheusC
     }
   }
 
-  return { codes: Array.from(collected), description: descriptions.get(root) ?? null }
+  return {
+    codes: Array.from(collected),
+    description: descriptions.get(root) ?? null,
+    foundInProtheus: adjacency.has(root) || descriptions.has(root),
+  }
 }
 
 /**

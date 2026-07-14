@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { classifyEquipmentType } from '@/lib/equipmentClassification'
+import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 
 const STORAGE_KEY = 'analisador-estruturas-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
@@ -25,6 +25,7 @@ interface AnalysisFile {
   codesAnalyzed?: number
   properties?: PropertyResult[]
   description?: string | null
+  foundInProtheus?: boolean
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -389,6 +390,8 @@ export default function AnalisadorEstruturasPage() {
   const [connecting, setConnecting] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [groupCodes, setGroupCodes] = useState<EquipmentCodeOption[]>([])
+  const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   // Restore previously analyzed files when returning to this page.
   useEffect(() => {
@@ -430,6 +433,24 @@ export default function AnalisadorEstruturasPage() {
       ))
       .catch(() => {})
   }, [])
+
+  // Loads the (user-editable, in Parâmetros de Estrutura) rules used to
+  // derive an equipment type from DESC_ESTRUTURA, for grouping the results.
+  useEffect(() => {
+    fetch('/api/equipment-classification-rules')
+      .then(r => r.json())
+      .then(rules => setClassificationRules(Array.isArray(rules) ? rules : []))
+      .catch(() => {})
+  }, [])
+
+  const toggleGroupCollapsed = (groupName: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupName)) next.delete(groupName)
+      else next.add(groupName)
+      return next
+    })
+  }
 
   const handleFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
@@ -481,7 +502,11 @@ export default function AnalisadorEstruturasPage() {
         setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: codesJson.error || 'Falha ao consultar o banco Protheus' } : f))
         return
       }
-      setFiles(prev => prev.map(f => f.id === id ? { ...f, description: codesJson.description ?? null } : f))
+      setFiles(prev => prev.map(f => f.id === id ? {
+        ...f,
+        description: codesJson.description ?? null,
+        foundInProtheus: !!codesJson.foundInProtheus,
+      } : f))
 
       const res = await fetch('/api/analisador-estruturas', {
         method: 'POST',
@@ -560,7 +585,7 @@ export default function AnalisadorEstruturasPage() {
   // without a matching rule falls into "Não classificado".
   const groupedFiles = new Map<string, AnalysisFile[]>()
   for (const file of files) {
-    const classification = classifyEquipmentType(file.description)
+    const classification = classifyEquipmentType(file.description, classificationRules)
     const groupName = classification?.equip || UNCLASSIFIED_GROUP
     const bucket = groupedFiles.get(groupName)
     if (bucket) bucket.push(file)
@@ -667,11 +692,20 @@ export default function AnalisadorEstruturasPage() {
         <div className="text-sm text-outline italic">Nenhum equipamento analisado ainda.</div>
       ) : (
         <div className="flex flex-col gap-6">
-          {groupedFileEntries.map(([groupName, groupFiles]) => (
+          {groupedFileEntries.map(([groupName, groupFiles]) => {
+            const groupOpen = !collapsedGroups.has(groupName)
+            return (
             <div key={groupName}>
-              <div className="text-xs font-bold text-primary uppercase tracking-wide mb-2">
-                {groupName} <span className="text-outline font-normal">({groupFiles.length})</span>
+              <div
+                onClick={() => toggleGroupCollapsed(groupName)}
+                className="flex items-center gap-2 mb-2 cursor-pointer select-none"
+              >
+                <span className={`text-outline text-sm leading-none transition-transform ${groupOpen ? 'rotate-90' : ''}`}>›</span>
+                <span className="text-xs font-bold text-primary uppercase tracking-wide">
+                  {groupName} <span className="text-outline font-normal">({groupFiles.length})</span>
+                </span>
               </div>
+              {groupOpen && (
               <div className="flex flex-col gap-3">
                 {groupFiles.map(file => {
             const isOpen = expandedId === file.id
@@ -679,8 +713,16 @@ export default function AnalisadorEstruturasPage() {
             const errorCount = props.filter(p => p.status === 'mismatch').length
             const duplicateCount = props.filter(p => p.status === 'duplicate').length
             const missingCount = props.filter(p => p.status === 'missing').length
+            const isDbDone = file.source === 'db' && file.status === 'done'
+            const cardTone = isDbDone && file.foundInProtheus && file.equipmentFound
+              ? 'border-green-500/30 bg-green-500/5'
+              : isDbDone && file.foundInProtheus && !file.equipmentFound
+              ? 'border-amber-500/30 bg-amber-500/5'
+              : isDbDone && !file.foundInProtheus && file.equipmentFound
+              ? 'border-error/30 bg-error-container/10'
+              : 'border-outline-variant bg-surface-container'
             return (
-              <div key={file.id} className="rounded-xl border border-outline-variant bg-surface-container overflow-hidden">
+              <div key={file.id} className={`rounded-xl border overflow-hidden ${cardTone}`}>
                 <div
                   className="flex items-center justify-between gap-3 px-5 py-3.5 cursor-pointer hover:bg-surface-container-high transition-colors"
                   onClick={() => setExpandedId(isOpen ? null : file.id)}
@@ -767,8 +809,10 @@ export default function AnalisadorEstruturasPage() {
             )
                 })}
               </div>
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

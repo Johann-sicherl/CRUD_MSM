@@ -1,12 +1,43 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { EquipmentClassificationRule } from '@/lib/equipmentClassification'
 
 interface Rule {
   property_field: string
   component_code: string
   expected_value: string
 }
+
+// Editable form of an EquipmentClassificationRule — patterns are kept as a
+// single comma-separated string while editing (split back into an array on
+// save), so the row stays a plain set of text inputs like the rest of this page.
+interface ClassificationRow {
+  patternsText: string
+  combinator: 'OR' | 'AND'
+  equip: string
+  fam: string
+  equipId: string
+  fabric: string
+}
+
+const ruleToRow = (r: EquipmentClassificationRule): ClassificationRow => ({
+  patternsText: r.patterns.join(', '),
+  combinator: r.combinator,
+  equip: r.equip,
+  fam: r.fam,
+  equipId: r.equipId,
+  fabric: r.fabric,
+})
+
+const rowToRule = (row: ClassificationRow): EquipmentClassificationRule => ({
+  patterns: row.patternsText.split(',').map(p => p.trim()).filter(Boolean),
+  combinator: row.combinator,
+  equip: row.equip.trim(),
+  fam: row.fam.trim(),
+  equipId: row.equipId.trim(),
+  fabric: row.fabric.trim(),
+})
 
 const keyOf = (r: Rule) => `${r.property_field.trim().toLowerCase()}::${r.component_code.trim().toLowerCase()}`
 
@@ -87,6 +118,86 @@ export default function ParametrosEstruturaPage() {
   const [pendingImport, setPendingImport] = useState<Rule[] | null>(null)
   const [importFileName, setImportFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [classRows, setClassRows] = useState<ClassificationRow[]>([])
+  const [classLoading, setClassLoading] = useState(true)
+  const [classSaving, setClassSaving] = useState(false)
+  const [classError, setClassError] = useState('')
+  const [classSuccessMsg, setClassSuccessMsg] = useState('')
+  const [classFilter, setClassFilter] = useState('')
+
+  const loadClassification = async () => {
+    setClassLoading(true)
+    setClassError('')
+    setClassSuccessMsg('')
+    try {
+      const res = await fetch('/api/equipment-classification-rules')
+      const json = await res.json()
+      if (!res.ok) { setClassError(json.error || 'Falha ao carregar classificação'); return }
+      setClassRows((json as EquipmentClassificationRule[]).map(ruleToRow))
+    } catch {
+      setClassError('Falha de rede ao carregar classificação')
+    } finally {
+      setClassLoading(false)
+    }
+  }
+
+  useEffect(() => { loadClassification() }, [])
+
+  const updateClassCell = (index: number, field: keyof ClassificationRow, value: string) => {
+    setClassRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r))
+  }
+
+  const addClassRow = () => {
+    setClassFilter('')
+    setClassRows(prev => [...prev, { patternsText: '', combinator: 'OR', equip: '', fam: '', equipId: '', fabric: '' }])
+  }
+
+  const removeClassRow = (index: number) => {
+    setClassRows(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSaveClassification = async () => {
+    const nonBlank = classRows.filter(r =>
+      r.patternsText.trim() || r.equip.trim() || r.fam.trim() || r.equipId.trim() || r.fabric.trim()
+    )
+    const clean = nonBlank.map(rowToRule)
+    for (let i = 0; i < clean.length; i++) {
+      const r = clean[i]
+      if (r.patterns.length === 0 || !r.equip) {
+        setClassError(`Linha ${i + 1}: informe ao menos um padrão e o campo Equipamento`)
+        return
+      }
+    }
+    setClassSaving(true)
+    setClassError('')
+    setClassSuccessMsg('')
+    try {
+      const res = await fetch('/api/equipment-classification-rules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clean),
+      })
+      const json = await res.json()
+      if (!res.ok) { setClassError(json.error || 'Falha ao salvar classificação'); return }
+      setClassSuccessMsg(`${clean.length} regra(s) salva(s) com sucesso`)
+      setClassRows(clean.map(ruleToRow))
+    } catch {
+      setClassError('Falha de rede ao salvar classificação')
+    } finally {
+      setClassSaving(false)
+    }
+  }
+
+  const classFilteredIndices = classRows.map((_, i) => i).filter(i => {
+    const f = classFilter.trim().toLowerCase()
+    if (!f) return true
+    const r = classRows[i]
+    return r.patternsText.toLowerCase().includes(f)
+      || r.equip.toLowerCase().includes(f)
+      || r.fam.toLowerCase().includes(f)
+      || r.fabric.toLowerCase().includes(f)
+  })
 
   const load = async () => {
     setLoading(true)
@@ -302,7 +413,7 @@ export default function ParametrosEstruturaPage() {
   const visibleGroups = groupOrder.filter(key => !isFiltering || (groupIndices.get(key) || []).length > 0)
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-6 max-w-[100rem]">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
         <h1 className="text-3xl font-bold text-on-surface">Parâmetros de Estrutura</h1>
@@ -311,9 +422,12 @@ export default function ParametrosEstruturaPage() {
           edite os códigos e o output diretamente e clique em Salvar, ou importe/exporte um Excel com as
           colunas GRUPO_ACESSORIOS, CODIGO_ACESSORIO_PROTHEUS e OUTPUT. Guardado em{' '}
           <code className="bg-surface-container px-1 rounded">src/data/structure-property-rules.json</code>.
+          À direita, a Classificação de Equipamentos usada para agrupar os resultados por tipo.
         </p>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+      <div>
       {loading ? (
         <div className="flex items-center gap-3 py-16 text-outline">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -539,6 +653,157 @@ export default function ParametrosEstruturaPage() {
           </div>
         </>
       )}
+      </div>
+
+      <div>
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-on-surface">Classificação de Equipamentos</h2>
+          <p className="text-on-surface-variant text-sm mt-1">
+            Regras que derivam o tipo de equipamento (Equipamento/Família/ID/Fabricante) a partir da descrição
+            da estrutura (DESC_ESTRUTURA), usadas para agrupar os resultados em Busc. Itens Série Estrut. —
+            portadas do script original. Cada regra roda na ordem da lista e a ÚLTIMA que bater (contendo
+            qualquer um dos padrões, se &quot;Qualquer (OU)&quot;, ou todos eles, se &quot;Todas (E)&quot;) define o resultado.
+            Guardado em{' '}
+            <code className="bg-surface-container px-1 rounded">src/data/equipment-classification-rules.json</code>.
+          </p>
+        </div>
+
+        {classLoading ? (
+          <div className="flex items-center gap-3 py-16 text-outline">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-base font-mono">Carregando...</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <input
+                type="text"
+                value={classFilter}
+                onChange={e => setClassFilter(e.target.value)}
+                placeholder="Filtrar por padrão, equipamento, família..."
+                className="flex-1 min-w-[200px] bg-surface-container border border-outline-variant rounded px-3 py-2 text-base text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              <span className="text-sm text-outline font-mono whitespace-nowrap">{classFilteredIndices.length} de {classRows.length}</span>
+            </div>
+
+            <div className="overflow-auto border border-outline-variant rounded-lg max-h-[65vh]">
+              <table className="text-sm w-full">
+                <thead className="sticky top-0 bg-surface-container-highest">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Padrões (vírgula = ou)</th>
+                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Condição</th>
+                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Equipamento</th>
+                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Família</th>
+                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">ID</th>
+                    <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Fabricante</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classFilteredIndices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-3 text-sm text-outline italic">Nenhuma regra encontrada.</td>
+                    </tr>
+                  ) : classFilteredIndices.map(i => (
+                    <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
+                      <td className="p-1">
+                        <input
+                          value={classRows[i].patternsText}
+                          onChange={e => updateClassCell(i, 'patternsText', e.target.value)}
+                          placeholder="ex: GARRETT"
+                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <select
+                          value={classRows[i].combinator}
+                          onChange={e => updateClassCell(i, 'combinator', e.target.value as 'OR' | 'AND')}
+                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none text-on-surface text-sm"
+                        >
+                          <option value="OR">Qualquer (OU)</option>
+                          <option value="AND">Todas (E)</option>
+                        </select>
+                      </td>
+                      <td className="p-1">
+                        <input
+                          value={classRows[i].equip}
+                          onChange={e => updateClassCell(i, 'equip', e.target.value)}
+                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          value={classRows[i].fam}
+                          onChange={e => updateClassCell(i, 'fam', e.target.value)}
+                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          value={classRows[i].equipId}
+                          onChange={e => updateClassCell(i, 'equipId', e.target.value)}
+                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          value={classRows[i].fabric}
+                          onChange={e => updateClassCell(i, 'fabric', e.target.value)}
+                          className="w-full bg-transparent px-2 py-1.5 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-sm"
+                        />
+                      </td>
+                      <td className="p-1 text-center">
+                        <button
+                          onClick={() => removeClassRow(i)}
+                          className="text-outline hover:text-error transition-colors text-lg"
+                          title="Remover regra"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {classError && (
+              <div className="mt-3 flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-sm">
+                ⚠ {classError}
+              </div>
+            )}
+            {classSuccessMsg && (
+              <div className="mt-3 flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">
+                ✓ {classSuccessMsg}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-3 flex-wrap">
+              <button
+                onClick={addClassRow}
+                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+              >
+                + Adicionar regra
+              </button>
+              <button
+                onClick={handleSaveClassification}
+                disabled={classSaving}
+                className="px-5 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {classSaving ? 'Salvando…' : 'Salvar'}
+              </button>
+              <button
+                onClick={loadClassification}
+                disabled={classSaving}
+                className="px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+              >
+                Descartar alterações e recarregar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      </div>
     </div>
   )
 }
