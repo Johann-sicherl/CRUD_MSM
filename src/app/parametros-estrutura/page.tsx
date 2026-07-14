@@ -637,7 +637,7 @@ export default function ParametrosEstruturaPage() {
       )}
       </div>
 
-      <div>
+      <div className="xl:pl-12">
         <h1 className="text-3xl font-bold text-on-surface mb-1">Classificação de Equipamentos</h1>
         <p className="text-on-surface-variant text-base mb-3">
           Define o tipo de equipamento a partir da descrição da estrutura, usado para agrupar os resultados
