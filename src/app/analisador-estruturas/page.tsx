@@ -392,6 +392,9 @@ export default function AnalisadorEstruturasPage() {
   const [groupCodes, setGroupCodes] = useState<EquipmentCodeOption[]>([])
   const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  // "Chave" filter: false = mostra tudo (comportamento atual); true = só o que está
+  // no Protheus e ainda não está cadastrado no banco interno.
+  const [showOnlyMissingFromInternal, setShowOnlyMissingFromInternal] = useState(false)
 
   // Restore previously analyzed files when returning to this page.
   useEffect(() => {
@@ -580,11 +583,17 @@ export default function AnalisadorEstruturasPage() {
     setExpandedId(prev => (prev === id ? null : prev))
   }
 
+  // "Chave" filter — applied before grouping, on top of the exact same
+  // layout/grouping logic below, so toggling it never changes anything else.
+  const displayedFiles = showOnlyMissingFromInternal
+    ? files.filter(f => f.status === 'done' && f.equipmentFound === false)
+    : files
+
   // Groups analyzed equipment by the type derived from DESC_ESTRUTURA (see
   // src/lib/equipmentClassification.ts) — anything without a description or
   // without a matching rule falls into "Não classificado".
   const groupedFiles = new Map<string, AnalysisFile[]>()
-  for (const file of files) {
+  for (const file of displayedFiles) {
     const groupName = classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
     const bucket = groupedFiles.get(groupName)
     if (bucket) bucket.push(file)
@@ -687,8 +696,40 @@ export default function AnalisadorEstruturasPage() {
         />
       )}
 
+      {files.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-sm text-on-surface-variant">Mostrar:</span>
+          <button
+            onClick={() => setShowOnlyMissingFromInternal(v => !v)}
+            role="switch"
+            aria-checked={showOnlyMissingFromInternal}
+            title="Alterna entre ver tudo ou só o que está no Protheus e ainda falta no banco interno"
+            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors shrink-0 ${
+              showOnlyMissingFromInternal ? 'bg-primary' : 'bg-surface-container-highest border border-outline-variant'
+            }`}
+          >
+            <span
+              className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                showOnlyMissingFromInternal ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+          <span className={`text-sm font-semibold ${showOnlyMissingFromInternal ? 'text-outline' : 'text-primary'}`}>
+            Consulta completa
+          </span>
+          <span className="text-outline">/</span>
+          <span className={`text-sm font-semibold ${showOnlyMissingFromInternal ? 'text-primary' : 'text-outline'}`}>
+            Só o que falta no meu banco
+          </span>
+        </div>
+      )}
+
       {files.length === 0 ? (
         <div className="text-sm text-outline italic">Nenhum equipamento analisado ainda.</div>
+      ) : displayedFiles.length === 0 ? (
+        <div className="text-sm text-outline italic">
+          Nenhum equipamento no Protheus está faltando no seu banco interno, entre os já analisados.
+        </div>
       ) : (
         <div className="flex flex-col gap-6">
           {groupedFileEntries.map(([groupName, groupFiles]) => {
