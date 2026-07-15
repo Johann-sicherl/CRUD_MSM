@@ -146,9 +146,12 @@ export async function listStructureHeaders(prefixes: string[], creds: ProtheusCr
 // ─── Product master (SB1010) status check ──────────────────────────────
 // Separate from the ESTRUTURAS cache above — this is a different table,
 // used by the view-only Protheus status flag in Cadastro de Equipamentos.
-// Mirrors the exact status derivation the user's own SB1010/SBM010 query
-// uses (B1_MSBLQL '2'/''→ATIVO, '1'→BLOQUEADO, INNER JOIN SBM010 requiring
-// an active micro-group), just trimmed down to the two columns this needs.
+// This is the user's own reference query, verbatim (same SELECT list,
+// same INNER/LEFT JOINs) — the only change is dropping the trailing
+// `AND (...) = 'ATIVO'` filter, since keeping it would mean BLOQUEADO rows
+// never come back and the red flag could never trigger. Only COD_PRODUTO
+// and STD_BLOQ are read from each row; the rest of the columns are pulled
+// (matching the reference query exactly) but unused here.
 
 export type ProtheusProductStatus = 'ATIVO' | 'BLOQUEADO'
 
@@ -174,16 +177,43 @@ async function loadProductStatusCache(creds: ProtheusCredentials): Promise<Produ
     try {
       await pool.connect()
       const result = await pool.request().query(`
-        SELECT rtrim(a.B1_COD) AS COD_PRODUTO,
-          CASE
-            WHEN a.B1_MSBLQL = '2' THEN 'ATIVO'
-            WHEN a.B1_MSBLQL = '1' THEN 'BLOQUEADO'
-            WHEN a.B1_MSBLQL = ''  THEN 'ATIVO'
-          END AS STD_BLOQ
+        SELECT
+            rtrim(a.B1_COD) AS COD_PRODUTO,
+            left(rtrim(a.B1_COD),11) AS COD_SEM_REV,
+            rtrim(a.B1_DESC) AS DESCRICAO_PRODUTO,
+            rtrim(a.B1_TIPO) AS TIPO,
+            rtrim(a.B1_UM) AS PRIMEIRA_UNIDADE,
+            rtrim(a.B1_SEGUM) AS SEGUNDA_UNIDADE,
+            rtrim(a.B1_CONV) AS FAT_CONV,
+            CASE
+                WHEN a.B1_MSBLQL = '2' THEN 'ATIVO'
+                WHEN a.B1_MSBLQL = '1' THEN 'BLOQUEADO'
+                WHEN a.B1_MSBLQL = ''  THEN 'ATIVO'
+            END AS STD_BLOQ,
+            rtrim(a.B1_LOCPAD) AS LOCAL_PADRAO,
+            rtrim(a.B1_GRUPO) AS GRUPO_PRODUTO,
+            rtrim(b.BM_DESC) AS DESC_GRUPO_MICRO,
+            rtrim(b2.BM_DESC) AS GRUPO_PRINC,
+            rtrim(a.B1_FABRIC) AS FABRICANTE,
+            rtrim(a.B1_REVATU) AS REVISAO,
+            rtrim(a.B1_CONTRAT) AS CONTRATO,
+            rtrim(a.B1_MODELO) AS MODELO_PRODUTO,
+            rtrim(a.B1_ZQEKBAM) AS KANBAN,
+            rtrim(a.B1_POSIPI) AS NCM,
+            rtrim(a.B1_PE) AS MRP_PRAZO_ENTREGA,
+            rtrim(a.B1_DATREF) AS DATA_REFERENCIA,
+            rtrim(a.B1_ZOHO) AS ZOHO,
+            rtrim(a.B1_UREV) AS UREV,
+            rtrim(a.B1_LOCZPA) AS MRP_LOCAL_PADRAO_DE_PRODUCAO,
+            a.B1_ZDES,
+            a.B1_FANTASM
         FROM SB1010 a
         INNER JOIN SBM010 b
-          ON a.B1_GRUPO = b.BM_GRUPO
-         AND b.D_E_L_E_T_ <> '*' AND b.BM_MSBLQL = '2'
+            ON a.B1_GRUPO = b.BM_GRUPO
+           AND b.D_E_L_E_T_ <> '*' AND b.BM_MSBLQL = '2'
+        LEFT JOIN SBM010 b2
+            ON b2.BM_GRUPO = LEFT(a.B1_GRUPO, 2)
+           AND b2.D_E_L_E_T_ <> '*'
         WHERE a.D_E_L_E_T_ <> '*'
       `)
 
