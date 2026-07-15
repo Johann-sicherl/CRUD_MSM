@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
+import { idbGet, idbSet } from '@/lib/idbStore'
 
 const STORAGE_KEY = 'analisador-estruturas-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
@@ -396,25 +397,30 @@ export default function AnalisadorEstruturasPage() {
   // no Protheus e ainda não está cadastrado no banco interno.
   const [showOnlyMissingFromInternal, setShowOnlyMissingFromInternal] = useState(false)
 
-  // Restore previously analyzed files when returning to this page.
+  // Restore previously analyzed files when returning to this page. Uses
+  // IndexedDB instead of sessionStorage — a big Busca Reversa/"Analisar
+  // TODOS" run can easily exceed sessionStorage's ~5-10MB per-tab quota,
+  // which silently stops the save from happening at all.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw) as { files: AnalysisFile[]; expandedId: string | null }
-        setFiles(parsed.files || [])
-        setExpandedId(parsed.expandedId ?? null)
+    (async () => {
+      try {
+        const stored = await idbGet<{ files: AnalysisFile[]; expandedId: string | null }>(STORAGE_KEY)
+        if (stored) {
+          setFiles(stored.files || [])
+          setExpandedId(stored.expandedId ?? null)
+        }
+      } catch {
+        // ignore corrupt/unavailable storage
+      } finally {
+        hydrated.current = true
       }
-    } catch {
-      // ignore corrupt storage
-    }
-    hydrated.current = true
+    })()
   }, [])
 
   // Persist on every change, so navigating away and back keeps the results.
   useEffect(() => {
     if (!hydrated.current) return
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ files, expandedId }))
+    idbSet(STORAGE_KEY, { files, expandedId }).catch(() => {})
   }, [files, expandedId])
 
   // Load the equipment-group membership once, so picking a group can run
