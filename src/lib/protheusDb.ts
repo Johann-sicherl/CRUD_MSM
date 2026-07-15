@@ -143,13 +143,76 @@ export async function listStructureHeaders(prefixes: string[], creds: ProtheusCr
     .sort((a, b) => a.localeCompare(b))
 }
 
+// ─── Product master (SB1010) status check ──────────────────────────────
+// Separate from the ESTRUTURAS cache above — this is a different table,
+// used by the view-only Protheus status flag in Cadastro de Equipamentos.
+// Mirrors the exact status derivation the user's own SB1010/SBM010 query
+// uses (B1_MSBLQL '2'/''→ATIVO, '1'→BLOQUEADO, INNER JOIN SBM010 requiring
+// an active micro-group), just trimmed down to the two columns this needs.
+
+export type ProtheusProductStatus = 'ATIVO' | 'BLOQUEADO'
+
+interface ProductStatusCache {
+  statusByCode: Map<string, ProtheusProductStatus>
+  fetchedAt: number
+}
+
+let productStatusCache: ProductStatusCache | null = null
+let productStatusInFlight: Promise<ProductStatusCache> | null = null
+
+async function loadProductStatusCache(creds: ProtheusCredentials): Promise<ProductStatusCache> {
+  if (productStatusCache && Date.now() - productStatusCache.fetchedAt < CACHE_TTL_MS) return productStatusCache
+  if (productStatusInFlight) return productStatusInFlight
+
+  productStatusInFlight = (async () => {
+    const pool = new sql.ConnectionPool({
+      ...CONNECTION_BASE,
+      user: creds.user,
+      password: creds.password,
+      requestTimeout: BULK_LOAD_TIMEOUT_MS,
+    })
+    try {
+      await pool.connect()
+      const result = await pool.request().query(`
+        SELECT rtrim(a.B1_COD) AS COD_PRODUTO,
+          CASE
+            WHEN a.B1_MSBLQL = '2' THEN 'ATIVO'
+            WHEN a.B1_MSBLQL = '1' THEN 'BLOQUEADO'
+            WHEN a.B1_MSBLQL = ''  THEN 'ATIVO'
+          END AS STD_BLOQ
+        FROM SB1010 a
+        INNER JOIN SBM010 b
+          ON a.B1_GRUPO = b.BM_GRUPO
+         AND b.D_E_L_E_T_ <> '*' AND b.BM_MSBLQL = '2'
+        WHERE a.D_E_L_E_T_ <> '*'
+      `)
+
+      const statusByCode = new Map<string, ProtheusProductStatus>()
+      for (const row of result.recordset as { COD_PRODUTO: unknown; STD_BLOQ: unknown }[]) {
+        const code = String(row.COD_PRODUTO ?? '').trim().toUpperCase()
+        const status = String(row.STD_BLOQ ?? '').trim().toUpperCase()
+        if (!code || (status !== 'ATIVO' && status !== 'BLOQUEADO')) continue
+        statusByCode.set(code, status as ProtheusProductStatus)
+      }
+
+      productStatusCache = { statusByCode, fetchedAt: Date.now() }
+      return productStatusCache
+    } finally {
+      await pool.close()
+      productStatusInFlight = null
+    }
+  })()
+
+  return productStatusInFlight
+}
+
 /**
- * Every distinct ESTRUTURA header code registered in the live Protheus
- * database, unfiltered — used for a one-shot "which of my rows exist as a
- * structure in Protheus?" check (e.g. the view-only flag column in Cadastro
- * de Equipamentos). Reuses the same cache as the other functions above.
+ * ATIVO/BLOQUEADO status per product code (B1_COD), keyed by uppercased
+ * trimmed code — used by the view-only Protheus flag column in Cadastro de
+ * Equipamentos: green when ATIVO, strong red when BLOQUEADO, neutral when
+ * the code isn't a registered product in Protheus at all.
  */
-export async function listAllStructureHeaders(creds: ProtheusCredentials): Promise<string[]> {
-  const { adjacency } = await loadStructureCache(creds)
-  return Array.from(adjacency.keys()).sort((a, b) => a.localeCompare(b))
+export async function listProductStatuses(creds: ProtheusCredentials): Promise<Map<string, ProtheusProductStatus>> {
+  const { statusByCode } = await loadProductStatusCache(creds)
+  return statusByCode
 }

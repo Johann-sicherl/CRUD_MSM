@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
+import type { ProtheusProductStatus } from '@/lib/protheusDb'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -89,9 +90,9 @@ export default function DataTable({ tableName, schema }: Props) {
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
-  // View-only "existe no Protheus?" flag column (see schema.protheusStructureCheckField) —
-  // credentials are never stored, only used to pull the current ESTRUTURA header list once per connect.
-  const [protheusHeaders, setProtheusHeaders] = useState<Set<string> | null>(null)
+  // View-only Protheus status flag column (see schema.protheusStatusCheckField) — ATIVO/BLOQUEADO
+  // per product code (SB1010). Credentials are never stored, only used to pull the status map once per connect.
+  const [protheusStatusMap, setProtheusStatusMap] = useState<Map<string, ProtheusProductStatus> | null>(null)
   const [protheusModalOpen, setProtheusModalOpen] = useState(false)
   const [protheusConnecting, setProtheusConnecting] = useState(false)
   const [protheusError, setProtheusError] = useState('')
@@ -224,26 +225,26 @@ export default function DataTable({ tableName, schema }: Props) {
     exportMatrix(schema.fields, `matriz_${tableName}.xlsx`)
   }
 
-  // null = not connected/unknown, true/false = actually checked against Protheus.
-  const isInProtheus = useCallback((row: Record<string, unknown>): boolean | null => {
-    if (!schema.protheusStructureCheckField || !protheusHeaders) return null
-    const code = String(row[schema.protheusStructureCheckField] ?? '').trim().toUpperCase()
+  // null = not connected yet, or the code isn't a registered product in Protheus at all.
+  const getProtheusStatus = useCallback((row: Record<string, unknown>): ProtheusProductStatus | null => {
+    if (!schema.protheusStatusCheckField || !protheusStatusMap) return null
+    const code = String(row[schema.protheusStatusCheckField] ?? '').trim().toUpperCase()
     if (!code) return null
-    return protheusHeaders.has(code)
-  }, [schema.protheusStructureCheckField, protheusHeaders])
+    return protheusStatusMap.get(code) ?? null
+  }, [schema.protheusStatusCheckField, protheusStatusMap])
 
   const handleProtheusConnect = async (user: string, password: string) => {
     setProtheusConnecting(true)
     setProtheusError('')
     try {
-      const res = await fetch('/api/protheus-estrutura-headers', {
+      const res = await fetch('/api/protheus-produto-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user, password }),
       })
       const json = await res.json()
       if (!res.ok) { setProtheusError(json.error || 'Falha ao consultar o banco Protheus'); return }
-      setProtheusHeaders(new Set((json.headers as string[]).map(h => h.trim().toUpperCase())))
+      setProtheusStatusMap(new Map(Object.entries(json.statuses as Record<string, ProtheusProductStatus>)))
       setProtheusModalOpen(false)
     } catch {
       setProtheusError('Erro de comunicação com o banco Protheus')
@@ -253,13 +254,13 @@ export default function DataTable({ tableName, schema }: Props) {
   }
 
   const handleExportVisible = () => {
-    const includeProtheusFlag = !!schema.protheusStructureCheckField && !!protheusHeaders
+    const includeProtheusFlag = !!schema.protheusStatusCheckField && !!protheusStatusMap
     const headers = [
-      ...(includeProtheusFlag ? ['Existe no Protheus'] : []),
+      ...(includeProtheusFlag ? ['Status Protheus'] : []),
       ...listFields.map(f => f.label),
     ]
     const rowData = filteredRows.map(row => [
-      ...(includeProtheusFlag ? [isInProtheus(row) ? 'Sim' : 'Não'] : []),
+      ...(includeProtheusFlag ? [getProtheusStatus(row) ?? 'Não encontrado'] : []),
       ...listFields.map(f => getDisplayValue(row, f.name, f, lookups)),
     ])
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
@@ -328,8 +329,8 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const actionButtons = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
-      {schema.protheusStructureCheckField && (
-        protheusHeaders ? (
+      {schema.protheusStatusCheckField && (
+        protheusStatusMap ? (
           <button
             onClick={() => setProtheusModalOpen(true)}
             title="Consultar novamente o banco Protheus"
@@ -528,10 +529,10 @@ export default function DataTable({ tableName, schema }: Props) {
                         }}
                       />
                     </th>
-                    {schema.protheusStructureCheckField && (
+                    {schema.protheusStatusCheckField && (
                       <th
                         className="px-3 py-3 w-10 text-center text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono"
-                        title="Existe como estrutura (ESTRUTURA) no Protheus?"
+                        title="Status do produto (ATIVO/BLOQUEADO) no Protheus"
                       >
                         Protheus
                       </th>
@@ -567,7 +568,7 @@ export default function DataTable({ tableName, schema }: Props) {
                 <tbody className="divide-y divide-outline-variant/30">
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={listFields.length + 2 + (schema.protheusStructureCheckField ? 1 : 0)} className="px-4 py-12 text-center text-outline text-sm">
+                      <td colSpan={listFields.length + 2 + (schema.protheusStatusCheckField ? 1 : 0)} className="px-4 py-12 text-center text-outline text-sm">
                         Nenhum registro encontrado
                       </td>
                     </tr>
@@ -589,16 +590,16 @@ export default function DataTable({ tableName, schema }: Props) {
                             })}
                           />
                         </td>
-                        {schema.protheusStructureCheckField && (
+                        {schema.protheusStatusCheckField && (
                           <td className="px-3 py-3 text-center">
                             {(() => {
-                              const found = isInProtheus(row)
-                              if (found === null) {
-                                return <span className="inline-block w-2.5 h-2.5 rounded-full bg-outline-variant" title="Conecte ao Protheus para verificar (botão acima da tabela)" />
+                              const status = getProtheusStatus(row)
+                              if (status === null) {
+                                return <span className="inline-block w-2.5 h-2.5 rounded-full bg-outline-variant" title="Conecte ao Protheus para verificar (botão acima da tabela) — ou o código não é um produto registrado lá" />
                               }
-                              return found
-                                ? <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="Encontrado no Protheus" />
-                                : <span className="inline-block w-2.5 h-2.5 rounded-full bg-error" title="Não encontrado no Protheus" />
+                              return status === 'ATIVO'
+                                ? <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="ATIVO no Protheus" />
+                                : <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-600" title="BLOQUEADO no Protheus" />
                             })()}
                           </td>
                         )}
@@ -662,8 +663,8 @@ export default function DataTable({ tableName, schema }: Props) {
           <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl p-6 w-full max-w-sm animate-fade-in">
             <h3 className="text-base font-semibold text-on-surface mb-2">Conectar ao Banco Protheus</h3>
             <p className="text-on-surface-variant text-sm mb-4">
-              Verifica quais códigos desta lista já existem como estrutura (ESTRUTURA) no Protheus. A conexão
-              é aberta só para esta consulta e fechada em seguida — nada fica salvo.
+              Verifica o status (ATIVO/BLOQUEADO) de cada código desta lista no cadastro de produtos do
+              Protheus. A conexão é aberta só para esta consulta e fechada em seguida — nada fica salvo.
             </p>
             <form
               className="flex flex-col gap-3"

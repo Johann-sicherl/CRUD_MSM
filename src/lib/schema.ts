@@ -82,7 +82,7 @@ export interface TableSchema {
   bulkEdit?: boolean        // show "Alterar selecionados" button to mass-update checked rows
   auditQueries?: boolean    // log a ready-to-run SQL statement to audit_log on every insert/update/delete, for manual export to the production database
   auditKeyField?: string | string[]  // field(s) used to identify the row across environments in the generated SQL (defaults to the unique field, then autoIncrement, then all noBulkEdit fields as a composite key, then the PK)
-  protheusStructureCheckField?: string  // field whose value is checked against ESTRUTURA headers in the live Protheus DB — adds a view-only flag column (and, once connected, an extra "Exportar dados" column) showing whether each row's code exists there
+  protheusStatusCheckField?: string  // field whose value is checked against the Protheus product master (SB1010) status (ATIVO/BLOQUEADO) — adds a view-only flag column (and, once connected, an extra "Exportar dados" column)
 }
 
 // Financial multiplier fields that the Atualizador Global de Tabelas MSM always
@@ -182,7 +182,7 @@ export const tables: Record<string, TableSchema> = {
     compactHeader: true,
     bulkEdit: true,
     auditQueries: true,
-    protheusStructureCheckField: 'protheus_code',
+    protheusStatusCheckField: 'protheus_code',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listFilterType: 'text', noBulkEdit: true,

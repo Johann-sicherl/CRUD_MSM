@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { listAllStructureHeaders } from '@/lib/protheusDb'
+import { listProductStatuses } from '@/lib/protheusDb'
 
-// Returns every ESTRUTURA header registered in the live Protheus database,
-// unfiltered — used by the view-only "existe no Protheus?" flag column in
-// Cadastro de Equipamentos. Credentials come in per request and are never
-// stored server-side — see src/lib/protheusDb.ts.
+// Returns the ATIVO/BLOQUEADO status of every product registered in the
+// Protheus product master (SB1010), keyed by code — used by the view-only
+// Protheus status flag column in Cadastro de Equipamentos. Credentials come
+// in per request and are never stored server-side — see src/lib/protheusDb.ts.
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const headers = await listAllStructureHeaders({ user, password })
-    return NextResponse.json({ headers })
+    const statusByCode = await listProductStatuses({ user, password })
+    return NextResponse.json({ statuses: Object.fromEntries(statusByCode) })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao consultar o banco Protheus'
     return NextResponse.json({ error: message }, { status: 502 })
