@@ -599,7 +599,7 @@ export default function DataTable({ tableName, schema }: Props) {
                               }
                               return status === 'ATIVO'
                                 ? <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="ATIVO no Protheus" />
-                                : <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-600" title="BLOQUEADO no Protheus" />
+                                : <span className="inline-block w-3 h-3 rounded-full bg-[#ff0000] shadow-[0_0_6px_rgba(255,0,0,0.7)]" title="BLOQUEADO no Protheus" />
                             })()}
                           </td>
                         )}
