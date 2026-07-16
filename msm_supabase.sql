@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS accessory_groups (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   legacy_id   INTEGER NOT NULL UNIQUE,
   name        VARCHAR NOT NULL UNIQUE,
-  description TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

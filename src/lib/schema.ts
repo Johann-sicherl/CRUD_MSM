@@ -164,7 +164,6 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id', label: 'ID Leg.', type: 'number', nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true, listFilterType: 'text' },
-      { name: 'description', label: 'Descrição', type: 'textarea', nullable: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
