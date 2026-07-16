@@ -40,7 +40,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
         onMouseLeave={() => setHovered(false)}
       >
         {/* Header */}
-        <div className="relative px-4 py-4 border-b border-outline-variant flex flex-col items-center gap-2">
+        <div className="relative px-4 py-2 border-b border-outline-variant flex flex-col items-center gap-2">
           <Image
             src="https://vmisecurity.com/wp-content/uploads/2021/11/logo-vmi-trademark.png"
             alt="VMI Security"
@@ -50,8 +50,6 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
             priority
             unoptimized
           />
-          <div className="text-base font-bold text-primary neon-text tracking-wider font-mono">COMMAND CENTER</div>
-          <div className="text-[10px] text-outline font-mono">PostgreSQL 14 · CRUD · MSM</div>
 
           {/* Pin button */}
           <button
