@@ -1,11 +1,38 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
+import { getListFields, type Field } from '@/lib/schema'
+import ColumnFilter from '@/components/ColumnFilter'
 
 const STORAGE_KEY = 'analisador-estruturas-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
+
+// Every real column of "Cadastro de Equipamentos" (standard_equipment_items) —
+// the exact set the "Filtro avançado" modal offers, one filter per header.
+const ADVANCED_FILTER_FIELDS: Field[] = getListFields('standard_equipment_items')
+
+// Mirrors DataTable.tsx's getDisplayValue: resolves lookupFrom fields (e.g.
+// legacy_equipment_id → equipment name) through a small local lookup map
+// instead of touching the shared DataTable component at all.
+type AdvancedFilterLookups = Record<string, Record<string, string>>
+
+function getAdvancedFieldValue(
+  row: Record<string, unknown> | undefined,
+  field: Field,
+  lookups: AdvancedFilterLookups,
+): string {
+  if (!row) return 'N/A'
+  if (field.lookupFrom && lookups[field.name]) {
+    const keyField = field.lookupFrom.sourceField ?? field.name
+    const key = String(row[keyField] ?? '')
+    return lookups[field.name][key] ?? 'N/A'
+  }
+  const raw = row[field.name]
+  if (raw === null || raw === undefined || raw === 'null' || raw === '') return 'N/A'
+  return String(raw)
+}
 
 interface PropertyResult {
   field: string
@@ -379,6 +406,77 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds
   )
 }
 
+// ─── Advanced filter — every header of Cadastro de Equipamentos ────────
+// Filters the analysis cards already on screen; it never touches the
+// analysis/fetch logic, only which of `files` end up in `displayedFiles`.
+function AdvancedFilterModal({
+  onClose,
+  fields,
+  filters,
+  options,
+  search,
+  onSearchChange,
+  onToggleValue,
+  onClearField,
+  onClearAll,
+}: {
+  onClose: () => void
+  fields: Field[]
+  filters: Record<string, string[]>
+  options: Record<string, string[]>
+  search: Record<string, string>
+  onSearchChange: (fieldName: string, value: string) => void
+  onToggleValue: (fieldName: string, value: string) => void
+  onClearField: (fieldName: string) => void
+  onClearAll: () => void
+}) {
+  const activeCount = Object.values(filters).filter(v => v.length > 0).length
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
+          <div>
+            <h2 className="text-base font-semibold text-on-surface">Filtro avançado</h2>
+            <p className="text-xs text-outline mt-0.5">
+              Filtra os equipamentos analisados abaixo por qualquer coluna de Cadastro de Equipamentos.
+              {activeCount > 0 && <span className="text-primary font-semibold"> {activeCount} filtro(s) ativo(s)</span>}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+        <div className="flex-1 overflow-auto p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {fields.map(field => (
+            <div key={field.name} className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-on-surface-variant">{field.label}</label>
+              <ColumnFilter
+                searchValue={search[field.name] || ''}
+                onSearchChange={v => onSearchChange(field.name, v)}
+                selectedValues={filters[field.name] || []}
+                onToggleValue={v => onToggleValue(field.name, v)}
+                onClearValues={() => onClearField(field.name)}
+                options={options[field.name] || []}
+                placeholder="filtrar…"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-outline-variant shrink-0">
+          <button onClick={onClearAll} className="px-3 py-1.5 text-sm text-error hover:underline">
+            Limpar todos os filtros
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-all"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AnalisadorEstruturasPage() {
   const [files, setFiles] = useState<AnalysisFile[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -396,6 +494,18 @@ export default function AnalisadorEstruturasPage() {
   // "Chave" filter: false = mostra tudo (comportamento atual); true = só o que está
   // no Protheus e ainda não está cadastrado no banco interno.
   const [showOnlyMissingFromInternal, setShowOnlyMissingFromInternal] = useState(false)
+
+  // "Filtro avançado" — one multi-select filter per Cadastro de Equipamentos
+  // column, applied on top of whatever is already displayed. `equipmentRows`
+  // holds the full standard_equipment_items row (every status, so a card can
+  // still be matched even if the equipment was later deactivated) keyed by
+  // uppercased protheus_code; `advancedLookups` resolves the two lookup
+  // fields (Equipamento, Alerta) the same way DataTable.tsx does.
+  const [equipmentRows, setEquipmentRows] = useState<Record<string, Record<string, unknown>>>({})
+  const [advancedLookups, setAdvancedLookups] = useState<AdvancedFilterLookups>({})
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string[]>>({})
+  const [advancedFilterSearch, setAdvancedFilterSearch] = useState<Record<string, string>>({})
 
   // Restore previously analyzed files when returning to this page. Uses
   // IndexedDB instead of sessionStorage — a big Busca Reversa/"Analisar
@@ -450,6 +560,40 @@ export default function AnalisadorEstruturasPage() {
       .then(r => r.json())
       .then(rules => setClassificationRules(Array.isArray(rules) ? rules : []))
       .catch(() => {})
+  }, [])
+
+  // Loads the data the "Filtro avançado" modal needs: every
+  // standard_equipment_items row (all statuses — a card must stay filterable
+  // even if the equipment was deactivated later) plus the two lookup tables
+  // used to resolve Equipamento/Alerta to their display names.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [itemsRes, eqRes, alertRes] = await Promise.all([
+          fetch('/api/standard_equipment_items?limit=25000'),
+          fetch('/api/equipments?limit=25000'),
+          fetch('/api/general_alerts?limit=25000'),
+        ])
+        const [itemsJson, eqJson, alertJson] = await Promise.all([itemsRes.json(), eqRes.json(), alertRes.json()])
+
+        const rows: Record<string, Record<string, unknown>> = {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of (itemsJson.data || [])) {
+          const code = String(r.protheus_code || '').trim().toUpperCase()
+          if (code) rows[code] = r
+        }
+        setEquipmentRows(rows)
+
+        const lookups: AdvancedFilterLookups = { legacy_equipment_id: {}, legacy_general_alert_id: {} }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const g of (eqJson.data || [])) lookups.legacy_equipment_id[String(g.legacy_id)] = g.name || 'N/A'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const a of (alertJson.data || [])) lookups.legacy_general_alert_id[String(a.legacy_id)] = a.description || 'N/A'
+        setAdvancedLookups(lookups)
+      } catch {
+        // Filtro avançado simply has no options if this fails — doesn't block anything else on the page.
+      }
+    })()
   }, [])
 
   const toggleGroupExpanded = (groupName: string) => {
@@ -599,13 +743,60 @@ export default function AnalisadorEstruturasPage() {
     setExpandedId(null)
     setExpandedGroups(new Set())
     setShowOnlyMissingFromInternal(false)
+    setAdvancedFilters({})
+    setAdvancedFilterSearch({})
+  }
+
+  const toggleAdvancedFilterValue = (fieldName: string, value: string) => {
+    setAdvancedFilters(prev => {
+      const current = prev[fieldName] || []
+      const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value]
+      return { ...prev, [fieldName]: next }
+    })
+  }
+  const clearAdvancedFilterField = (fieldName: string) => {
+    setAdvancedFilters(prev => ({ ...prev, [fieldName]: [] }))
+  }
+  const clearAllAdvancedFilters = () => setAdvancedFilters({})
+  const setAdvancedFilterSearchValue = (fieldName: string, value: string) => {
+    setAdvancedFilterSearch(prev => ({ ...prev, [fieldName]: value }))
+  }
+
+  // Distinct display values per column, gathered from the equipment rows
+  // behind the equipamentos currently analyzed (not the whole catalog) — so
+  // the filter options only ever offer what's actually on screen.
+  const advancedFilterOptions = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    for (const field of ADVANCED_FILTER_FIELDS) {
+      const set = new Set<string>()
+      for (const file of files) {
+        const row = equipmentRows[file.protheusCode.trim().toUpperCase()]
+        set.add(getAdvancedFieldValue(row, field, advancedLookups))
+      }
+      map[field.name] = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    }
+    return map
+  }, [files, equipmentRows, advancedLookups])
+
+  const activeAdvancedFilterCount = Object.values(advancedFilters).filter(v => v.length > 0).length
+
+  const passesAdvancedFilter = (file: AnalysisFile) => {
+    const activeEntries = Object.entries(advancedFilters).filter(([, vals]) => vals.length > 0)
+    if (activeEntries.length === 0) return true
+    const row = equipmentRows[file.protheusCode.trim().toUpperCase()]
+    return activeEntries.every(([fieldName, vals]) => {
+      const field = ADVANCED_FILTER_FIELDS.find(f => f.name === fieldName)
+      if (!field) return true
+      return vals.includes(getAdvancedFieldValue(row, field, advancedLookups))
+    })
   }
 
   // "Chave" filter — applied before grouping, on top of the exact same
   // layout/grouping logic below, so toggling it never changes anything else.
-  const displayedFiles = showOnlyMissingFromInternal
+  const displayedFiles = (showOnlyMissingFromInternal
     ? files.filter(f => f.status === 'done' && f.equipmentFound === false)
     : files
+  ).filter(passesAdvancedFilter)
 
   // Groups analyzed equipment by the type derived from DESC_ESTRUTURA (see
   // src/lib/equipmentClassification.ts) — anything without a description or
@@ -713,6 +904,19 @@ export default function AnalisadorEstruturasPage() {
           onAnalyze={handleAnalyzeCodes}
         />
       )}
+      {advancedFilterOpen && (
+        <AdvancedFilterModal
+          onClose={() => setAdvancedFilterOpen(false)}
+          fields={ADVANCED_FILTER_FIELDS}
+          filters={advancedFilters}
+          options={advancedFilterOptions}
+          search={advancedFilterSearch}
+          onSearchChange={setAdvancedFilterSearchValue}
+          onToggleValue={toggleAdvancedFilterValue}
+          onClearField={clearAdvancedFilterField}
+          onClearAll={clearAllAdvancedFilters}
+        />
+      )}
 
       {files.length > 0 && (
         <div className="flex items-center gap-3 mb-4">
@@ -740,6 +944,17 @@ export default function AnalisadorEstruturasPage() {
             Só o que falta no meu banco
           </span>
           <button
+            onClick={() => setAdvancedFilterOpen(true)}
+            title="Filtra os equipamentos exibidos por qualquer coluna de Cadastro de Equipamentos"
+            className={`px-3 py-1.5 text-sm rounded border transition-colors whitespace-nowrap ${
+              activeAdvancedFilterCount > 0
+                ? 'text-primary border-primary/40 bg-primary/10 hover:bg-primary/20'
+                : 'text-on-surface-variant border-outline-variant hover:border-primary hover:text-primary'
+            }`}
+          >
+            🔎 Filtro avançado{activeAdvancedFilterCount > 0 ? ` (${activeAdvancedFilterCount})` : ''}
+          </button>
+          <button
             onClick={clearAllFiles}
             title="Remove todos os equipamentos analisados desta lista, para começar do zero"
             className="ml-auto px-3 py-1.5 text-sm text-error border border-error/30 rounded hover:bg-error-container/20 transition-colors whitespace-nowrap"
@@ -753,7 +968,9 @@ export default function AnalisadorEstruturasPage() {
         <div className="text-sm text-outline italic">Nenhum equipamento analisado ainda.</div>
       ) : displayedFiles.length === 0 ? (
         <div className="text-sm text-outline italic">
-          Nenhum equipamento no Protheus está faltando no seu banco interno, entre os já analisados.
+          {activeAdvancedFilterCount > 0
+            ? 'Nenhum equipamento analisado corresponde ao filtro avançado aplicado.'
+            : 'Nenhum equipamento no Protheus está faltando no seu banco interno, entre os já analisados.'}
         </div>
       ) : (
         <div className="flex flex-col gap-6">
