@@ -589,6 +589,18 @@ export default function AnalisadorEstruturasPage() {
     setExpandedId(prev => (prev === id ? null : prev))
   }
 
+  // Results now persist across reloads/navigation, which means the list only
+  // ever grows unless cleared explicitly — this is that explicit reset.
+  const clearAllFiles = () => {
+    if (files.length === 0) return
+    const ok = window.confirm(`Limpar todos os ${files.length} equipamento(s) analisado(s) desta lista?`)
+    if (!ok) return
+    setFiles([])
+    setExpandedId(null)
+    setExpandedGroups(new Set())
+    setShowOnlyMissingFromInternal(false)
+  }
+
   // "Chave" filter — applied before grouping, on top of the exact same
   // layout/grouping logic below, so toggling it never changes anything else.
   const displayedFiles = showOnlyMissingFromInternal
@@ -727,6 +739,13 @@ export default function AnalisadorEstruturasPage() {
           <span className={`text-sm font-semibold ${showOnlyMissingFromInternal ? 'text-primary' : 'text-outline'}`}>
             Só o que falta no meu banco
           </span>
+          <button
+            onClick={clearAllFiles}
+            title="Remove todos os equipamentos analisados desta lista, para começar do zero"
+            className="ml-auto px-3 py-1.5 text-sm text-error border border-error/30 rounded hover:bg-error-container/20 transition-colors whitespace-nowrap"
+          >
+            🗑 Limpar tudo
+          </button>
         </div>
       )}
 
