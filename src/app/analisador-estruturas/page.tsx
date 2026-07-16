@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
-import { getListFields, type Field } from '@/lib/schema'
+import { getListFields, tables, type Field } from '@/lib/schema'
 import ColumnFilter from '@/components/ColumnFilter'
+import RecordModal from '@/components/RecordModal'
 
 const STORAGE_KEY = 'analisador-estruturas-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
@@ -531,6 +532,44 @@ function AdvancedFilterModal({
   )
 }
 
+// ─── Grupo de Equipamentos ausente ─────────────────────────────────────
+// "Adicionar ao banco" needs a Grupo de Equipamentos to link the new item
+// to (legacy_equipment_id is required) — when the equipment-type
+// classification for a card doesn't match any registered group by name,
+// this blocks the create form entirely instead of opening it half-broken,
+// pointing the user at Grupo de Equipamentos to register it first.
+function GroupMissingAlert({ groupName, onClose }: { groupName: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-error/40 rounded-lg shadow-2xl w-full max-w-md animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant">
+          <h2 className="text-base font-semibold text-error">⚠ Grupo de Equipamentos não cadastrado</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+        <div className="p-5 flex flex-col gap-3">
+          <p className="text-sm text-on-surface-variant">
+            Não foi encontrado nenhum Grupo de Equipamentos com o nome{' '}
+            <strong className="text-on-surface">&quot;{groupName}&quot;</strong>. Cadastre esse grupo primeiro em{' '}
+            <a href="/equipments" className="text-primary hover:underline">Grupo de Equipamentos</a>, depois volte aqui
+            para adicionar este item ao banco.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+              Fechar
+            </button>
+            <a
+              href="/equipments"
+              className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-all"
+            >
+              Ir para Grupo de Equipamentos
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AnalisadorEstruturasPage() {
   const [files, setFiles] = useState<AnalysisFile[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -557,8 +596,20 @@ export default function AnalisadorEstruturasPage() {
   // fields (Equipamento, Alerta) the same way DataTable.tsx does.
   const [equipmentRows, setEquipmentRows] = useState<Record<string, Record<string, unknown>>>({})
   const [advancedLookups, setAdvancedLookups] = useState<AdvancedFilterLookups>({})
+  const [equipmentGroupsByName, setEquipmentGroupsByName] = useState<Record<string, number>>({})
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string[]>>({})
+
+  // "Adicionar ao banco" — opens the standard "Novo — Cadastro de Equipamentos"
+  // form already prefilled with what Busc. Itens Série Estrut. found for that
+  // card. `addModalFile` is the card being added; `addModalPrefill` the values
+  // computed for it; `groupMissingAlert` holds the classification name when no
+  // matching Grupo de Equipamentos exists yet — that blocks the form entirely
+  // instead of opening it, since legacy_equipment_id is a required reference.
+  const [addModalFile, setAddModalFile] = useState<AnalysisFile | null>(null)
+  const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
+  const [groupMissingAlert, setGroupMissingAlert] = useState<string | null>(null)
+  const fieldOptionsCacheRef = useRef<Record<string, string[]> | null>(null)
 
   // Restore previously analyzed files when returning to this page. Uses
   // IndexedDB instead of sessionStorage — a big Busca Reversa/"Analisar
@@ -615,39 +666,48 @@ export default function AnalisadorEstruturasPage() {
       .catch(() => {})
   }, [])
 
-  // Loads the data the "Filtro avançado" modal needs: every
+  // Loads the data both "Filtro avançado" and "Adicionar ao banco" need: every
   // standard_equipment_items row (all statuses — a card must stay filterable
-  // even if the equipment was deactivated later) plus the two lookup tables
-  // used to resolve Equipamento/Alerta to their display names.
-  useEffect(() => {
-    (async () => {
-      try {
-        const [itemsRes, eqRes, alertRes] = await Promise.all([
-          fetch('/api/standard_equipment_items?limit=25000'),
-          fetch('/api/equipments?limit=25000'),
-          fetch('/api/general_alerts?limit=25000'),
-        ])
-        const [itemsJson, eqJson, alertJson] = await Promise.all([itemsRes.json(), eqRes.json(), alertRes.json()])
+  // even if the equipment was deactivated later), the two lookup tables used
+  // to resolve Equipamento/Alerta to their display names, and a name→legacy_id
+  // map of every registered Grupo de Equipamentos (used to find the group a
+  // card's classification belongs to before prefilling "Adicionar ao banco").
+  // Extracted into a stable function so it can also be re-run right after a
+  // new equipment is saved, instead of only ever loading once on mount.
+  const loadEquipmentFilterData = useCallback(async () => {
+    try {
+      const [itemsRes, eqRes, alertRes] = await Promise.all([
+        fetch('/api/standard_equipment_items?limit=25000'),
+        fetch('/api/equipments?limit=25000'),
+        fetch('/api/general_alerts?limit=25000'),
+      ])
+      const [itemsJson, eqJson, alertJson] = await Promise.all([itemsRes.json(), eqRes.json(), alertRes.json()])
 
-        const rows: Record<string, Record<string, unknown>> = {}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const r of (itemsJson.data || [])) {
-          const code = String(r.protheus_code || '').trim().toUpperCase()
-          if (code) rows[code] = r
-        }
-        setEquipmentRows(rows)
-
-        const lookups: AdvancedFilterLookups = { legacy_equipment_id: {}, legacy_general_alert_id: {} }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const g of (eqJson.data || [])) lookups.legacy_equipment_id[String(g.legacy_id)] = g.name || 'N/A'
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const a of (alertJson.data || [])) lookups.legacy_general_alert_id[String(a.legacy_id)] = a.description || 'N/A'
-        setAdvancedLookups(lookups)
-      } catch {
-        // Filtro avançado simply has no options if this fails — doesn't block anything else on the page.
+      const rows: Record<string, Record<string, unknown>> = {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (itemsJson.data || [])) {
+        const code = String(r.protheus_code || '').trim().toUpperCase()
+        if (code) rows[code] = r
       }
-    })()
+      setEquipmentRows(rows)
+
+      const lookups: AdvancedFilterLookups = { legacy_equipment_id: {}, legacy_general_alert_id: {} }
+      const groupsByName: Record<string, number> = {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const g of (eqJson.data || [])) {
+        lookups.legacy_equipment_id[String(g.legacy_id)] = g.name || 'N/A'
+        if (g.name) groupsByName[String(g.name).trim().toUpperCase()] = g.legacy_id
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const a of (alertJson.data || [])) lookups.legacy_general_alert_id[String(a.legacy_id)] = a.description || 'N/A'
+      setAdvancedLookups(lookups)
+      setEquipmentGroupsByName(groupsByName)
+    } catch {
+      // Filtro avançado / Adicionar ao banco simply have no data if this fails — doesn't block anything else on the page.
+    }
   }, [])
+
+  useEffect(() => { loadEquipmentFilterData() }, [loadEquipmentFilterData])
 
   const toggleGroupExpanded = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -784,6 +844,49 @@ export default function AnalisadorEstruturasPage() {
   const removeFile = (id: string) => {
     setFiles(prev => prev.filter(f => f.id !== id))
     setExpandedId(prev => (prev === id ? null : prev))
+  }
+
+  // Prefills "Novo — Cadastro de Equipamentos" with what this card's analysis
+  // already found: Cód. Protheus itself, the Grupo de Equipamentos matched by
+  // name from the equipment-type classification, and — only for properties
+  // whose computed value already exists as a registered option in Lista Itens
+  // de Série — the property values themselves. Anything that can't be safely
+  // resolved (missing group, unregistered property value) is simply left out
+  // of the prefill so the normal dropdown of valid options is shown and the
+  // user picks it by hand — nothing invalid is ever silently pre-selected.
+  const handleAddToDatabase = async (file: AnalysisFile) => {
+    const groupName = classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
+    const groupId = equipmentGroupsByName[groupName.trim().toUpperCase()]
+    if (groupId === undefined) {
+      setGroupMissingAlert(groupName)
+      return
+    }
+
+    if (!fieldOptionsCacheRef.current) {
+      try {
+        const res = await fetch('/api/field-options')
+        fieldOptionsCacheRef.current = res.ok ? await res.json() : {}
+      } catch {
+        fieldOptionsCacheRef.current = {}
+      }
+    }
+    const fieldOptions = fieldOptionsCacheRef.current || {}
+
+    const prefill: Record<string, string> = {
+      protheus_code: file.protheusCode,
+      legacy_equipment_id: String(groupId),
+    }
+    for (const field of ADVANCED_FILTER_FIELDS) {
+      if (!field.dynamicOptions) continue
+      const computed = file.properties?.find(p => p.field === field.name)?.computedValue
+      if (!computed) continue
+      const options = fieldOptions[field.dynamicOptions] || []
+      const match = options.find(o => o.trim().toUpperCase() === computed.trim().toUpperCase())
+      if (match) prefill[field.name] = match
+    }
+
+    setAddModalPrefill(prefill)
+    setAddModalFile(file)
   }
 
   // Results now persist across reloads/navigation, which means the list only
@@ -957,6 +1060,25 @@ export default function AnalisadorEstruturasPage() {
           computeOptions={computeAdvancedFilterOptions}
         />
       )}
+      {groupMissingAlert && (
+        <GroupMissingAlert groupName={groupMissingAlert} onClose={() => setGroupMissingAlert(null)} />
+      )}
+      {addModalFile && (
+        <RecordModal
+          schema={tables.standard_equipment_items}
+          tableName="standard_equipment_items"
+          record={null}
+          prefill={addModalPrefill}
+          onClose={() => { setAddModalFile(null); setAddModalPrefill(null) }}
+          onSaved={() => {
+            const savedId = addModalFile.id
+            setAddModalFile(null)
+            setAddModalPrefill(null)
+            setFiles(prev => prev.map(f => f.id === savedId ? { ...f, equipmentFound: true } : f))
+            loadEquipmentFilterData()
+          }}
+        />
+      )}
 
       {files.length > 0 && (
         <div className="flex items-center gap-3 mb-4">
@@ -1072,6 +1194,15 @@ export default function AnalisadorEstruturasPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    {file.status === 'done' && file.equipmentFound === false && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleAddToDatabase(file) }}
+                        title="Abre o cadastro de um novo item em Cadastro de Equipamentos já preenchido com o que foi encontrado aqui"
+                        className="px-2.5 py-1 text-xs font-semibold text-primary border border-primary/40 rounded hover:bg-primary/10 transition-colors whitespace-nowrap"
+                      >
+                        + Adicionar ao banco
+                      </button>
+                    )}
                     <button
                       onClick={e => { e.stopPropagation(); removeFile(file.id) }}
                       className="text-outline hover:text-error text-sm px-1"
