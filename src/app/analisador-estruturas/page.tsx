@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
 import { getListFields, type Field } from '@/lib/schema'
@@ -431,28 +431,41 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds
 // ─── Advanced filter — every header of Cadastro de Equipamentos ────────
 // Filters the analysis cards already on screen; it never touches the
 // analysis/fetch logic, only which of `files` end up in `displayedFiles`.
+//
+// Owns its own "draft" selection (separate from the filters actually applied
+// to the page) so nothing changes on screen until "Aplicar" is pressed — and
+// while the draft is being edited, each field's options are recomputed from
+// only the cards that still match every OTHER currently-selected field, so
+// picking e.g. one Equipamento immediately narrows down Cód. Protheus (and
+// vice-versa) instead of always listing every value ever seen.
 function AdvancedFilterModal({
   onClose,
+  onApply,
   fields,
-  filters,
-  options,
-  search,
-  onSearchChange,
-  onToggleValue,
-  onClearField,
-  onClearAll,
+  initialFilters,
+  computeOptions,
 }: {
   onClose: () => void
+  onApply: (filters: Record<string, string[]>) => void
   fields: Field[]
-  filters: Record<string, string[]>
-  options: Record<string, string[]>
-  search: Record<string, string>
-  onSearchChange: (fieldName: string, value: string) => void
-  onToggleValue: (fieldName: string, value: string) => void
-  onClearField: (fieldName: string) => void
-  onClearAll: () => void
+  initialFilters: Record<string, string[]>
+  computeOptions: (draft: Record<string, string[]>) => Record<string, string[]>
 }) {
-  const activeCount = Object.values(filters).filter(v => v.length > 0).length
+  const [draftFilters, setDraftFilters] = useState<Record<string, string[]>>(initialFilters)
+  const [search, setSearch] = useState<Record<string, string>>({})
+
+  const options = useMemo(() => computeOptions(draftFilters), [draftFilters, computeOptions])
+  const activeCount = Object.values(draftFilters).filter(v => v.length > 0).length
+
+  const toggleValue = (fieldName: string, value: string) => {
+    setDraftFilters(prev => {
+      const current = prev[fieldName] || []
+      const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value]
+      return { ...prev, [fieldName]: next }
+    })
+  }
+  const clearField = (fieldName: string) => setDraftFilters(prev => ({ ...prev, [fieldName]: [] }))
+  const clearAll = () => setDraftFilters({})
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -461,8 +474,9 @@ function AdvancedFilterModal({
           <div>
             <h2 className="text-base font-semibold text-on-surface">Filtro avançado</h2>
             <p className="text-xs text-outline mt-0.5">
-              Filtra os equipamentos analisados abaixo por qualquer coluna de Cadastro de Equipamentos.
-              {activeCount > 0 && <span className="text-primary font-semibold"> {activeCount} filtro(s) ativo(s)</span>}
+              Selecione os valores desejados e clique em Aplicar. As opções de cada campo se ajustam
+              conforme os outros filtros já selecionados.
+              {activeCount > 0 && <span className="text-primary font-semibold"> {activeCount} filtro(s) selecionado(s)</span>}
             </p>
           </div>
           <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
@@ -473,10 +487,10 @@ function AdvancedFilterModal({
               <label className="text-xs font-semibold text-on-surface-variant">{field.label}</label>
               <ColumnFilter
                 searchValue={search[field.name] || ''}
-                onSearchChange={v => onSearchChange(field.name, v)}
-                selectedValues={filters[field.name] || []}
-                onToggleValue={v => onToggleValue(field.name, v)}
-                onClearValues={() => onClearField(field.name)}
+                onSearchChange={v => setSearch(prev => ({ ...prev, [field.name]: v }))}
+                selectedValues={draftFilters[field.name] || []}
+                onToggleValue={v => toggleValue(field.name, v)}
+                onClearValues={() => clearField(field.name)}
                 options={options[field.name] || []}
                 placeholder="filtrar…"
               />
@@ -484,14 +498,17 @@ function AdvancedFilterModal({
           ))}
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-outline-variant shrink-0">
-          <button onClick={onClearAll} className="px-3 py-1.5 text-sm text-error hover:underline">
+          <button onClick={clearAll} className="px-3 py-1.5 text-sm text-error hover:underline">
             Limpar todos os filtros
           </button>
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+            Cancelar
+          </button>
           <button
-            onClick={onClose}
+            onClick={() => { onApply(draftFilters); onClose() }}
             className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-all"
           >
-            Fechar
+            Aplicar
           </button>
         </div>
       </div>
@@ -527,7 +544,6 @@ export default function AnalisadorEstruturasPage() {
   const [advancedLookups, setAdvancedLookups] = useState<AdvancedFilterLookups>({})
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string[]>>({})
-  const [advancedFilterSearch, setAdvancedFilterSearch] = useState<Record<string, string>>({})
 
   // Restore previously analyzed files when returning to this page. Uses
   // IndexedDB instead of sessionStorage — a big Busca Reversa/"Analisar
@@ -766,32 +782,25 @@ export default function AnalisadorEstruturasPage() {
     setExpandedGroups(new Set())
     setShowOnlyMissingFromInternal(false)
     setAdvancedFilters({})
-    setAdvancedFilterSearch({})
   }
 
-  const toggleAdvancedFilterValue = (fieldName: string, value: string) => {
-    setAdvancedFilters(prev => {
-      const current = prev[fieldName] || []
-      const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value]
-      return { ...prev, [fieldName]: next }
-    })
-  }
-  const clearAdvancedFilterField = (fieldName: string) => {
-    setAdvancedFilters(prev => ({ ...prev, [fieldName]: [] }))
-  }
-  const clearAllAdvancedFilters = () => setAdvancedFilters({})
-  const setAdvancedFilterSearchValue = (fieldName: string, value: string) => {
-    setAdvancedFilterSearch(prev => ({ ...prev, [fieldName]: value }))
-  }
-
-  // Distinct display values per column, gathered from the equipment rows
-  // behind the equipamentos currently analyzed (not the whole catalog) — so
-  // the filter options only ever offer what's actually on screen.
-  const advancedFilterOptions = useMemo(() => {
+  // Faceted options for the "Filtro avançado" modal: for each column, only
+  // cards that still match every OTHER selected column's values are
+  // considered — so narrowing one field (e.g. Equipamento) immediately
+  // narrows what the other fields (e.g. Cód. Protheus) can offer, instead of
+  // always listing every value ever seen regardless of the current selection.
+  const computeAdvancedFilterOptions = useCallback((draft: Record<string, string[]>) => {
     const map: Record<string, string[]> = {}
     for (const field of ADVANCED_FILTER_FIELDS) {
       const set = new Set<string>()
       for (const file of files) {
+        const passesOtherFields = Object.entries(draft).every(([otherName, vals]) => {
+          if (otherName === field.name || vals.length === 0) return true
+          const otherField = ADVANCED_FILTER_FIELDS.find(f => f.name === otherName)
+          if (!otherField) return true
+          return vals.includes(getAdvancedFilterValueForFile(file, otherField, equipmentRows, advancedLookups, classificationRules))
+        })
+        if (!passesOtherFields) continue
         set.add(getAdvancedFilterValueForFile(file, field, equipmentRows, advancedLookups, classificationRules))
       }
       map[field.name] = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
@@ -927,14 +936,10 @@ export default function AnalisadorEstruturasPage() {
       {advancedFilterOpen && (
         <AdvancedFilterModal
           onClose={() => setAdvancedFilterOpen(false)}
+          onApply={setAdvancedFilters}
           fields={ADVANCED_FILTER_FIELDS}
-          filters={advancedFilters}
-          options={advancedFilterOptions}
-          search={advancedFilterSearch}
-          onSearchChange={setAdvancedFilterSearchValue}
-          onToggleValue={toggleAdvancedFilterValue}
-          onClearField={clearAdvancedFilterField}
-          onClearAll={clearAllAdvancedFilters}
+          initialFilters={advancedFilters}
+          computeOptions={computeAdvancedFilterOptions}
         />
       )}
 
