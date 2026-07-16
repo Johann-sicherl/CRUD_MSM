@@ -95,11 +95,18 @@ async function loadStructureCache(creds: ProtheusCredentials): Promise<Structure
  * its components are pulled in too — same result as the union of
  * "2-Estruturas"/"FLAT-LIST" from the manual Excel export. Runs entirely
  * against the in-memory adjacency map (see loadStructureCache above); a
- * visited-set guards against cyclic BOM references. Also returns the
- * structure's own DESC_ESTRUTURA, when known.
+ * visited-set guards against cyclic BOM references.
+ *
+ * The description shown alongside the code comes from DESCRICAO_PRODUTO
+ * (SB1010, product master) rather than DESC_ESTRUTURA — not every
+ * structure has a populated DESC_ESTRUTURA, while the product master
+ * description is filled in far more consistently.
  */
 export async function fetchStructureCodes(protheusCode: string, creds: ProtheusCredentials): Promise<{ codes: string[]; description: string | null; foundInProtheus: boolean }> {
-  const { adjacency, descriptions } = await loadStructureCache(creds)
+  const [{ adjacency, descriptions }, description] = await Promise.all([
+    loadStructureCache(creds),
+    getProductDescription(protheusCode, creds),
+  ])
 
   const root = protheusCode.trim()
   const visited = new Set<string>()
@@ -119,7 +126,7 @@ export async function fetchStructureCodes(protheusCode: string, creds: ProtheusC
 
   return {
     codes: Array.from(collected),
-    description: descriptions.get(root) ?? null,
+    description,
     foundInProtheus: adjacency.has(root) || descriptions.has(root),
   }
 }
@@ -155,19 +162,24 @@ export async function listStructureHeaders(prefixes: string[], creds: ProtheusCr
 
 export type ProtheusProductStatus = 'ATIVO' | 'BLOQUEADO'
 
-interface ProductStatusCache {
-  statusByCode: Map<string, ProtheusProductStatus>
+export interface ProtheusProductInfo {
+  status: ProtheusProductStatus
+  description: string | null
+}
+
+interface ProductInfoCache {
+  infoByCode: Map<string, ProtheusProductInfo>
   fetchedAt: number
 }
 
-let productStatusCache: ProductStatusCache | null = null
-let productStatusInFlight: Promise<ProductStatusCache> | null = null
+let productInfoCache: ProductInfoCache | null = null
+let productInfoInFlight: Promise<ProductInfoCache> | null = null
 
-async function loadProductStatusCache(creds: ProtheusCredentials): Promise<ProductStatusCache> {
-  if (productStatusCache && Date.now() - productStatusCache.fetchedAt < CACHE_TTL_MS) return productStatusCache
-  if (productStatusInFlight) return productStatusInFlight
+async function loadProductInfoCache(creds: ProtheusCredentials): Promise<ProductInfoCache> {
+  if (productInfoCache && Date.now() - productInfoCache.fetchedAt < CACHE_TTL_MS) return productInfoCache
+  if (productInfoInFlight) return productInfoInFlight
 
-  productStatusInFlight = (async () => {
+  productInfoInFlight = (async () => {
     const pool = new sql.ConnectionPool({
       ...CONNECTION_BASE,
       user: creds.user,
@@ -217,23 +229,24 @@ async function loadProductStatusCache(creds: ProtheusCredentials): Promise<Produ
         WHERE a.D_E_L_E_T_ <> '*'
       `)
 
-      const statusByCode = new Map<string, ProtheusProductStatus>()
-      for (const row of result.recordset as { COD_PRODUTO: unknown; STD_BLOQ: unknown }[]) {
+      const infoByCode = new Map<string, ProtheusProductInfo>()
+      for (const row of result.recordset as { COD_PRODUTO: unknown; STD_BLOQ: unknown; DESCRICAO_PRODUTO: unknown }[]) {
         const code = String(row.COD_PRODUTO ?? '').trim().toUpperCase()
         const status = String(row.STD_BLOQ ?? '').trim().toUpperCase()
         if (!code || (status !== 'ATIVO' && status !== 'BLOQUEADO')) continue
-        statusByCode.set(code, status as ProtheusProductStatus)
+        const description = String(row.DESCRICAO_PRODUTO ?? '').trim()
+        infoByCode.set(code, { status: status as ProtheusProductStatus, description: description || null })
       }
 
-      productStatusCache = { statusByCode, fetchedAt: Date.now() }
-      return productStatusCache
+      productInfoCache = { infoByCode, fetchedAt: Date.now() }
+      return productInfoCache
     } finally {
       await pool.close()
-      productStatusInFlight = null
+      productInfoInFlight = null
     }
   })()
 
-  return productStatusInFlight
+  return productInfoInFlight
 }
 
 /**
@@ -243,6 +256,20 @@ async function loadProductStatusCache(creds: ProtheusCredentials): Promise<Produ
  * the code isn't a registered product in Protheus at all.
  */
 export async function listProductStatuses(creds: ProtheusCredentials): Promise<Map<string, ProtheusProductStatus>> {
-  const { statusByCode } = await loadProductStatusCache(creds)
+  const { infoByCode } = await loadProductInfoCache(creds)
+  const statusByCode = new Map<string, ProtheusProductStatus>()
+  for (const [code, info] of infoByCode) statusByCode.set(code, info.status)
   return statusByCode
+}
+
+/**
+ * DESCRICAO_PRODUTO (B1_DESC) for a single product code, from the same
+ * SB1010/SBM010 cache above — this is what Busc. Itens Série Estrut. shows
+ * under each analyzed equipment's code, since not every structure has a
+ * DESC_ESTRUTURA and the product master description is more consistently
+ * populated.
+ */
+export async function getProductDescription(code: string, creds: ProtheusCredentials): Promise<string | null> {
+  const { infoByCode } = await loadProductInfoCache(creds)
+  return infoByCode.get(code.trim().toUpperCase())?.description ?? null
 }
