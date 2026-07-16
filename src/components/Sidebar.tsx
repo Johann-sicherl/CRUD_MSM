@@ -144,16 +144,6 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               Sistema
             </div>
             <Link
-              href="/options"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/options'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Lista Itens de Série</span>
-            </Link>
-            <Link
               href="/auditoria"
               className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
                 pathname === '/auditoria'
@@ -164,16 +154,6 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               <span className="truncate">Desenvolvedor de Queries</span>
             </Link>
             <Link
-              href="/parametros-estrutura"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/parametros-estrutura'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Param. Itens de Série</span>
-            </Link>
-            <Link
               href="/analisador-estruturas"
               className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
                 pathname === '/analisador-estruturas'
@@ -182,6 +162,32 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               }`}
             >
               <span className="truncate">Busc. Itens Série Estrut.</span>
+            </Link>
+          </div>
+
+          <div className="mt-5">
+            <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
+              Parâmetros
+            </div>
+            <Link
+              href="/options"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/options'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Lista Itens de Série</span>
+            </Link>
+            <Link
+              href="/parametros-estrutura"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/parametros-estrutura'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Param. Itens de Série</span>
             </Link>
           </div>
         </nav>
