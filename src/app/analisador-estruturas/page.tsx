@@ -848,12 +848,16 @@ export default function AnalisadorEstruturasPage() {
 
   // Prefills "Novo — Cadastro de Equipamentos" with what this card's analysis
   // already found: Cód. Protheus itself, the Grupo de Equipamentos matched by
-  // name from the equipment-type classification, and — only for properties
-  // whose computed value already exists as a registered option in Lista Itens
-  // de Série — the property values themselves. Anything that can't be safely
-  // resolved (missing group, unregistered property value) is simply left out
-  // of the prefill so the normal dropdown of valid options is shown and the
-  // user picks it by hand — nothing invalid is ever silently pre-selected.
+  // name from the equipment-type classification, and every property the
+  // structure analysis computed a value for. A computed value that isn't yet
+  // a registered option in Lista Itens de Série is registered on the fly —
+  // the exact same call the "+" button next to each dropdown already makes
+  // (POST /api/field-options) — instead of being silently dropped: the
+  // structure/BOM data is already treated as ground truth everywhere else on
+  // this page (it's what flags mismatches against the internal DB), so it
+  // wouldn't make sense to trust it for comparison but not for prefilling.
+  // Only fields with no computed value at all (status "missing"/"duplicate")
+  // are left blank for manual selection, same as before.
   const handleAddToDatabase = async (file: AnalysisFile) => {
     const groupName = classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
     const groupId = equipmentGroupsByName[groupName.trim().toUpperCase()]
@@ -878,11 +882,30 @@ export default function AnalisadorEstruturasPage() {
     }
     for (const field of ADVANCED_FILTER_FIELDS) {
       if (!field.dynamicOptions) continue
-      const computed = file.properties?.find(p => p.field === field.name)?.computedValue
+      const computed = file.properties?.find(p => p.field === field.name)?.computedValue?.trim()
       if (!computed) continue
-      const options = fieldOptions[field.dynamicOptions] || []
-      const match = options.find(o => o.trim().toUpperCase() === computed.trim().toUpperCase())
-      if (match) prefill[field.name] = match
+      const key = field.dynamicOptions
+      const options = fieldOptions[key] || []
+      const existing = options.find(o => o.trim().toUpperCase() === computed.toUpperCase())
+      if (existing) {
+        prefill[field.name] = existing
+        continue
+      }
+      try {
+        const res = await fetch('/api/field-options', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: computed }),
+        })
+        if (res.ok) {
+          const updated: string[] = await res.json()
+          fieldOptions[key] = updated
+          fieldOptionsCacheRef.current = { ...fieldOptionsCacheRef.current, [key]: updated }
+          prefill[field.name] = computed.toUpperCase()
+        }
+      } catch {
+        // Couldn't register the new option — leave this field blank for manual selection.
+      }
     }
 
     setAddModalPrefill(prefill)
