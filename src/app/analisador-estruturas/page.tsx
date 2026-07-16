@@ -34,14 +34,22 @@ function getAdvancedFieldValue(
   return String(raw)
 }
 
-// "Equipamento" is special-cased: instead of resolving the equipment's
-// registered name (which is only possible when the code already exists in
-// Cadastro de Equipamentos — leaving every code found only in Protheus, e.g.
-// via Busca Reversa, stuck at "N/A"), it uses the same equipment-type
-// classification (src/lib/equipmentClassification.ts, driven by the rules in
-// Parâmetros de Estrutura) already used to group the cards on screen. That
-// classification comes from the product description and is available for
-// every analyzed card regardless of whether it's registered internally.
+// Busc. Itens Série Estrut. searches inside AND outside the internal
+// database (e.g. Busca Reversa/"Analisar TODOS" walk the live Protheus BOM
+// directly), so a card can be fully analyzed without ever having a row in
+// Cadastro de Equipamentos. Falling back to that internal row for every
+// field meant any such card showed "N/A" across the board — including for
+// data the analysis itself already produced. So each field is resolved from
+// whatever Busc. Itens Série Estrut. already knows about the card first, and
+// only falls back to the internal row for fields that have no equivalent in
+// the structure analysis (Alerta, Status, Custo — those only exist once the
+// equipment is actually registered):
+//   • Cód. Protheus — the code being analyzed itself, always known.
+//   • Equipamento — the equipment-type classification (same one used to
+//     group the cards on screen), derived from the product description.
+//   • Every structure-derived property (Processador, Memória, ...) — the
+//     value computed from the matched Protheus structure codes, exactly
+//     like the "Valor Esperado (Estrutura)" column already shown per card.
 function getAdvancedFilterValueForFile(
   file: AnalysisFile,
   field: Field,
@@ -49,8 +57,15 @@ function getAdvancedFilterValueForFile(
   lookups: AdvancedFilterLookups,
   classificationRules: EquipmentClassificationRule[],
 ): string {
+  if (field.name === 'protheus_code') {
+    return file.protheusCode.trim() || 'N/A'
+  }
   if (field.name === 'legacy_equipment_id') {
     return classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
+  }
+  if (field.name in FIELD_LABELS) {
+    const prop = file.properties?.find(p => p.field === field.name)
+    return prop?.computedValue ? prop.computedValue : 'N/A'
   }
   const row = equipmentRows[file.protheusCode.trim().toUpperCase()]
   return getAdvancedFieldValue(row, field, lookups)
