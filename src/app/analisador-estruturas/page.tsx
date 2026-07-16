@@ -14,8 +14,8 @@ const UNCLASSIFIED_GROUP = 'Não classificado'
 const ADVANCED_FILTER_FIELDS: Field[] = getListFields('standard_equipment_items')
 
 // Mirrors DataTable.tsx's getDisplayValue: resolves lookupFrom fields (e.g.
-// legacy_equipment_id → equipment name) through a small local lookup map
-// instead of touching the shared DataTable component at all.
+// legacy_general_alert_id → alert description) through a small local lookup
+// map instead of touching the shared DataTable component at all.
 type AdvancedFilterLookups = Record<string, Record<string, string>>
 
 function getAdvancedFieldValue(
@@ -32,6 +32,28 @@ function getAdvancedFieldValue(
   const raw = row[field.name]
   if (raw === null || raw === undefined || raw === 'null' || raw === '') return 'N/A'
   return String(raw)
+}
+
+// "Equipamento" is special-cased: instead of resolving the equipment's
+// registered name (which is only possible when the code already exists in
+// Cadastro de Equipamentos — leaving every code found only in Protheus, e.g.
+// via Busca Reversa, stuck at "N/A"), it uses the same equipment-type
+// classification (src/lib/equipmentClassification.ts, driven by the rules in
+// Parâmetros de Estrutura) already used to group the cards on screen. That
+// classification comes from the product description and is available for
+// every analyzed card regardless of whether it's registered internally.
+function getAdvancedFilterValueForFile(
+  file: AnalysisFile,
+  field: Field,
+  equipmentRows: Record<string, Record<string, unknown>>,
+  lookups: AdvancedFilterLookups,
+  classificationRules: EquipmentClassificationRule[],
+): string {
+  if (field.name === 'legacy_equipment_id') {
+    return classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
+  }
+  const row = equipmentRows[file.protheusCode.trim().toUpperCase()]
+  return getAdvancedFieldValue(row, field, lookups)
 }
 
 interface PropertyResult {
@@ -770,24 +792,22 @@ export default function AnalisadorEstruturasPage() {
     for (const field of ADVANCED_FILTER_FIELDS) {
       const set = new Set<string>()
       for (const file of files) {
-        const row = equipmentRows[file.protheusCode.trim().toUpperCase()]
-        set.add(getAdvancedFieldValue(row, field, advancedLookups))
+        set.add(getAdvancedFilterValueForFile(file, field, equipmentRows, advancedLookups, classificationRules))
       }
       map[field.name] = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
     }
     return map
-  }, [files, equipmentRows, advancedLookups])
+  }, [files, equipmentRows, advancedLookups, classificationRules])
 
   const activeAdvancedFilterCount = Object.values(advancedFilters).filter(v => v.length > 0).length
 
   const passesAdvancedFilter = (file: AnalysisFile) => {
     const activeEntries = Object.entries(advancedFilters).filter(([, vals]) => vals.length > 0)
     if (activeEntries.length === 0) return true
-    const row = equipmentRows[file.protheusCode.trim().toUpperCase()]
     return activeEntries.every(([fieldName, vals]) => {
       const field = ADVANCED_FILTER_FIELDS.find(f => f.name === fieldName)
       if (!field) return true
-      return vals.includes(getAdvancedFieldValue(row, field, advancedLookups))
+      return vals.includes(getAdvancedFilterValueForFile(file, field, equipmentRows, advancedLookups, classificationRules))
     })
   }
 
