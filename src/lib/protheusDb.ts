@@ -273,3 +273,172 @@ export async function getProductDescription(code: string, creds: ProtheusCredent
   const { infoByCode } = await loadProductInfoCache(creds)
   return infoByCode.get(code.trim().toUpperCase())?.description ?? null
 }
+
+// ─── Full BOM detail (Excel export) ─────────────────────────────────────
+// Separate cache/query from everything above — feeds only the "Exportar
+// Excel" button in Busc. Itens Série Estrut. and needs several columns
+// (quantity, cost, unit, type, phantom flag) the existing ESTRUTURAS queries
+// don't select. Kept fully isolated so it can't affect the BOM-resolution
+// caches/logic already relied on by the rest of the page.
+
+export interface BomLine {
+  descEstrutura: string
+  componente: string
+  descComponente: string
+  tipo: string
+  unidade: string
+  quant: number
+  custoStd: number
+  custoPond: number
+  fantasma: string
+}
+
+interface BomDetailCache {
+  byEstrutura: Map<string, BomLine[]>
+  descByEstrutura: Map<string, string>
+  fetchedAt: number
+}
+
+let bomDetailCache: BomDetailCache | null = null
+let bomDetailInFlight: Promise<BomDetailCache> | null = null
+
+// Values come from typed SQL Server numeric columns, not free-text Excel
+// cells, so this only needs to cover the odd comma-decimal string — nothing
+// like the VBA source macro's much heavier manual parsing is needed here.
+function toNumberSafe(v: unknown): number {
+  if (typeof v === 'number') return isFinite(v) ? v : 0
+  const n = parseFloat(String(v ?? '').trim().replace(',', '.'))
+  return isNaN(n) ? 0 : n
+}
+
+async function loadBomDetailCache(creds: ProtheusCredentials): Promise<BomDetailCache> {
+  if (bomDetailCache && Date.now() - bomDetailCache.fetchedAt < CACHE_TTL_MS) return bomDetailCache
+  if (bomDetailInFlight) return bomDetailInFlight
+
+  bomDetailInFlight = (async () => {
+    const pool = new sql.ConnectionPool({
+      ...CONNECTION_BASE,
+      user: creds.user,
+      password: creds.password,
+      requestTimeout: BULK_LOAD_TIMEOUT_MS,
+    })
+    try {
+      await pool.connect()
+      const result = await pool.request().query(`
+        SELECT ESTRUTURA, DESC_ESTRUTURA, COMPONENTE, DESC_COMPONENTE, B1_TIPO, UN, QUANT, CUSTO_STD, C_ULT_ENTRADA, FANTASMA
+        FROM ESTRUTURAS
+      `)
+
+      const byEstrutura = new Map<string, BomLine[]>()
+      const descByEstrutura = new Map<string, string>()
+      for (const row of result.recordset as Record<string, unknown>[]) {
+        const estrutura = String(row.ESTRUTURA ?? '').trim()
+        const componente = String(row.COMPONENTE ?? '').trim()
+        if (!estrutura || !componente) continue
+
+        const descEstrutura = String(row.DESC_ESTRUTURA ?? '').trim()
+        if (descEstrutura && !descByEstrutura.has(estrutura)) descByEstrutura.set(estrutura, descEstrutura)
+
+        const line: BomLine = {
+          descEstrutura,
+          componente,
+          descComponente: String(row.DESC_COMPONENTE ?? '').trim(),
+          tipo: String(row.B1_TIPO ?? '').trim().toUpperCase(),
+          unidade: String(row.UN ?? '').trim(),
+          quant: toNumberSafe(row.QUANT),
+          custoStd: toNumberSafe(row.CUSTO_STD),
+          custoPond: toNumberSafe(row.C_ULT_ENTRADA),
+          fantasma: String(row.FANTASMA ?? '').trim().toUpperCase(),
+        }
+        const list = byEstrutura.get(estrutura)
+        if (list) list.push(line)
+        else byEstrutura.set(estrutura, [line])
+      }
+
+      bomDetailCache = { byEstrutura, descByEstrutura, fetchedAt: Date.now() }
+      return bomDetailCache
+    } finally {
+      await pool.close()
+      bomDetailInFlight = null
+    }
+  })()
+
+  return bomDetailInFlight
+}
+
+export interface ExplodedBomRow {
+  estrutura: string
+  descEstrutura: string
+  nivel: number
+  codigo: string
+  denominacao: string
+  qtd: number
+  unidade: string
+  tipo: string
+  custoStd: number
+  custoPond: number
+  qtdTotal: number
+  stdTotal: number
+  pondTotal: number
+  alerta: string
+  codPaiDireto: string
+}
+
+/**
+ * Faithful port of the legacy VBA DFS_Explode macro: walks the BOM tree from
+ * `protheusCode` accumulating the quantity multiplier level by level (QTD
+ * TOTAL = QTD × multiplicador acumulado do pai), flags lines with no cost
+ * registered as "PRECIFICAR" (excluding phantom-structure and labor/PI-type
+ * lines, same conditions as the source macro), and guards against cyclic
+ * structures the same way the macro does: a node already in the current
+ * root-to-here path is skipped, but the same node reached again via a
+ * different branch is still explored normally (no cross-branch blocking).
+ */
+export async function explodeBomForExport(
+  protheusCode: string,
+  creds: ProtheusCredentials,
+): Promise<{ rows: ExplodedBomRow[]; descEstrutura: string | null; found: boolean }> {
+  const { byEstrutura, descByEstrutura } = await loadBomDetailCache(creds)
+  const root = protheusCode.trim()
+  const rootDesc = descByEstrutura.get(root) ?? null
+  const rows: ExplodedBomRow[] = []
+
+  const explode = (codPai: string, nivel: number, fator: number, path: Set<string>) => {
+    const children = byEstrutura.get(codPai)
+    if (!children || path.has(codPai)) return
+    const nextPath = new Set(path)
+    nextPath.add(codPai)
+
+    for (const child of children) {
+      const qtdTotal = child.quant * fator
+      const stdTotal = qtdTotal * child.custoStd
+      const pondTotal = qtdTotal * child.custoPond
+      const alerta = (child.custoStd === 0 && child.custoPond === 0 && child.tipo !== 'PI' && child.tipo !== 'MO' && child.fantasma !== 'S')
+        ? 'PRECIFICAR'
+        : ''
+
+      rows.push({
+        estrutura: root,
+        descEstrutura: rootDesc ?? '',
+        nivel,
+        codigo: child.componente,
+        denominacao: child.descComponente,
+        qtd: child.quant,
+        unidade: child.unidade,
+        tipo: child.tipo,
+        custoStd: child.custoStd,
+        custoPond: child.custoPond,
+        qtdTotal,
+        stdTotal,
+        pondTotal,
+        alerta,
+        codPaiDireto: codPai,
+      })
+
+      explode(child.componente, nivel + 1, qtdTotal, nextPath)
+    }
+  }
+
+  explode(root, 2, 1, new Set())
+  return { rows, descEstrutura: rootDesc, found: byEstrutura.has(root) || descByEstrutura.has(root) }
+}

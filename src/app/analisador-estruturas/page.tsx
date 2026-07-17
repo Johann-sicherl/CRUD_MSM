@@ -135,6 +135,88 @@ async function extractStructureCodes(file: File): Promise<string[]> {
   return Array.from(codes)
 }
 
+// ─── Exportar Excel — mirrors the legacy VBA macro's own output format ──
+// One row per exploded BOM line, in the same server-side DFS pre-order the
+// macro produces (see explodeBomForExport in src/lib/protheusDb.ts).
+interface ExportedBomRow {
+  estrutura: string
+  descEstrutura: string
+  nivel: number
+  codigo: string
+  denominacao: string
+  qtd: number
+  unidade: string
+  tipo: string
+  custoStd: number
+  custoPond: number
+  qtdTotal: number
+  stdTotal: number
+  pondTotal: number
+  alerta: string
+  codPaiDireto: string
+}
+
+async function buildAndDownloadStructureWorkbook(
+  protheusCode: string,
+  descEstrutura: string | null,
+  rows: ExportedBomRow[],
+) {
+  const XLSX = await import('xlsx')
+
+  const estruturasHeader = [
+    'ESTRUTURA', 'DESC_ESTRUTURA', 'NIVEL', 'CÓDIGO', 'DENOMINAÇÃO', 'QTD', 'UNIDADE', 'TIPO',
+    'CUSTO_STD', 'CUSTO_POND', 'QTD TOTAL', 'STD_TOTAL', 'POND_TOTAL', 'ALERTA', 'COD_PAI_DIRETO',
+  ]
+  const estruturasRows = rows.map(r => [
+    r.estrutura, r.descEstrutura, r.nivel, r.codigo, r.denominacao, r.qtd, r.unidade, r.tipo,
+    r.custoStd, r.custoPond, r.qtdTotal, r.stdTotal, r.pondTotal, r.alerta, r.codPaiDireto,
+  ])
+  const wsEstruturas = XLSX.utils.aoa_to_sheet([estruturasHeader, ...estruturasRows])
+
+  // FLAT-LIST — one row per distinct código, QTD TOTAL somada entre todas as ocorrências.
+  const flatMap = new Map<string, { denominacao: string; qtdTotal: number }>()
+  for (const r of rows) {
+    const existing = flatMap.get(r.codigo)
+    if (existing) existing.qtdTotal += r.qtdTotal
+    else flatMap.set(r.codigo, { denominacao: r.denominacao, qtdTotal: r.qtdTotal })
+  }
+  const flatRows = Array.from(flatMap.entries()).map(([codigo, v]) => [codigo, v.denominacao, v.qtdTotal])
+  const wsFlat = XLSX.utils.aoa_to_sheet([['CÓDIGO', 'DENOMINAÇÃO', 'QTD TOTAL'], ...flatRows])
+
+  // IDENTADO — mesma ordem (DFS) de 2-Estruturas; cada linha desloca suas 5
+  // colunas (CÓDIGO/DENOMINAÇÃO/QTD/UNIDADE/TIPO) conforme o nível: nível 2
+  // começa na coluna B, nível 3 na G — 5 colunas por nível, sem salto de linha.
+  const identadoRows = rows.map(r => {
+    const colStart = 1 + (r.nivel - 2) * 5 // 0-indexado; nível 2 → índice 1 (coluna B)
+    const row: (string | number)[] = new Array(Math.max(colStart, 0)).fill('')
+    row.push(r.codigo, r.denominacao, r.qtd, r.unidade, r.tipo)
+    return row
+  })
+  const wsIdentado = XLSX.utils.aoa_to_sheet(identadoRows)
+
+  // PROPRIEDADES_ESTRUTURA — resumo, somando os totais já calculados por linha.
+  const custoStandard = rows.reduce((sum, r) => sum + r.stdTotal, 0)
+  const custoUltimoPreco = rows.reduce((sum, r) => sum + r.pondTotal, 0)
+  const semPreco = rows.filter(r => r.alerta === 'PRECIFICAR')
+  const fmtBRL = (n: number) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const wsPropriedades = XLSX.utils.aoa_to_sheet([
+    ['CÓDIGO DA ESTRUTURA', protheusCode],
+    ['DENOMINAÇÃO DA ESTRUTURA', descEstrutura || ''],
+    ['QUANTIDADE DE CÓDIGOS', flatMap.size],
+    ['CUSTO STANDARD', fmtBRL(custoStandard)],
+    ['CUSTO ÚLTIMO PREÇO DE COMPRA', fmtBRL(custoUltimoPreco)],
+    ['POSSUI ALGUM ITEM SEM PREÇO?', semPreco.length > 0 ? 'SIM' : 'NÃO'],
+    ['QTD ITENS SEM PREÇO', semPreco.length],
+  ])
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, wsEstruturas, '2-Estruturas')
+  XLSX.utils.book_append_sheet(wb, wsFlat, 'FLAT-LIST')
+  XLSX.utils.book_append_sheet(wb, wsIdentado, 'IDENTADO')
+  XLSX.utils.book_append_sheet(wb, wsPropriedades, 'PROPRIEDADES_ESTRUTURA')
+  XLSX.writeFile(wb, `${protheusCode}.xlsx`)
+}
+
 function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline' | 'success'; children: React.ReactNode }) {
   const cls = tone === 'error'
     ? 'text-error border-error/30 bg-error-container/20'
@@ -611,6 +693,10 @@ export default function AnalisadorEstruturasPage() {
   const [groupMissingAlert, setGroupMissingAlert] = useState<string | null>(null)
   const fieldOptionsCacheRef = useRef<Record<string, string[]> | null>(null)
 
+  // "Exportar Excel" — id of the card currently being exported, just to show
+  // a small loading state on its button while the request is in flight.
+  const [exportingId, setExportingId] = useState<string | null>(null)
+
   // Restore previously analyzed files when returning to this page. Uses
   // IndexedDB instead of sessionStorage — a big Busca Reversa/"Analisar
   // TODOS" run can easily exceed sessionStorage's ~5-10MB per-tab quota,
@@ -910,6 +996,33 @@ export default function AnalisadorEstruturasPage() {
 
     setAddModalPrefill(prefill)
     setAddModalFile(file)
+  }
+
+  // "Exportar Excel" — re-queries the Protheus BOM for this card's código
+  // (now asking for quantity/cost/unit/type/phantom too, not just the flat
+  // component list already cached for the on-screen analysis) and downloads
+  // it as a .xlsx in the same 2-Estruturas/FLAT-LIST/IDENTADO/PROPRIEDADES_
+  // ESTRUTURA layout the legacy macro produces.
+  const handleExportExcel = async (file: AnalysisFile) => {
+    if (!dbCreds) return
+    setExportingId(file.id)
+    try {
+      const res = await fetch('/api/protheus-estrutura-detalhe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, protheusCode: file.protheusCode }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        alert(json.error || 'Falha ao gerar a exportação')
+        return
+      }
+      await buildAndDownloadStructureWorkbook(file.protheusCode, json.descEstrutura ?? null, json.rows as ExportedBomRow[])
+    } catch {
+      alert('Erro de comunicação com o banco Protheus')
+    } finally {
+      setExportingId(null)
+    }
   }
 
   // Results now persist across reloads/navigation, which means the list only
@@ -1217,6 +1330,16 @@ export default function AnalisadorEstruturasPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    {file.source === 'db' && file.status === 'done' && file.foundInProtheus && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleExportExcel(file) }}
+                        disabled={exportingId === file.id}
+                        title="Baixa a estrutura completa (quantidades e custos) em .xlsx, no padrão 2-Estruturas/FLAT-LIST/IDENTADO/PROPRIEDADES_ESTRUTURA"
+                        className="px-2.5 py-1 text-xs font-semibold text-on-surface-variant border border-outline-variant rounded hover:border-primary hover:text-primary disabled:opacity-50 transition-colors whitespace-nowrap"
+                      >
+                        {exportingId === file.id ? '⏳ Exportando…' : '⬇ Exportar Excel'}
+                      </button>
+                    )}
                     {file.status === 'done' && file.equipmentFound === false && (
                       <button
                         onClick={e => { e.stopPropagation(); handleAddToDatabase(file) }}
