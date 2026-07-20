@@ -157,8 +157,14 @@ export default function BuscaAvancadaAcessoriosPage() {
   const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
   const [registeredCodes, setRegisteredCodes] = useState<Set<string>>(new Set())
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [expandedHeaders, setExpandedHeaders] = useState<Set<string>>(new Set())
   const [equipFilter, setEquipFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  // "Chave" de visualização: lista = lista plana de acessórios (sem
+  // duplicatas); cascata = mantém o relacionamento de qual 26.xx cada item
+  // veio, em árvore (26.xx → Embalagens/SubPA/Gastos Gerais → Equipamento/
+  // Acessórios/matéria-prima da embalagem).
+  const [viewMode, setViewMode] = useState<'lista' | 'cascata'>('lista')
 
   const hydrated = useRef(false)
 
@@ -260,6 +266,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       setRawGroups(json.groups || [])
       setHasScanned(true)
       setExpandedGroups(new Set())
+      setExpandedHeaders(new Set())
       setEquipFilter('')
       setCategoryFilter('')
     } catch {
@@ -276,6 +283,7 @@ export default function BuscaAvancadaAcessoriosPage() {
     setRawGroups([])
     setHasScanned(false)
     setExpandedGroups(new Set())
+    setExpandedHeaders(new Set())
     setEquipFilter('')
     setCategoryFilter('')
   }
@@ -285,6 +293,15 @@ export default function BuscaAvancadaAcessoriosPage() {
       const next = new Set(prev)
       if (next.has(groupName)) next.delete(groupName)
       else next.add(groupName)
+      return next
+    })
+  }
+
+  const toggleHeaderExpanded = (estrutura: string) => {
+    setExpandedHeaders(prev => {
+      const next = new Set(prev)
+      if (next.has(estrutura)) next.delete(estrutura)
+      else next.add(estrutura)
       return next
     })
   }
@@ -340,6 +357,82 @@ export default function BuscaAvancadaAcessoriosPage() {
     .filter(([name]) => !equipFilter || name === equipFilter)
     .map(([name, items]) => [name, items.filter(i => !categoryFilter || i.categoria === categoryFilter)] as const)
     .filter(([, items]) => items.length > 0)
+
+  // "Lista de acessórios" — os mesmos itens de displayedGroups, mas sem
+  // repetir o mesmo código dentro de um mesmo equipamento (um acessório
+  // pode aparecer em mais de um 26.xx ou nível 3 do mesmo equipamento).
+  const dedupedGroups = displayedGroups.map(([name, items]) => {
+    const seen = new Set<string>()
+    const deduped = items.filter(item => {
+      const key = item.codigo.trim().toUpperCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    return [name, deduped] as const
+  })
+
+  // "Visão em cascata" — reconstrói a árvore 26.xx → NIVEL 2 → NIVEL 3 a
+  // partir dos mesmos dados já classificados, ligando cada linha de nível 3
+  // ao seu pai de nível 2 via codPaiDireto.
+  interface CascadeNivel3Node {
+    codigo: string
+    denominacao: string
+    qtd: number
+    categoria: AccessoryCategory
+    isUps: boolean
+    registered: boolean
+  }
+  interface CascadeNivel2Node extends CascadeNivel3Node {
+    children: CascadeNivel3Node[]
+  }
+  interface CascadeHeader {
+    estrutura: string
+    descEstrutura: string
+    equipType: string
+    nivel2: CascadeNivel2Node[]
+  }
+
+  const cascadeHeaders = useMemo<CascadeHeader[]>(() => {
+    return rawGroups.map(g => {
+      const equipType = classifyEquipmentType(g.descEstrutura, classificationRules) || UNCLASSIFIED_GROUP
+      const toNode = (r: AccessoryHierarchyRow) => {
+        const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
+        return {
+          codigo: r.codigo,
+          denominacao: r.denominacao,
+          qtd: r.qtd,
+          categoria,
+          isUps,
+          registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
+        }
+      }
+      const nivel3Rows = g.rows.filter(r => r.nivel === 3)
+      const nivel2 = g.rows
+        .filter(r => r.nivel === 2)
+        .map(r => ({
+          ...toNode(r),
+          children: nivel3Rows.filter(n3 => n3.codPaiDireto === r.codigo).map(toNode),
+        }))
+      return { estrutura: g.estrutura, descEstrutura: g.descEstrutura, equipType, nivel2 }
+    })
+  }, [rawGroups, classificationRules, registeredCodes])
+
+  const cascadeByEquip = useMemo(() => {
+    const map = new Map<string, CascadeHeader[]>()
+    for (const h of cascadeHeaders) {
+      const bucket = map.get(h.equipType)
+      if (bucket) bucket.push(h)
+      else map.set(h.equipType, [h])
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === UNCLASSIFIED_GROUP) return 1
+      if (b === UNCLASSIFIED_GROUP) return -1
+      return a.localeCompare(b, 'pt-BR')
+    })
+  }, [cascadeHeaders])
+
+  const displayedCascadeGroups = cascadeByEquip.filter(([name]) => !equipFilter || name === equipFilter)
 
   return (
     <div className="p-8 max-w-[108rem]">
@@ -427,6 +520,30 @@ export default function BuscaAvancadaAcessoriosPage() {
 
       {hasScanned && groupedByEquip.length > 0 && (
         <div className="mb-4 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setViewMode(v => v === 'lista' ? 'cascata' : 'lista')}
+              role="switch"
+              aria-checked={viewMode === 'cascata'}
+              title="Alterna entre a lista plana de acessórios (sem duplicatas) e a visão em cascata por 26.xx"
+              className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors shrink-0 ${
+                viewMode === 'cascata' ? 'bg-primary' : 'bg-surface-container-highest border border-outline-variant'
+              }`}
+            >
+              <span
+                className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                  viewMode === 'cascata' ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <span className={`text-sm font-semibold ${viewMode === 'cascata' ? 'text-outline' : 'text-primary'}`}>
+              Lista de acessórios
+            </span>
+            <span className="text-outline">/</span>
+            <span className={`text-sm font-semibold ${viewMode === 'cascata' ? 'text-primary' : 'text-outline'}`}>
+              Visão em cascata (26.xx)
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-on-surface-variant">Equipamento:</span>
             <select
@@ -440,19 +557,21 @@ export default function BuscaAvancadaAcessoriosPage() {
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-on-surface-variant">Categoria:</span>
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-            >
-              <option value="">— Todas —</option>
-              {categoriesPresent.map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
+          {viewMode === 'lista' && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-on-surface-variant">Categoria:</span>
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              >
+                <option value="">— Todas —</option>
+                {categoriesPresent.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
@@ -462,11 +581,12 @@ export default function BuscaAvancadaAcessoriosPage() {
         <div className="text-sm text-outline italic">
           Nenhuma estrutura encontrada com esse(s) prefixo(s).
         </div>
-      ) : displayedGroups.length === 0 ? (
-        <div className="text-sm text-outline italic">Nenhum item combina com os filtros selecionados.</div>
-      ) : (
+      ) : viewMode === 'lista' ? (
+        displayedGroups.length === 0 ? (
+          <div className="text-sm text-outline italic">Nenhum item combina com os filtros selecionados.</div>
+        ) : (
         <div className="flex flex-col gap-6">
-          {displayedGroups.map(([equipType, items]) => {
+          {dedupedGroups.map(([equipType, items]) => {
             const groupOpen = expandedGroups.has(equipType)
             return (
               <div key={equipType}>
@@ -484,29 +604,21 @@ export default function BuscaAvancadaAcessoriosPage() {
                     <table className="text-xs w-full">
                       <thead className="bg-surface-container-highest">
                         <tr>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Nível</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Denominação</th>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Qtd</th>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cód. Pai Direto</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Categoria</th>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Estrutura de Origem</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cadastro</th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((item, i) => (
-                          <tr key={`${item.estrutura}-${item.codPaiDireto}-${item.codigo}-${i}`} className="border-t border-outline-variant/50">
-                            <td className="px-3 py-2 text-outline">{item.nivel}</td>
+                          <tr key={`${item.codigo}-${i}`} className="border-t border-outline-variant/50">
                             <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">{item.codigo}</td>
                             <td className="px-3 py-2 text-on-surface">{item.denominacao || '—'}</td>
-                            <td className="px-3 py-2 text-on-surface">{item.qtd}</td>
-                            <td className="px-3 py-2 font-mono text-outline whitespace-nowrap">{item.codPaiDireto}</td>
                             <td className="px-3 py-2 whitespace-nowrap">
                               <span className="text-on-surface-variant font-semibold">{item.categoria}</span>
                               {item.isUps && <span className="ml-1.5"><Badge tone="amber">UPS</Badge></span>}
                             </td>
-                            <td className="px-3 py-2 font-mono text-outline whitespace-nowrap">{item.estrutura}</td>
                             <td className="px-3 py-2">
                               {item.registered
                                 ? <Badge tone="success">Cadastrado no MSM</Badge>
@@ -516,6 +628,81 @@ export default function BuscaAvancadaAcessoriosPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        )
+      ) : displayedCascadeGroups.length === 0 ? (
+        <div className="text-sm text-outline italic">Nenhum item combina com o filtro selecionado.</div>
+      ) : (
+        <div className="flex flex-col gap-6">
+          {displayedCascadeGroups.map(([equipType, headers]) => {
+            const groupOpen = expandedGroups.has(equipType)
+            const totalCount = headers.length
+            return (
+              <div key={equipType}>
+                <div
+                  onClick={() => toggleGroupExpanded(equipType)}
+                  className="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl border border-outline-variant bg-surface-container-high hover:bg-surface-container-highest cursor-pointer select-none transition-colors"
+                >
+                  <span className={`text-outline text-sm leading-none transition-transform ${groupOpen ? 'rotate-90' : ''}`}>›</span>
+                  <span className="text-xs font-bold text-primary uppercase tracking-wide">
+                    {equipType} <span className="text-outline font-normal">({totalCount} estrutura{totalCount !== 1 ? 's' : ''} 26.xx)</span>
+                  </span>
+                </div>
+                {groupOpen && (
+                  <div className="flex flex-col gap-2">
+                    {headers.map(h => {
+                      const headerOpen = expandedHeaders.has(h.estrutura)
+                      return (
+                        <div key={h.estrutura} className="border border-outline-variant rounded-lg overflow-hidden">
+                          <div
+                            onClick={() => toggleHeaderExpanded(h.estrutura)}
+                            className="flex items-center gap-3 px-3 py-2 bg-surface-container-high hover:bg-surface-container-highest cursor-pointer select-none transition-colors"
+                          >
+                            <span className={`text-outline text-xs leading-none transition-transform ${headerOpen ? 'rotate-90' : ''}`}>›</span>
+                            <span className="font-mono text-xs text-primary">{h.estrutura}</span>
+                            <span className="text-xs text-on-surface-variant truncate">{h.descEstrutura}</span>
+                            <span className="text-xs text-outline ml-auto shrink-0">({h.nivel2.length})</span>
+                          </div>
+                          {headerOpen && (
+                            <div className="divide-y divide-outline-variant/40">
+                              {h.nivel2.map((n2, i2) => (
+                                <div key={`${n2.codigo}-${i2}`} className="p-2">
+                                  <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-surface-container">
+                                    <span className="font-mono text-xs text-on-surface whitespace-nowrap">{n2.codigo}</span>
+                                    <span className="text-xs text-on-surface-variant truncate flex-1">{n2.denominacao || '—'}</span>
+                                    <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n2.categoria}</span>
+                                    {n2.isUps && <Badge tone="amber">UPS</Badge>}
+                                    {n2.registered
+                                      ? <Badge tone="success">Cadastrado no MSM</Badge>
+                                      : <Badge tone="error">Não cadastrado no MSM</Badge>}
+                                  </div>
+                                  {n2.children.length > 0 && (
+                                    <div className="ml-6 mt-1 flex flex-col gap-1">
+                                      {n2.children.map((n3, i3) => (
+                                        <div key={`${n3.codigo}-${i3}`} className="flex items-center gap-2 px-2 py-1.5 rounded border border-outline-variant/40">
+                                          <span className="font-mono text-xs text-primary whitespace-nowrap">{n3.codigo}</span>
+                                          <span className="text-xs text-on-surface-variant truncate flex-1">{n3.denominacao || '—'}</span>
+                                          <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n3.categoria}</span>
+                                          {n3.isUps && <Badge tone="amber">UPS</Badge>}
+                                          {n3.registered
+                                            ? <Badge tone="success">Cadastrado no MSM</Badge>
+                                            : <Badge tone="error">Não cadastrado no MSM</Badge>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
