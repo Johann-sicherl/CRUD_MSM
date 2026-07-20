@@ -442,3 +442,55 @@ export async function explodeBomForExport(
   explode(root, 2, 1, new Set())
   return { rows, descEstrutura: rootDesc, found: byEstrutura.has(root) || descByEstrutura.has(root) }
 }
+
+// ─── Acessórios por equipamento (Busc. Avançada Acessórios) ─────────────
+// Reuses the same BomDetailCache built for "Exportar Excel" above — no new
+// Protheus query needed. For every "26.xx"-style header (a kit/family of
+// accessories), reports its own direct children (NIVEL 2 in the same
+// numbering used elsewhere) whose own código also matches the accessory
+// prefixes of interest (default "26, 27.13") — i.e. one decomposition step,
+// filtered down to the accessory-looking items and away from generic
+// hardware/raw-material components that also live at that same level.
+export interface AccessoryStructureGroup {
+  estrutura: string
+  descEstrutura: string
+  children: { codigo: string; denominacao: string }[]
+}
+
+export async function listAccessoryStructuresByEquipment(
+  headerPrefixes: string[],
+  childPrefixes: string[],
+  creds: ProtheusCredentials,
+): Promise<AccessoryStructureGroup[]> {
+  const { byEstrutura, descByEstrutura } = await loadBomDetailCache(creds)
+
+  const normHeaderPrefixes = headerPrefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
+  const normChildPrefixes = childPrefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
+  if (normHeaderPrefixes.length === 0) return []
+
+  const headers = Array.from(byEstrutura.keys())
+    .filter(code => normHeaderPrefixes.some(p => code.toUpperCase().startsWith(p)))
+    .sort((a, b) => a.localeCompare(b))
+
+  const groups: AccessoryStructureGroup[] = []
+  for (const estrutura of headers) {
+    const lines = byEstrutura.get(estrutura) || []
+    const seen = new Set<string>()
+    const children: { codigo: string; denominacao: string }[] = []
+    for (const line of lines) {
+      const codigo = line.componente
+      if (!codigo || seen.has(codigo)) continue
+      if (normChildPrefixes.length > 0 && !normChildPrefixes.some(p => codigo.toUpperCase().startsWith(p))) continue
+      seen.add(codigo)
+      children.push({ codigo, denominacao: line.descComponente })
+    }
+    if (children.length === 0) continue
+    groups.push({
+      estrutura,
+      descEstrutura: descByEstrutura.get(estrutura) ?? '',
+      children,
+    })
+  }
+
+  return groups
+}
