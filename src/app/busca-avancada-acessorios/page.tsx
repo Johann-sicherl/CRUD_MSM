@@ -360,7 +360,8 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   // "Lista de acessórios" — os mesmos itens de displayedGroups, mas sem
   // repetir o mesmo código dentro de um mesmo equipamento (um acessório
-  // pode aparecer em mais de um 26.xx ou nível 3 do mesmo equipamento).
+  // pode aparecer em mais de um 26.xx ou nível 3 do mesmo equipamento),
+  // ordenados por Código crescente e, em seguida, por Categoria.
   const dedupedGroups = displayedGroups.map(([name, items]) => {
     const seen = new Set<string>()
     const deduped = items.filter(item => {
@@ -369,6 +370,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       seen.add(key)
       return true
     })
+    deduped.sort((a, b) => a.codigo.localeCompare(b.codigo, 'pt-BR', { numeric: true }) || a.categoria.localeCompare(b.categoria, 'pt-BR'))
     return [name, deduped] as const
   })
 
