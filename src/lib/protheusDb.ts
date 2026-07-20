@@ -468,11 +468,13 @@ export interface AccessoryHierarchyGroup {
 
 export async function listAccessoryHierarchy(
   headerPrefixes: string[],
+  nivel2Prefixes: string[],
   creds: ProtheusCredentials,
 ): Promise<AccessoryHierarchyGroup[]> {
   const { byEstrutura, descByEstrutura } = await loadBomDetailCache(creds)
 
   const normHeaderPrefixes = headerPrefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
+  const normNivel2Prefixes = nivel2Prefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
   if (normHeaderPrefixes.length === 0) return []
 
   const headers = Array.from(byEstrutura.keys())
@@ -486,6 +488,14 @@ export async function listAccessoryHierarchy(
     for (const nivel2 of nivel2Lines) {
       if (!nivel2.componente) continue
       rows.push({ nivel: 2, codigo: nivel2.componente, denominacao: nivel2.descComponente, qtd: nivel2.quant, codPaiDireto: estrutura })
+
+      // Only descend into NIVEL 3 for a NIVEL 2 node whose own código matches
+      // one of nivel2Prefixes (default "27.13", the SubPA branch) — other
+      // NIVEL 2 nodes (Embalagens, Gastos Gerais, or any other structure
+      // that happens to have its own sub-BOM in Protheus) are still listed,
+      // but not expanded, so an unrelated sub-structure never leaks in as
+      // unwanted NIVEL 3 rows.
+      if (normNivel2Prefixes.length > 0 && !normNivel2Prefixes.some(p => nivel2.componente.toUpperCase().startsWith(p))) continue
 
       const nivel3Lines = byEstrutura.get(nivel2.componente) || []
       for (const nivel3 of nivel3Lines) {

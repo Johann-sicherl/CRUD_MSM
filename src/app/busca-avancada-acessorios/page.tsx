@@ -7,6 +7,7 @@ import { idbGet, idbSet } from '@/lib/idbStore'
 const STORAGE_KEY = 'busca-avancada-acessorios-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
 const DEFAULT_HEADER_PREFIXES = '26'
+const DEFAULT_NIVEL2_PREFIXES = '27.13'
 
 interface AccessoryHierarchyRow {
   nivel: 2 | 3
@@ -149,6 +150,7 @@ export default function BuscaAvancadaAcessoriosPage() {
   const [connecting, setConnecting] = useState(false)
 
   const [headerPrefixInput, setHeaderPrefixInput] = useState(DEFAULT_HEADER_PREFIXES)
+  const [nivel2PrefixInput, setNivel2PrefixInput] = useState(DEFAULT_NIVEL2_PREFIXES)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState('')
   const [rawGroups, setRawGroups] = useState<AccessoryHierarchyGroup[]>([])
@@ -174,7 +176,7 @@ export default function BuscaAvancadaAcessoriosPage() {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await idbGet<{ rawGroups: AccessoryHierarchyGroup[]; headerPrefixInput: string; hasScanned: boolean }>(STORAGE_KEY)
+        const stored = await idbGet<{ rawGroups: AccessoryHierarchyGroup[]; headerPrefixInput: string; nivel2PrefixInput: string; hasScanned: boolean }>(STORAGE_KEY)
         if (stored) {
           // Discard anything saved by an earlier version of this page whose
           // AccessoryHierarchyGroup shape doesn't match the current one
@@ -184,6 +186,7 @@ export default function BuscaAvancadaAcessoriosPage() {
           const validGroups = Array.isArray(stored.rawGroups) && stored.rawGroups.every(g => Array.isArray(g?.rows))
           setRawGroups(validGroups ? stored.rawGroups : [])
           setHeaderPrefixInput(stored.headerPrefixInput || DEFAULT_HEADER_PREFIXES)
+          setNivel2PrefixInput(stored.nivel2PrefixInput || DEFAULT_NIVEL2_PREFIXES)
           setHasScanned(validGroups && !!stored.hasScanned)
         }
       } catch {
@@ -196,8 +199,8 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   useEffect(() => {
     if (!hydrated.current) return
-    idbSet(STORAGE_KEY, { rawGroups, headerPrefixInput, hasScanned }).catch(() => {})
-  }, [rawGroups, headerPrefixInput, hasScanned])
+    idbSet(STORAGE_KEY, { rawGroups, headerPrefixInput, nivel2PrefixInput, hasScanned }).catch(() => {})
+  }, [rawGroups, headerPrefixInput, nivel2PrefixInput, hasScanned])
 
   // Loads the (user-editable, in Parâmetros de Estrutura) classification
   // rules — same engine already used to group equipment in Busc. Itens
@@ -251,6 +254,7 @@ export default function BuscaAvancadaAcessoriosPage() {
   const runScan = async () => {
     if (!dbCreds) { setShowLoginModal(true); return }
     const headerPrefixes = headerPrefixInput.split(',').map(p => p.trim()).filter(Boolean)
+    const nivel2Prefixes = nivel2PrefixInput.split(',').map(p => p.trim()).filter(Boolean)
     if (headerPrefixes.length === 0) { setScanError('Informe ao menos um prefixo de estrutura'); return }
 
     setScanning(true)
@@ -259,7 +263,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       const res = await fetch('/api/protheus-acessorios-por-equipamento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, headerPrefixes }),
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, headerPrefixes, nivel2Prefixes }),
       })
       const json = await res.json()
       if (!res.ok) { setScanError(json.error || 'Falha ao consultar o banco Protheus'); return }
@@ -444,13 +448,14 @@ export default function BuscaAvancadaAcessoriosPage() {
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Avançada Acessórios</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Varre todo cabeçalho de estrutura no Protheus com o prefixo informado (NIVEL 1 — nunca listado
+          Varre todo cabeçalho de estrutura no Protheus com o prefixo de NIVEL 1 informado (nunca listado
           diretamente), classifica cada um por tipo de equipamento usando as mesmas regras de{' '}
           <a href="/parametros-estrutura" className="text-primary hover:underline">Classificação de Equipamentos</a>
-          {' '}(aplicadas sobre DESC_ESTRUTURA), e lista todos os itens de NIVEL 2 e NIVEL 3 dessa estrutura — SubPA,
-          Embalagens, Gastos Gerais, o próprio equipamento e seus acessórios — cada um com a categoria (regras
-          herdadas da macro VBA original) e se já está cadastrado no MSM (Cadastro de Equipamentos ou Cadastro de
-          Componentes). Nada é ocultado por não estar cadastrado.
+          {' '}(aplicadas sobre DESC_ESTRUTURA), e lista todos os itens de NIVEL 2 dessa estrutura — SubPA,
+          Embalagens, Gastos Gerais — só abrindo para NIVEL 3 (o próprio equipamento e seus acessórios) os itens de
+          nível 2 que combinem com o prefixo de NIVEL 2 informado. Cada item ganha uma categoria (regras herdadas
+          da macro VBA original) e um texto dizendo se já está cadastrado no MSM (Cadastro de Equipamentos ou
+          Cadastro de Componentes). Nada é ocultado por não estar cadastrado.
         </p>
       </div>
 
@@ -498,6 +503,17 @@ export default function BuscaAvancadaAcessoriosPage() {
             value={headerPrefixInput}
             onChange={e => setHeaderPrefixInput(e.target.value)}
             placeholder="ex: 26"
+            className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-48"
+          />
+        </label>
+        <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+          Prefixo(s) para abrir NIVEL 2
+          <input
+            type="text"
+            value={nivel2PrefixInput}
+            onChange={e => setNivel2PrefixInput(e.target.value)}
+            placeholder="ex: 27.13"
+            title="Só os itens de nível 2 cujo código combine com este prefixo têm seus filhos (nível 3) explorados — os demais aparecem no nível 2, mas sem abrir mais fundo"
             className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-48"
           />
         </label>
