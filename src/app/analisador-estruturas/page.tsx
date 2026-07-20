@@ -536,24 +536,38 @@ function EquipmentPickerModal({ onClose, onPick, onPickGroup, onPickAll, dbCreds
 // only the cards that still match every OTHER currently-selected field, so
 // picking e.g. one Equipamento immediately narrows down Cód. Protheus (and
 // vice-versa) instead of always listing every value ever seen.
+// Splits a "Filtro avançado" description search on "+" into required terms,
+// e.g. "100100+SV" → must contain "100100" AND "SV", each anywhere in the
+// string (case-insensitive) — used against whichever description the card
+// is showing (DESC_ESTRUTURA or DESCRICAO_PRODUTO, whatever's in use).
+function matchesDescriptionSearch(description: string | null | undefined, query: string): boolean {
+  const terms = query.split('+').map(t => t.trim().toUpperCase()).filter(Boolean)
+  if (terms.length === 0) return true
+  const desc = (description || '').toUpperCase()
+  return terms.every(t => desc.includes(t))
+}
+
 function AdvancedFilterModal({
   onClose,
   onApply,
   fields,
   initialFilters,
+  initialDescSearch,
   computeOptions,
 }: {
   onClose: () => void
-  onApply: (filters: Record<string, string[]>) => void
+  onApply: (filters: Record<string, string[]>, descSearch: string) => void
   fields: Field[]
   initialFilters: Record<string, string[]>
+  initialDescSearch: string
   computeOptions: (draft: Record<string, string[]>) => Record<string, string[]>
 }) {
   const [draftFilters, setDraftFilters] = useState<Record<string, string[]>>(initialFilters)
+  const [draftDescSearch, setDraftDescSearch] = useState(initialDescSearch)
   const [search, setSearch] = useState<Record<string, string>>({})
 
   const options = useMemo(() => computeOptions(draftFilters), [draftFilters, computeOptions])
-  const activeCount = Object.values(draftFilters).filter(v => v.length > 0).length
+  const activeCount = Object.values(draftFilters).filter(v => v.length > 0).length + (draftDescSearch.trim() ? 1 : 0)
 
   const toggleValue = (fieldName: string, value: string) => {
     setDraftFilters(prev => {
@@ -563,48 +577,67 @@ function AdvancedFilterModal({
     })
   }
   const clearField = (fieldName: string) => setDraftFilters(prev => ({ ...prev, [fieldName]: [] }))
-  const clearAll = () => setDraftFilters({})
+  const clearAll = () => { setDraftFilters({}); setDraftDescSearch('') }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-fade-in">
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-on-surface">Filtro avançado</h2>
-            <p className="text-xs text-outline mt-0.5">
+            <h2 className="text-lg font-semibold text-on-surface">Filtro avançado</h2>
+            <p className="text-sm text-outline mt-0.5">
               Selecione os valores desejados e clique em Aplicar. As opções de cada campo se ajustam
               conforme os outros filtros já selecionados.
               {activeCount > 0 && <span className="text-primary font-semibold"> {activeCount} filtro(s) selecionado(s)</span>}
             </p>
           </div>
-          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-2xl leading-none">✕</button>
         </div>
-        <div className="flex-1 overflow-auto p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {fields.map(field => (
-            <div key={field.name} className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-on-surface-variant">{field.label}</label>
-              <ColumnFilter
-                searchValue={search[field.name] || ''}
-                onSearchChange={v => setSearch(prev => ({ ...prev, [field.name]: v }))}
-                selectedValues={draftFilters[field.name] || []}
-                onToggleValue={v => toggleValue(field.name, v)}
-                onClearValues={() => clearField(field.name)}
-                options={options[field.name] || []}
-                placeholder="filtrar…"
-              />
-            </div>
-          ))}
+        <div className="flex-1 overflow-auto p-5 flex flex-col gap-5">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-semibold text-on-surface-variant">
+              Buscar em Descrição (DESC_ESTRUTURA / DESCRICAO_PRODUTO)
+            </label>
+            <input
+              type="text"
+              value={draftDescSearch}
+              onChange={e => setDraftDescSearch(e.target.value)}
+              placeholder="ex: 100100+SV"
+              className="bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-base text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+            <p className="text-sm text-outline">
+              Busca a palavra em qualquer posição da descrição. Use <span className="font-mono font-semibold">+</span> para
+              exigir mais de uma palavra ao mesmo tempo — ex.: <span className="font-mono">100100+SV</span> encontra tudo
+              que contenha 100100 <span className="font-semibold">e</span> SV juntos, em qualquer posição do texto.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fields.map(field => (
+              <div key={field.name} className="flex flex-col gap-1">
+                <label className="text-sm font-semibold text-on-surface-variant">{field.label}</label>
+                <ColumnFilter
+                  searchValue={search[field.name] || ''}
+                  onSearchChange={v => setSearch(prev => ({ ...prev, [field.name]: v }))}
+                  selectedValues={draftFilters[field.name] || []}
+                  onToggleValue={v => toggleValue(field.name, v)}
+                  onClearValues={() => clearField(field.name)}
+                  options={options[field.name] || []}
+                  placeholder="filtrar…"
+                />
+              </div>
+            ))}
+          </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-outline-variant shrink-0">
-          <button onClick={clearAll} className="px-3 py-1.5 text-sm text-error hover:underline">
+          <button onClick={clearAll} className="px-3 py-1.5 text-base text-error hover:underline">
             Limpar todos os filtros
           </button>
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+          <button onClick={onClose} className="px-3 py-1.5 text-base text-on-surface-variant hover:text-on-surface">
             Cancelar
           </button>
           <button
-            onClick={() => { onApply(draftFilters); onClose() }}
-            className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-all"
+            onClick={() => { onApply(draftFilters, draftDescSearch); onClose() }}
+            className="px-4 py-1.5 bg-primary text-on-primary rounded text-base font-semibold hover:shadow-neon transition-all"
           >
             Aplicar
           </button>
@@ -681,6 +714,7 @@ export default function AnalisadorEstruturasPage() {
   const [equipmentGroupsByName, setEquipmentGroupsByName] = useState<Record<string, number>>({})
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string[]>>({})
+  const [advancedDescSearch, setAdvancedDescSearch] = useState('')
 
   // "Adicionar ao banco" — opens the standard "Novo — Cadastro de Equipamentos"
   // form already prefilled with what Busc. Itens Série Estrut. found for that
@@ -1036,6 +1070,7 @@ export default function AnalisadorEstruturasPage() {
     setExpandedGroups(new Set())
     setShowOnlyMissingFromInternal(false)
     setAdvancedFilters({})
+    setAdvancedDescSearch('')
   }
 
   // Faceted options for the "Filtro avançado" modal: for each column, only
@@ -1062,9 +1097,10 @@ export default function AnalisadorEstruturasPage() {
     return map
   }, [files, equipmentRows, advancedLookups, classificationRules])
 
-  const activeAdvancedFilterCount = Object.values(advancedFilters).filter(v => v.length > 0).length
+  const activeAdvancedFilterCount = Object.values(advancedFilters).filter(v => v.length > 0).length + (advancedDescSearch.trim() ? 1 : 0)
 
   const passesAdvancedFilter = (file: AnalysisFile) => {
+    if (!matchesDescriptionSearch(file.description, advancedDescSearch)) return false
     const activeEntries = Object.entries(advancedFilters).filter(([, vals]) => vals.length > 0)
     if (activeEntries.length === 0) return true
     return activeEntries.every(([fieldName, vals]) => {
@@ -1190,9 +1226,10 @@ export default function AnalisadorEstruturasPage() {
       {advancedFilterOpen && (
         <AdvancedFilterModal
           onClose={() => setAdvancedFilterOpen(false)}
-          onApply={setAdvancedFilters}
+          onApply={(filters, descSearch) => { setAdvancedFilters(filters); setAdvancedDescSearch(descSearch) }}
           fields={ADVANCED_FILTER_FIELDS}
           initialFilters={advancedFilters}
+          initialDescSearch={advancedDescSearch}
           computeOptions={computeAdvancedFilterOptions}
         />
       )}
