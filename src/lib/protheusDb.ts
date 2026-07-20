@@ -445,50 +445,59 @@ export async function explodeBomForExport(
 
 // ─── Acessórios por equipamento (Busc. Avançada Acessórios) ─────────────
 // Reuses the same BomDetailCache built for "Exportar Excel" above — no new
-// Protheus query needed. For every "26.xx"-style header (a kit/family of
-// accessories), reports its own direct children (NIVEL 2 in the same
-// numbering used elsewhere) whose own código also matches the accessory
-// prefixes of interest (default "26, 27.13") — i.e. one decomposition step,
-// filtered down to the accessory-looking items and away from generic
-// hardware/raw-material components that also live at that same level.
-export interface AccessoryStructureGroup {
-  estrutura: string
-  descEstrutura: string
-  children: { codigo: string; denominacao: string }[]
+// Protheus query needed. The company's own hierarchy: a "26.xx" header is
+// the top level (NIVEL 1, implicit — never itself reported); its direct
+// children are NIVEL 2 (SubPA/Embalagens/Gastos Gerais); the children of
+// THOSE are NIVEL 3 (the actual equipamento + its accessories, under the
+// SubPA node, or the packaging's own raw materials, under the Embalagens
+// node). Only these two levels are reported — nothing deeper, exactly as
+// specified ("nível 1 é o próprio 26.xx.xxxxx... somente isso").
+export interface AccessoryHierarchyRow {
+  nivel: 2 | 3
+  codigo: string
+  denominacao: string
+  qtd: number
+  codPaiDireto: string
 }
 
-export async function listAccessoryStructuresByEquipment(
+export interface AccessoryHierarchyGroup {
+  estrutura: string
+  descEstrutura: string
+  rows: AccessoryHierarchyRow[]
+}
+
+export async function listAccessoryHierarchy(
   headerPrefixes: string[],
-  childPrefixes: string[],
   creds: ProtheusCredentials,
-): Promise<AccessoryStructureGroup[]> {
+): Promise<AccessoryHierarchyGroup[]> {
   const { byEstrutura, descByEstrutura } = await loadBomDetailCache(creds)
 
   const normHeaderPrefixes = headerPrefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
-  const normChildPrefixes = childPrefixes.map(p => p.trim().toUpperCase()).filter(Boolean)
   if (normHeaderPrefixes.length === 0) return []
 
   const headers = Array.from(byEstrutura.keys())
     .filter(code => normHeaderPrefixes.some(p => code.toUpperCase().startsWith(p)))
     .sort((a, b) => a.localeCompare(b))
 
-  const groups: AccessoryStructureGroup[] = []
+  const groups: AccessoryHierarchyGroup[] = []
   for (const estrutura of headers) {
-    const lines = byEstrutura.get(estrutura) || []
-    const seen = new Set<string>()
-    const children: { codigo: string; denominacao: string }[] = []
-    for (const line of lines) {
-      const codigo = line.componente
-      if (!codigo || seen.has(codigo)) continue
-      if (normChildPrefixes.length > 0 && !normChildPrefixes.some(p => codigo.toUpperCase().startsWith(p))) continue
-      seen.add(codigo)
-      children.push({ codigo, denominacao: line.descComponente })
+    const rows: AccessoryHierarchyRow[] = []
+    const nivel2Lines = byEstrutura.get(estrutura) || []
+    for (const nivel2 of nivel2Lines) {
+      if (!nivel2.componente) continue
+      rows.push({ nivel: 2, codigo: nivel2.componente, denominacao: nivel2.descComponente, qtd: nivel2.quant, codPaiDireto: estrutura })
+
+      const nivel3Lines = byEstrutura.get(nivel2.componente) || []
+      for (const nivel3 of nivel3Lines) {
+        if (!nivel3.componente) continue
+        rows.push({ nivel: 3, codigo: nivel3.componente, denominacao: nivel3.descComponente, qtd: nivel3.quant, codPaiDireto: nivel2.componente })
+      }
     }
-    if (children.length === 0) continue
+    if (rows.length === 0) continue
     groups.push({
       estrutura,
       descEstrutura: descByEstrutura.get(estrutura) ?? '',
-      children,
+      rows,
     })
   }
 

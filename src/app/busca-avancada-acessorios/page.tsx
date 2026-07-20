@@ -7,19 +7,65 @@ import { idbGet, idbSet } from '@/lib/idbStore'
 const STORAGE_KEY = 'busca-avancada-acessorios-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
 const DEFAULT_HEADER_PREFIXES = '26'
-const DEFAULT_CHILD_PREFIXES = '26, 27.13'
 
-interface AccessoryStructureGroup {
-  estrutura: string
-  descEstrutura: string
-  children: { codigo: string; denominacao: string }[]
+interface AccessoryHierarchyRow {
+  nivel: 2 | 3
+  codigo: string
+  denominacao: string
+  qtd: number
+  codPaiDireto: string
 }
 
-function Badge({ tone, children }: { tone: 'error' | 'success' | 'outline'; children: React.ReactNode }) {
+interface AccessoryHierarchyGroup {
+  estrutura: string
+  descEstrutura: string
+  rows: AccessoryHierarchyRow[]
+}
+
+// Faithful port of the legacy VBA macros (ACESSORIOS/EQUIPS/SUBPAS/
+// EMBALAGENS/ADESIVOS/SPAREPARTS) — each checks the CÓDIGO (not the
+// denominação) for a substring, in this same order; whatever doesn't match
+// any of them is what the ACESSORIOS() macro keeps (the residual/default
+// category). UPS is a separate overlay flag from the UPS() macro (código
+// contains "BAT" or denominação contains "NOBRE"), independent of category.
+type AccessoryCategory = 'SUBPA' | 'EQUIPAMENTO' | 'GASTOS GERAIS' | 'EMBALAGENS' | 'ADESIVOS' | 'SPARE PARTS' | 'CABOS' | 'ACESSÓRIO'
+
+function classifyAccessoryRow(codigo: string, denominacao: string): { categoria: AccessoryCategory; isUps: boolean } {
+  const cod = codigo.toUpperCase()
+  const denom = denominacao.toUpperCase()
+  let categoria: AccessoryCategory = 'ACESSÓRIO'
+  if (cod.includes('27.13')) categoria = 'SUBPA'
+  else if (cod.includes('27.04') || cod.includes('27.03')) categoria = 'EQUIPAMENTO'
+  else if (cod.includes('G000')) categoria = 'GASTOS GERAIS'
+  else if (cod.includes('27.11')) categoria = 'EMBALAGENS'
+  else if (cod.includes('22.05')) categoria = 'ADESIVOS'
+  else if (cod.includes('27.12')) categoria = 'SPARE PARTS'
+  else if (cod.includes('20.11')) categoria = 'CABOS'
+  const isUps = cod.includes('BAT') || denom.includes('NOBRE')
+  return { categoria, isUps }
+}
+
+interface FlatItem {
+  estrutura: string
+  descEstrutura: string
+  equipType: string
+  nivel: 2 | 3
+  codigo: string
+  denominacao: string
+  qtd: number
+  codPaiDireto: string
+  categoria: AccessoryCategory
+  isUps: boolean
+  registered: boolean
+}
+
+function Badge({ tone, children }: { tone: 'error' | 'success' | 'outline' | 'amber'; children: React.ReactNode }) {
   const cls = tone === 'error'
     ? 'text-error border-error/30 bg-error-container/20'
     : tone === 'success'
     ? 'text-green-400 border-green-500/40 bg-green-500/10'
+    : tone === 'amber'
+    ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
     : 'text-outline border-outline-variant bg-surface-container'
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
@@ -103,16 +149,16 @@ export default function BuscaAvancadaAcessoriosPage() {
   const [connecting, setConnecting] = useState(false)
 
   const [headerPrefixInput, setHeaderPrefixInput] = useState(DEFAULT_HEADER_PREFIXES)
-  const [childPrefixInput, setChildPrefixInput] = useState(DEFAULT_CHILD_PREFIXES)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState('')
-  const [rawGroups, setRawGroups] = useState<AccessoryStructureGroup[]>([])
+  const [rawGroups, setRawGroups] = useState<AccessoryHierarchyGroup[]>([])
   const [hasScanned, setHasScanned] = useState(false)
 
   const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
   const [registeredCodes, setRegisteredCodes] = useState<Set<string>>(new Set())
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [equipFilter, setEquipFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
 
   const hydrated = useRef(false)
 
@@ -122,11 +168,10 @@ export default function BuscaAvancadaAcessoriosPage() {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await idbGet<{ rawGroups: AccessoryStructureGroup[]; headerPrefixInput: string; childPrefixInput: string; hasScanned: boolean }>(STORAGE_KEY)
+        const stored = await idbGet<{ rawGroups: AccessoryHierarchyGroup[]; headerPrefixInput: string; hasScanned: boolean }>(STORAGE_KEY)
         if (stored) {
           setRawGroups(stored.rawGroups || [])
           setHeaderPrefixInput(stored.headerPrefixInput || DEFAULT_HEADER_PREFIXES)
-          setChildPrefixInput(stored.childPrefixInput || DEFAULT_CHILD_PREFIXES)
           setHasScanned(!!stored.hasScanned)
         }
       } catch {
@@ -139,8 +184,8 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   useEffect(() => {
     if (!hydrated.current) return
-    idbSet(STORAGE_KEY, { rawGroups, headerPrefixInput, childPrefixInput, hasScanned }).catch(() => {})
-  }, [rawGroups, headerPrefixInput, childPrefixInput, hasScanned])
+    idbSet(STORAGE_KEY, { rawGroups, headerPrefixInput, hasScanned }).catch(() => {})
+  }, [rawGroups, headerPrefixInput, hasScanned])
 
   // Loads the (user-editable, in Parâmetros de Estrutura) classification
   // rules — same engine already used to group equipment in Busc. Itens
@@ -155,9 +200,8 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   // Registration check against the internal DB: a código counts as
   // "cadastrado no MSM" if it exists in EITHER standard_equipment_items OR
-  // accessories — matching how this tool is meant to be used (an accessory
-  // code found via Protheus could turn out to already be registered as
-  // either an accessory or, less commonly, as an equipment item).
+  // accessories — an item found here could turn out to already be
+  // registered as either an accessory or, less commonly, as an equipment.
   useEffect(() => {
     (async () => {
       try {
@@ -195,7 +239,6 @@ export default function BuscaAvancadaAcessoriosPage() {
   const runScan = async () => {
     if (!dbCreds) { setShowLoginModal(true); return }
     const headerPrefixes = headerPrefixInput.split(',').map(p => p.trim()).filter(Boolean)
-    const childPrefixes = childPrefixInput.split(',').map(p => p.trim()).filter(Boolean)
     if (headerPrefixes.length === 0) { setScanError('Informe ao menos um prefixo de estrutura'); return }
 
     setScanning(true)
@@ -204,7 +247,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       const res = await fetch('/api/protheus-acessorios-por-equipamento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, headerPrefixes, childPrefixes }),
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, headerPrefixes }),
       })
       const json = await res.json()
       if (!res.ok) { setScanError(json.error || 'Falha ao consultar o banco Protheus'); return }
@@ -212,6 +255,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       setHasScanned(true)
       setExpandedGroups(new Set())
       setEquipFilter('')
+      setCategoryFilter('')
     } catch {
       setScanError('Erro de comunicação com o banco Protheus')
     } finally {
@@ -227,6 +271,7 @@ export default function BuscaAvancadaAcessoriosPage() {
     setHasScanned(false)
     setExpandedGroups(new Set())
     setEquipFilter('')
+    setCategoryFilter('')
   }
 
   const toggleGroupExpanded = (groupName: string) => {
@@ -240,33 +285,55 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   // Classifies each "26.xx" header by its own DESC_ESTRUTURA (same rule
   // engine, different input text than Busc. Itens Série Estrut.'s equipment
-  // analysis), then flattens every header's children into one list per
-  // equipamento group, tagging each with its registration status.
-  const groupedByEquip = useMemo(() => {
-    const map = new Map<string, { codigo: string; denominacao: string; estrutura: string; registered: boolean }[]>()
+  // analysis) and flags every NIVEL 2/3 row with its VBA-derived category
+  // and registration status.
+  const flatItems = useMemo(() => {
+    const out: FlatItem[] = []
     for (const g of rawGroups) {
       const equipType = classifyEquipmentType(g.descEstrutura, classificationRules) || UNCLASSIFIED_GROUP
-      const bucket = map.get(equipType) || []
-      for (const c of g.children) {
-        bucket.push({
-          codigo: c.codigo,
-          denominacao: c.denominacao,
+      for (const r of g.rows) {
+        const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
+        out.push({
           estrutura: g.estrutura,
-          registered: registeredCodes.has(c.codigo.trim().toUpperCase()),
+          descEstrutura: g.descEstrutura,
+          equipType,
+          nivel: r.nivel,
+          codigo: r.codigo,
+          denominacao: r.denominacao,
+          qtd: r.qtd,
+          codPaiDireto: r.codPaiDireto,
+          categoria,
+          isUps,
+          registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
         })
       }
-      map.set(equipType, bucket)
+    }
+    return out
+  }, [rawGroups, classificationRules, registeredCodes])
+
+  const groupedByEquip = useMemo(() => {
+    const map = new Map<string, FlatItem[]>()
+    for (const item of flatItems) {
+      const bucket = map.get(item.equipType)
+      if (bucket) bucket.push(item)
+      else map.set(item.equipType, [item])
     }
     return Array.from(map.entries()).sort(([a], [b]) => {
       if (a === UNCLASSIFIED_GROUP) return 1
       if (b === UNCLASSIFIED_GROUP) return -1
       return a.localeCompare(b, 'pt-BR')
     })
-  }, [rawGroups, classificationRules, registeredCodes])
+  }, [flatItems])
 
-  const displayedGroups = equipFilter
-    ? groupedByEquip.filter(([name]) => name === equipFilter)
-    : groupedByEquip
+  const categoriesPresent = useMemo(
+    () => Array.from(new Set(flatItems.map(i => i.categoria))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [flatItems],
+  )
+
+  const displayedGroups = groupedByEquip
+    .filter(([name]) => !equipFilter || name === equipFilter)
+    .map(([name, items]) => [name, items.filter(i => !categoryFilter || i.categoria === categoryFilter)] as const)
+    .filter(([, items]) => items.length > 0)
 
   return (
     <div className="p-8 max-w-[108rem]">
@@ -276,12 +343,13 @@ export default function BuscaAvancadaAcessoriosPage() {
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Avançada Acessórios</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Varre todo cabeçalho de estrutura no Protheus com o prefixo informado, classifica cada um por tipo de
-          equipamento usando as mesmas regras de{' '}
+          Varre todo cabeçalho de estrutura no Protheus com o prefixo informado (NIVEL 1 — nunca listado
+          diretamente), classifica cada um por tipo de equipamento usando as mesmas regras de{' '}
           <a href="/parametros-estrutura" className="text-primary hover:underline">Classificação de Equipamentos</a>
-          {' '}(aplicadas sobre DESC_ESTRUTURA), e lista os itens diretos de cada estrutura que combinem com o
-          prefixo de acessório informado, verificando se já estão cadastrados no MSM (Cadastro de Equipamentos ou
-          Cadastro de Componentes) — nada é ocultado por não estar cadastrado.
+          {' '}(aplicadas sobre DESC_ESTRUTURA), e lista todos os itens de NIVEL 2 e NIVEL 3 dessa estrutura — SubPA,
+          Embalagens, Gastos Gerais, o próprio equipamento e seus acessórios — cada um com a categoria (regras
+          herdadas da macro VBA original) e se já está cadastrado no MSM (Cadastro de Equipamentos ou Cadastro de
+          Componentes). Nada é ocultado por não estar cadastrado.
         </p>
       </div>
 
@@ -323,23 +391,13 @@ export default function BuscaAvancadaAcessoriosPage() {
 
       <div className="mb-6 flex items-end gap-3 flex-wrap">
         <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-          Prefixo(s) de estrutura
+          Prefixo(s) de estrutura (NIVEL 1)
           <input
             type="text"
             value={headerPrefixInput}
             onChange={e => setHeaderPrefixInput(e.target.value)}
             placeholder="ex: 26"
             className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-48"
-          />
-        </label>
-        <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-          Prefixo(s) de acessório (nível 2)
-          <input
-            type="text"
-            value={childPrefixInput}
-            onChange={e => setChildPrefixInput(e.target.value)}
-            placeholder="ex: 26, 27.13"
-            className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-56"
           />
         </label>
         <button
@@ -362,18 +420,33 @@ export default function BuscaAvancadaAcessoriosPage() {
       {scanError && <div className="text-error text-sm mb-4">⚠ {scanError}</div>}
 
       {hasScanned && groupedByEquip.length > 0 && (
-        <div className="mb-4 flex items-center gap-3">
-          <span className="text-sm text-on-surface-variant">Filtrar por equipamento:</span>
-          <select
-            value={equipFilter}
-            onChange={e => setEquipFilter(e.target.value)}
-            className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-          >
-            <option value="">— Todos —</option>
-            {groupedByEquip.map(([name]) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
+        <div className="mb-4 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-on-surface-variant">Equipamento:</span>
+            <select
+              value={equipFilter}
+              onChange={e => setEquipFilter(e.target.value)}
+              className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            >
+              <option value="">— Todos —</option>
+              {groupedByEquip.map(([name]) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-on-surface-variant">Categoria:</span>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            >
+              <option value="">— Todas —</option>
+              {categoriesPresent.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
@@ -381,9 +454,10 @@ export default function BuscaAvancadaAcessoriosPage() {
         <div className="text-sm text-outline italic">Nenhuma busca realizada ainda.</div>
       ) : groupedByEquip.length === 0 ? (
         <div className="text-sm text-outline italic">
-          Nenhuma estrutura encontrada com esse(s) prefixo(s), ou nenhum item de nível 2 combinou com o prefixo de
-          acessório informado.
+          Nenhuma estrutura encontrada com esse(s) prefixo(s).
         </div>
+      ) : displayedGroups.length === 0 ? (
+        <div className="text-sm text-outline italic">Nenhum item combina com os filtros selecionados.</div>
       ) : (
         <div className="flex flex-col gap-6">
           {displayedGroups.map(([equipType, items]) => {
@@ -404,17 +478,28 @@ export default function BuscaAvancadaAcessoriosPage() {
                     <table className="text-xs w-full">
                       <thead className="bg-surface-container-highest">
                         <tr>
-                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cód. Acessório</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Nível</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Denominação</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Qtd</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cód. Pai Direto</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Categoria</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Estrutura de Origem</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cadastro</th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((item, i) => (
-                          <tr key={`${item.estrutura}-${item.codigo}-${i}`} className="border-t border-outline-variant/50">
+                          <tr key={`${item.estrutura}-${item.codPaiDireto}-${item.codigo}-${i}`} className="border-t border-outline-variant/50">
+                            <td className="px-3 py-2 text-outline">{item.nivel}</td>
                             <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">{item.codigo}</td>
                             <td className="px-3 py-2 text-on-surface">{item.denominacao || '—'}</td>
+                            <td className="px-3 py-2 text-on-surface">{item.qtd}</td>
+                            <td className="px-3 py-2 font-mono text-outline whitespace-nowrap">{item.codPaiDireto}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <span className="text-on-surface-variant font-semibold">{item.categoria}</span>
+                              {item.isUps && <span className="ml-1.5"><Badge tone="amber">UPS</Badge></span>}
+                            </td>
                             <td className="px-3 py-2 font-mono text-outline whitespace-nowrap">{item.estrutura}</td>
                             <td className="px-3 py-2">
                               {item.registered
