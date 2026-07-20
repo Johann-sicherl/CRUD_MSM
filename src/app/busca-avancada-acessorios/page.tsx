@@ -170,9 +170,15 @@ export default function BuscaAvancadaAcessoriosPage() {
       try {
         const stored = await idbGet<{ rawGroups: AccessoryHierarchyGroup[]; headerPrefixInput: string; hasScanned: boolean }>(STORAGE_KEY)
         if (stored) {
-          setRawGroups(stored.rawGroups || [])
+          // Discard anything saved by an earlier version of this page whose
+          // AccessoryHierarchyGroup shape doesn't match the current one
+          // (e.g. the old "children" field instead of "rows") — otherwise
+          // a stale cached result crashes the page instead of just being
+          // treated as "no scan yet".
+          const validGroups = Array.isArray(stored.rawGroups) && stored.rawGroups.every(g => Array.isArray(g?.rows))
+          setRawGroups(validGroups ? stored.rawGroups : [])
           setHeaderPrefixInput(stored.headerPrefixInput || DEFAULT_HEADER_PREFIXES)
-          setHasScanned(!!stored.hasScanned)
+          setHasScanned(validGroups && !!stored.hasScanned)
         }
       } catch {
         // ignore corrupt/unavailable storage
