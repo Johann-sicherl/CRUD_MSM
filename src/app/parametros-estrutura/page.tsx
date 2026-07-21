@@ -527,11 +527,17 @@ export default function ParametrosEstruturaPage() {
                     </div>
                     <span className="text-sm text-outline font-mono whitespace-nowrap">{indices.length} código(s)</span>
                     <button
-                      onClick={e => { e.stopPropagation(); removeGroup(key) }}
-                      title="Remover grupo inteiro"
-                      className="text-outline hover:text-error transition-colors text-lg px-1"
+                      onClick={e => {
+                        e.stopPropagation()
+                        const ok = window.confirm(
+                          `Remover o grupo "${key || '(sem nome)'}" e todos os ${indices.length} código(s) dele? Esta operação NÃO pode ser desfeita. Tem certeza?`
+                        )
+                        if (ok) removeGroup(key)
+                      }}
+                      title="Remover grupo inteiro (não pode ser desfeito)"
+                      className="px-3 py-1.5 text-sm text-error border border-error/30 rounded hover:bg-error-container/20 transition-colors whitespace-nowrap"
                     >
-                      ✕
+                      Remover grupo
                     </button>
                   </div>
                   {isOpen && (
