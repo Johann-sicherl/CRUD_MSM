@@ -527,12 +527,6 @@ export default function ParametrosEstruturaPage() {
                     </div>
                     <span className="text-sm text-outline font-mono whitespace-nowrap">{indices.length} código(s)</span>
                     <button
-                      onClick={e => { e.stopPropagation(); addRowToGroup(key) }}
-                      className="px-3 py-1.5 bg-primary/10 border border-primary/40 text-primary rounded text-sm font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
-                    >
-                      + Código
-                    </button>
-                    <button
                       onClick={e => { e.stopPropagation(); removeGroup(key) }}
                       title="Remover grupo inteiro"
                       className="text-outline hover:text-error transition-colors text-lg px-1"
@@ -584,6 +578,14 @@ export default function ParametrosEstruturaPage() {
                           ))}
                         </tbody>
                       </table>
+                      <div className="px-3 py-2 border-t border-outline-variant/50 bg-surface-container-low">
+                        <button
+                          onClick={() => addRowToGroup(key)}
+                          className="px-3 py-1.5 bg-primary/10 border border-primary/40 text-primary rounded text-sm font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
+                        >
+                          + Código
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
