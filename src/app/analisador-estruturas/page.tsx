@@ -733,6 +733,7 @@ export default function AnalisadorEstruturasPage() {
   // instead of opening it, since legacy_equipment_id is a required reference.
   const [addModalFile, setAddModalFile] = useState<AnalysisFile | null>(null)
   const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
+  const [addModalPendingOptions, setAddModalPendingOptions] = useState<{ fieldName: string; key: string; value: string }[]>([])
   const [groupMissingAlert, setGroupMissingAlert] = useState<string | null>(null)
   const fieldOptionsCacheRef = useRef<Record<string, string[]> | null>(null)
 
@@ -1009,6 +1010,13 @@ export default function AnalisadorEstruturasPage() {
       protheus_code: file.protheusCode,
       legacy_equipment_id: String(groupId),
     }
+    // Values not yet registered in Lista Itens de Série are still prefilled
+    // (fed to RecordModal as extraDynamicOptions, so the dropdown shows them
+    // as a valid choice without touching field-options.json), but only
+    // queued here — registering them for real happens in onSaved, below,
+    // and only if the record is actually created. Just opening this form
+    // (or cancelling it) must never mutate Lista Itens de Série.
+    const pending: { fieldName: string; key: string; value: string }[] = []
     for (const field of ADVANCED_FILTER_FIELDS) {
       if (!field.dynamicOptions) continue
       const computed = file.properties?.find(p => p.field === field.name)?.computedValue?.trim()
@@ -1018,26 +1026,15 @@ export default function AnalisadorEstruturasPage() {
       const existing = options.find(o => o.trim().toUpperCase() === computed.toUpperCase())
       if (existing) {
         prefill[field.name] = existing
-        continue
-      }
-      try {
-        const res = await fetch('/api/field-options', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, value: computed }),
-        })
-        if (res.ok) {
-          const updated: string[] = await res.json()
-          fieldOptions[key] = updated
-          fieldOptionsCacheRef.current = { ...fieldOptionsCacheRef.current, [key]: updated }
-          prefill[field.name] = computed.toUpperCase()
-        }
-      } catch {
-        // Couldn't register the new option — leave this field blank for manual selection.
+      } else {
+        const normalized = computed.toUpperCase()
+        prefill[field.name] = normalized
+        pending.push({ fieldName: field.name, key, value: normalized })
       }
     }
 
     setAddModalPrefill(prefill)
+    setAddModalPendingOptions(pending)
     setAddModalFile(file)
   }
 
@@ -1251,13 +1248,26 @@ export default function AnalisadorEstruturasPage() {
           tableName="standard_equipment_items"
           record={null}
           prefill={addModalPrefill}
-          onClose={() => { setAddModalFile(null); setAddModalPrefill(null) }}
+          extraDynamicOptions={Object.fromEntries(addModalPendingOptions.map(p => [p.fieldName, p.value]))}
+          onClose={() => { setAddModalFile(null); setAddModalPrefill(null); setAddModalPendingOptions([]) }}
           onSaved={() => {
             const savedId = addModalFile.id
+            const toRegister = addModalPendingOptions
             setAddModalFile(null)
             setAddModalPrefill(null)
+            setAddModalPendingOptions([])
             setFiles(prev => prev.map(f => f.id === savedId ? { ...f, equipmentFound: true } : f))
             loadEquipmentFilterData()
+            // Only now, with the record actually created, do the prefilled
+            // values that weren't yet in Lista Itens de Série get registered
+            // there — never just from opening or cancelling this form.
+            for (const { key, value } of toRegister) {
+              fetch('/api/field-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, value }),
+              }).catch(() => {})
+            }
           }}
         />
       )}

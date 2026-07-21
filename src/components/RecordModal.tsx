@@ -8,6 +8,12 @@ interface Props {
   tableName: string
   record?: Record<string, unknown> | null
   prefill?: Record<string, string> | null
+  // Extra value per dynamicOptions field to show as a selectable option even
+  // though it isn't registered in Lista Itens de Série yet — lets a caller
+  // (e.g. Busc. Itens Série Estrut.'s "Adicionar ao banco") prefill a
+  // not-yet-registered value without writing it to field-options.json just
+  // from opening this form; nothing here persists it, that's on the caller.
+  extraDynamicOptions?: Record<string, string>
   onClose: () => void
   onSaved: () => void
 }
@@ -39,7 +45,12 @@ const EMPTY_CASCADE: CascadeState = {
   selected: new Set(),
 }
 
-export default function RecordModal({ schema, tableName, record, prefill, onClose, onSaved }: Props) {
+function mergeExtraOption(options: string[], extra: string | undefined): string[] {
+  if (!extra || options.includes(extra)) return options
+  return [...options, extra]
+}
+
+export default function RecordModal({ schema, tableName, record, prefill, extraDynamicOptions, onClose, onSaved }: Props) {
   const isEdit = !!record
   const isBatch = !!schema.batchInsert && !isEdit
   const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
@@ -388,7 +399,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                 value={form[field.name] ?? ''}
                 onChange={(v) => handleChange(field.name, v)}
                 fetchedOptions={fetchedOptions[field.name]}
-                dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
+                dynamicOptionValues={field.dynamicOptions !== undefined ? mergeExtraOption(fetchedDynamic[field.name] ?? [], extraDynamicOptions?.[field.name]) : undefined}
                 onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
                 onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
               />
