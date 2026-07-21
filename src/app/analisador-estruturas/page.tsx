@@ -733,7 +733,6 @@ export default function AnalisadorEstruturasPage() {
   // instead of opening it, since legacy_equipment_id is a required reference.
   const [addModalFile, setAddModalFile] = useState<AnalysisFile | null>(null)
   const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
-  const [addModalPendingOptions, setAddModalPendingOptions] = useState<{ fieldName: string; key: string; value: string }[]>([])
   const [groupMissingAlert, setGroupMissingAlert] = useState<string | null>(null)
   const fieldOptionsCacheRef = useRef<Record<string, string[]> | null>(null)
 
@@ -978,16 +977,13 @@ export default function AnalisadorEstruturasPage() {
 
   // Prefills "Novo — Cadastro de Equipamentos" with what this card's analysis
   // already found: Cód. Protheus itself, the Grupo de Equipamentos matched by
-  // name from the equipment-type classification, and every property the
-  // structure analysis computed a value for. A computed value that isn't yet
-  // a registered option in Lista Itens de Série is registered on the fly —
-  // the exact same call the "+" button next to each dropdown already makes
-  // (POST /api/field-options) — instead of being silently dropped: the
-  // structure/BOM data is already treated as ground truth everywhere else on
-  // this page (it's what flags mismatches against the internal DB), so it
-  // wouldn't make sense to trust it for comparison but not for prefilling.
-  // Only fields with no computed value at all (status "missing"/"duplicate")
-  // are left blank for manual selection, same as before.
+  // name from the equipment-type classification, and only the properties
+  // whose computed value already exists, exact, as a registered option in
+  // Lista Itens de Série. This is a deliberate exact copy of the dropdowns
+  // already used in Cadastro de Equipamentos — nothing invented or injected
+  // beyond that list — so a computed value that doesn't match a registered
+  // option is left blank for manual selection, on purpose, to avoid the user
+  // ever mistakenly saving a value that was never really validated.
   const handleAddToDatabase = async (file: AnalysisFile) => {
     const groupName = classifyEquipmentType(file.description, classificationRules) || UNCLASSIFIED_GROUP
     const groupId = equipmentGroupsByName[groupName.trim().toUpperCase()]
@@ -1010,31 +1006,16 @@ export default function AnalisadorEstruturasPage() {
       protheus_code: file.protheusCode,
       legacy_equipment_id: String(groupId),
     }
-    // Values not yet registered in Lista Itens de Série are still prefilled
-    // (fed to RecordModal as extraDynamicOptions, so the dropdown shows them
-    // as a valid choice without touching field-options.json), but only
-    // queued here — registering them for real happens in onSaved, below,
-    // and only if the record is actually created. Just opening this form
-    // (or cancelling it) must never mutate Lista Itens de Série.
-    const pending: { fieldName: string; key: string; value: string }[] = []
     for (const field of ADVANCED_FILTER_FIELDS) {
       if (!field.dynamicOptions) continue
       const computed = file.properties?.find(p => p.field === field.name)?.computedValue?.trim()
       if (!computed) continue
-      const key = field.dynamicOptions
-      const options = fieldOptions[key] || []
+      const options = fieldOptions[field.dynamicOptions] || []
       const existing = options.find(o => o.trim().toUpperCase() === computed.toUpperCase())
-      if (existing) {
-        prefill[field.name] = existing
-      } else {
-        const normalized = computed.toUpperCase()
-        prefill[field.name] = normalized
-        pending.push({ fieldName: field.name, key, value: normalized })
-      }
+      if (existing) prefill[field.name] = existing
     }
 
     setAddModalPrefill(prefill)
-    setAddModalPendingOptions(pending)
     setAddModalFile(file)
   }
 
@@ -1248,26 +1229,13 @@ export default function AnalisadorEstruturasPage() {
           tableName="standard_equipment_items"
           record={null}
           prefill={addModalPrefill}
-          extraDynamicOptions={Object.fromEntries(addModalPendingOptions.map(p => [p.fieldName, p.value]))}
-          onClose={() => { setAddModalFile(null); setAddModalPrefill(null); setAddModalPendingOptions([]) }}
+          onClose={() => { setAddModalFile(null); setAddModalPrefill(null) }}
           onSaved={() => {
             const savedId = addModalFile.id
-            const toRegister = addModalPendingOptions
             setAddModalFile(null)
             setAddModalPrefill(null)
-            setAddModalPendingOptions([])
             setFiles(prev => prev.map(f => f.id === savedId ? { ...f, equipmentFound: true } : f))
             loadEquipmentFilterData()
-            // Only now, with the record actually created, do the prefilled
-            // values that weren't yet in Lista Itens de Série get registered
-            // there — never just from opening or cancelling this form.
-            for (const { key, value } of toRegister) {
-              fetch('/api/field-options', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key, value }),
-              }).catch(() => {})
-            }
           }}
         />
       )}
