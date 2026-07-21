@@ -197,7 +197,16 @@ function AdvancedFilterModal({
   const clearAll = () => { setDraftCodeFilter([]); setDraftDescSearch('') }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onKeyDown={e => {
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+          e.preventDefault()
+          onApply(draftCodeFilter, draftDescSearch)
+          onClose()
+        }
+      }}
+    >
       <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col animate-fade-in">
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant shrink-0">
           <div>
