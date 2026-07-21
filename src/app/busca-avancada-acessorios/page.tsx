@@ -75,6 +75,7 @@ interface FlatItem {
   codigo: string
   denominacao: string
   qtd: number
+  qtdTotal: number
   codPaiDireto: string
   categoria: AccessoryCategory
   isUps: boolean
@@ -440,8 +441,16 @@ export default function BuscaAvancadaAcessoriosPage() {
     const out: FlatItem[] = []
     for (const g of rawGroups) {
       const equipType = classifyEquipmentType(g.descEstrutura, classificationRules) || UNCLASSIFIED_GROUP
+      // NIVEL 2's own QUANT is the multiplier for everything under it — a
+      // NIVEL 3 line's real total is QUANT(nível 3) × QUANT(nível 2 pai),
+      // not just its own raw QUANT (mirrors QTD TOTAL in Exportar Excel).
+      const nivel2QtyByCode = new Map<string, number>()
+      for (const r of g.rows) {
+        if (r.nivel === 2) nivel2QtyByCode.set(r.codigo, r.qtd)
+      }
       for (const r of g.rows) {
         const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
+        const qtdTotal = r.nivel === 2 ? r.qtd : r.qtd * (nivel2QtyByCode.get(r.codPaiDireto) ?? 1)
         out.push({
           estrutura: g.estrutura,
           descEstrutura: g.descEstrutura,
@@ -450,6 +459,7 @@ export default function BuscaAvancadaAcessoriosPage() {
           codigo: r.codigo,
           denominacao: r.denominacao,
           qtd: r.qtd,
+          qtdTotal,
           codPaiDireto: r.codPaiDireto,
           categoria,
           isUps,
@@ -460,12 +470,14 @@ export default function BuscaAvancadaAcessoriosPage() {
     return out
   }, [rawGroups, classificationRules, registeredCodes])
 
-  // Options for the "Filtro avançado" Código selector — every código já
-  // encontrado nesta busca, independente do que os outros filtros escondem.
-  const codeOptions = useMemo(
-    () => Array.from(new Set(flatItems.map(i => i.codigo))).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
-    [flatItems],
-  )
+  // Options for the "Filtro avançado" Código selector — todo código já
+  // encontrado nesta busca, em qualquer nível (inclusive o próprio 26.xx),
+  // independente do que os outros filtros escondem.
+  const codeOptions = useMemo(() => {
+    const codes = new Set<string>(flatItems.map(i => i.codigo))
+    for (const g of rawGroups) codes.add(g.estrutura)
+    return Array.from(codes).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+  }, [flatItems, rawGroups])
 
   // "Filtro avançado" (Código + Denominação) — vale para Lista de
   // acessórios e Visão em cascata; aplicado aqui, antes de qualquer
@@ -517,11 +529,14 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   // "Visão em cascata" — reconstrói a árvore 26.xx → NIVEL 2 → NIVEL 3 a
   // partir dos mesmos dados já classificados, ligando cada linha de nível 3
-  // ao seu pai de nível 2 via codPaiDireto.
+  // ao seu pai de nível 2 via codPaiDireto. qtdTotal multiplica a QUANT do
+  // próprio item pela QUANT do pai direto de nível 2 (nível 2 já é a
+  // quantidade total, pois o multiplicador do 26.xx raiz é sempre 1).
   interface CascadeNivel3Node {
     codigo: string
     denominacao: string
     qtd: number
+    qtdTotal: number
     categoria: AccessoryCategory
     isUps: boolean
     registered: boolean
@@ -536,15 +551,20 @@ export default function BuscaAvancadaAcessoriosPage() {
     nivel2: CascadeNivel2Node[]
   }
 
+  // Filtro avançado ativo? Enquanto vazio, a cascata inteira aparece sem
+  // nenhuma poda — só passa a decidir o que mostrar quando há algo digitado.
+  const hasActiveAdvancedFilter = advancedCodeFilter.length > 0 || !!advancedDescSearch.trim()
+
   const cascadeHeaders = useMemo<CascadeHeader[]>(() => {
-    return rawGroups.map(g => {
+    const headers = rawGroups.map(g => {
       const equipType = classifyEquipmentType(g.descEstrutura, classificationRules) || UNCLASSIFIED_GROUP
-      const toNode = (r: AccessoryHierarchyRow) => {
+      const toNode = (r: AccessoryHierarchyRow, fator: number) => {
         const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
         return {
           codigo: r.codigo,
           denominacao: r.denominacao,
           qtd: r.qtd,
+          qtdTotal: r.qtd * fator,
           categoria,
           isUps,
           registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
@@ -554,19 +574,26 @@ export default function BuscaAvancadaAcessoriosPage() {
       const nivel2 = g.rows
         .filter(r => r.nivel === 2)
         .map(r => ({
-          ...toNode(r),
-          // "Filtro avançado" na cascata: só mantém os filhos (nível 3) que
-          // combinem com o filtro; o nó de nível 2 fica se ele mesmo
-          // combinar OU se sobrar algum filho depois do filtro.
-          children: nivel3Rows
-            .filter(n3 => n3.codPaiDireto === r.codigo)
-            .map(toNode)
-            .filter(n3 => matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch)),
+          ...toNode(r, 1),
+          children: nivel3Rows.filter(n3 => n3.codPaiDireto === r.codigo).map(n3 => toNode(n3, r.qtd)),
         }))
-        .filter(n2 => n2.children.length > 0 || matchesAdvancedFilter(n2.codigo, n2.denominacao, advancedCodeFilter, advancedDescSearch))
       return { estrutura: g.estrutura, descEstrutura: g.descEstrutura, equipType, nivel2 }
-    }).filter(h => h.nivel2.length > 0)
-  }, [rawGroups, classificationRules, registeredCodes, advancedCodeFilter, advancedDescSearch])
+    })
+    if (!hasActiveAdvancedFilter) return headers
+
+    // Um filtro ativo em Busc. Avançada Acessórios não deve isolar o item
+    // encontrado tirando o resto da árvore — ele deve continuar mostrando
+    // todos os pais e irmãos daquele componente, servidos junto com o
+    // cabeçalho 26.xx inteiro; o filtro só decide QUAIS cabeçalhos aparecem
+    // (qualquer item, em qualquer nível — 26.xx, nível 2 ou nível 3).
+    return headers.filter(h =>
+      matchesAdvancedFilter(h.estrutura, h.descEstrutura, advancedCodeFilter, advancedDescSearch) ||
+      h.nivel2.some(n2 =>
+        matchesAdvancedFilter(n2.codigo, n2.denominacao, advancedCodeFilter, advancedDescSearch) ||
+        n2.children.some(n3 => matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch))
+      )
+    )
+  }, [rawGroups, classificationRules, registeredCodes, hasActiveAdvancedFilter, advancedCodeFilter, advancedDescSearch])
 
   const cascadeByEquip = useMemo(() => {
     const map = new Map<string, CascadeHeader[]>()
@@ -583,6 +610,16 @@ export default function BuscaAvancadaAcessoriosPage() {
   }, [cascadeHeaders])
 
   const displayedCascadeGroups = cascadeByEquip.filter(([name]) => !equipFilter || name === equipFilter)
+
+  // Applying "Filtro avançado" auto-expands whatever groups/cabeçalhos it
+  // left standing — otherwise the match would be sitting inside boxes that
+  // are still collapsed by default, defeating the point of filtering.
+  useEffect(() => {
+    if (!hasActiveAdvancedFilter) return
+    setExpandedGroups(new Set([...groupedByEquip.map(([name]) => name), ...cascadeByEquip.map(([name]) => name)]))
+    setExpandedHeaders(new Set(cascadeHeaders.map(h => h.estrutura)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advancedCodeFilter, advancedDescSearch])
 
   return (
     <div className="p-8 max-w-[108rem]">
@@ -790,15 +827,19 @@ export default function BuscaAvancadaAcessoriosPage() {
                         <tr>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Denominação</th>
+                          <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Qtd Total</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Categoria</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cadastro</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {items.map((item, i) => (
-                          <tr key={`${item.codigo}-${i}`} className="border-t border-outline-variant/50">
+                        {items.map((item, i) => {
+                          const isMatch = hasActiveAdvancedFilter && matchesAdvancedFilter(item.codigo, item.denominacao, advancedCodeFilter, advancedDescSearch)
+                          return (
+                          <tr key={`${item.codigo}-${i}`} className={`border-t border-outline-variant/50 ${isMatch ? 'bg-primary/10' : ''}`}>
                             <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">{item.codigo}</td>
                             <td className="px-3 py-2 text-on-surface">{item.denominacao || '—'}</td>
+                            <td className="px-3 py-2 text-on-surface">{item.qtdTotal}</td>
                             <td className="px-3 py-2 whitespace-nowrap">
                               <span className="text-on-surface-variant font-semibold">{item.categoria}</span>
                               {item.isUps && <span className="ml-1.5"><Badge tone="amber">UPS</Badge></span>}
@@ -809,7 +850,8 @@ export default function BuscaAvancadaAcessoriosPage() {
                                 : <Badge tone="error">Não cadastrado no MSM</Badge>}
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -841,11 +883,12 @@ export default function BuscaAvancadaAcessoriosPage() {
                   <div className="flex flex-col gap-2">
                     {headers.map(h => {
                       const headerOpen = expandedHeaders.has(h.estrutura)
+                      const headerMatches = hasActiveAdvancedFilter && matchesAdvancedFilter(h.estrutura, h.descEstrutura, advancedCodeFilter, advancedDescSearch)
                       return (
                         <div key={h.estrutura} className="border border-outline-variant rounded-lg overflow-hidden">
                           <div
                             onClick={() => toggleHeaderExpanded(h.estrutura)}
-                            className="flex items-center gap-3 px-3 py-2 bg-surface-container-high hover:bg-surface-container-highest cursor-pointer select-none transition-colors"
+                            className={`flex items-center gap-3 px-3 py-2 hover:bg-surface-container-highest cursor-pointer select-none transition-colors ${headerMatches ? 'bg-primary/10' : 'bg-surface-container-high'}`}
                           >
                             <span className={`text-outline text-xs leading-none transition-transform ${headerOpen ? 'rotate-90' : ''}`}>›</span>
                             <span className="font-mono text-xs text-primary">{h.estrutura}</span>
@@ -854,11 +897,14 @@ export default function BuscaAvancadaAcessoriosPage() {
                           </div>
                           {headerOpen && (
                             <div className="divide-y divide-outline-variant/40">
-                              {h.nivel2.map((n2, i2) => (
+                              {h.nivel2.map((n2, i2) => {
+                                const n2Matches = hasActiveAdvancedFilter && matchesAdvancedFilter(n2.codigo, n2.denominacao, advancedCodeFilter, advancedDescSearch)
+                                return (
                                 <div key={`${n2.codigo}-${i2}`} className="p-2">
-                                  <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-surface-container">
+                                  <div className={`flex items-center gap-2 px-2 py-1.5 rounded ${n2Matches ? 'bg-primary/10' : 'bg-surface-container'}`}>
                                     <span className="font-mono text-xs text-on-surface whitespace-nowrap">{n2.codigo}</span>
                                     <span className="text-xs text-on-surface-variant truncate flex-1">{n2.denominacao || '—'}</span>
+                                    <span className="text-[10px] text-outline font-mono whitespace-nowrap">Qtd Total: {n2.qtdTotal}</span>
                                     <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n2.categoria}</span>
                                     {n2.isUps && <Badge tone="amber">UPS</Badge>}
                                     {n2.registered
@@ -867,21 +913,26 @@ export default function BuscaAvancadaAcessoriosPage() {
                                   </div>
                                   {n2.children.length > 0 && (
                                     <div className="ml-6 mt-1 flex flex-col gap-1">
-                                      {n2.children.map((n3, i3) => (
-                                        <div key={`${n3.codigo}-${i3}`} className="flex items-center gap-2 px-2 py-1.5 rounded border border-outline-variant/40">
+                                      {n2.children.map((n3, i3) => {
+                                        const n3Matches = hasActiveAdvancedFilter && matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch)
+                                        return (
+                                        <div key={`${n3.codigo}-${i3}`} className={`flex items-center gap-2 px-2 py-1.5 rounded border ${n3Matches ? 'border-primary/50 bg-primary/10' : 'border-outline-variant/40'}`}>
                                           <span className="font-mono text-xs text-primary whitespace-nowrap">{n3.codigo}</span>
                                           <span className="text-xs text-on-surface-variant truncate flex-1">{n3.denominacao || '—'}</span>
+                                          <span className="text-[10px] text-outline font-mono whitespace-nowrap">Qtd Total: {n3.qtdTotal}</span>
                                           <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n3.categoria}</span>
                                           {n3.isUps && <Badge tone="amber">UPS</Badge>}
                                           {n3.registered
                                             ? <Badge tone="success">Cadastrado no MSM</Badge>
                                             : <Badge tone="error">Não cadastrado no MSM</Badge>}
                                         </div>
-                                      ))}
+                                        )
+                                      })}
                                     </div>
                                   )}
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           )}
                         </div>
