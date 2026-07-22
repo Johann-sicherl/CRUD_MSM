@@ -381,18 +381,24 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {editableFields.map(field => (
-              <FieldInput
-                key={field.name}
-                field={field}
-                value={form[field.name] ?? ''}
-                onChange={(v) => handleChange(field.name, v)}
-                fetchedOptions={fetchedOptions[field.name]}
-                dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
-                onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
-                onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
-              />
-            ))}
+            {editableFields.map(field => {
+              const forceRequired = field.requiredWhen
+                ? field.requiredWhen.values.map(String).includes(String(form[field.requiredWhen.field] ?? ''))
+                : false
+              return (
+                <FieldInput
+                  key={field.name}
+                  field={field}
+                  value={form[field.name] ?? ''}
+                  onChange={(v) => handleChange(field.name, v)}
+                  fetchedOptions={fetchedOptions[field.name]}
+                  dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
+                  onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
+                  onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
+                  forceRequired={forceRequired}
+                />
+              )
+            })}
           </div>
 
           {error && (
@@ -759,6 +765,7 @@ function FieldInput({
   dynamicOptionValues,
   onAddOption,
   onCascadeOpen,
+  forceRequired,
 }: {
   field: Field
   value: string
@@ -767,6 +774,7 @@ function FieldInput({
   dynamicOptionValues?: string[]
   onAddOption?: (value: string) => Promise<void>
   onCascadeOpen?: () => void
+  forceRequired?: boolean
 }) {
   const [addingOpt, setAddingOpt] = useState(false)
   const [newOptInput, setNewOptInput] = useState('')
@@ -784,10 +792,16 @@ function FieldInput({
 
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
   const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+  // requiredWhen (ex.: Cor/Material/Dimensão para MESAS DE ROLETES e
+  // EXTENSOES DE TUNEL, Tam. Monitor para MONITORES) torna o campo
+  // obrigatório mesmo sendo nullable no banco — depende do grupo escolhido.
+  const isRequired = !field.nullable || !!forceRequired
   // Campos opcionais (nullable) parados em "— Selecione —" ficam com texto e
   // borda levemente avermelhados — só um aviso visual de que esse campo
   // segue vazio, nunca bloqueia o envio (nulo é um valor válido para eles).
-  const isEmptyNullable = field.nullable && !value
+  // Campos tornados obrigatórios via requiredWhen não entram nesse aviso —
+  // eles bloqueiam o envio como qualquer outro campo obrigatório.
+  const isEmptyNullable = !isRequired && !value
   const selectClass = isEmptyNullable
     ? "w-full bg-surface-container-low border border-error/50 rounded px-3 py-2 text-[16.8px] text-error/80 placeholder:text-outline focus:outline-none focus:border-error focus:ring-1 focus:ring-error/30 transition-colors"
     : inputClass
@@ -796,7 +810,7 @@ function FieldInput({
 
   if (fetchedOptions) {
     input = (
-      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={selectClass}>
+      <select value={value} onChange={e => onChange(e.target.value)} required={isRequired} className={selectClass}>
         <option value="">— Selecione —</option>
         {fetchedOptions.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -807,7 +821,7 @@ function FieldInput({
     input = (
       <div>
         <div className="flex gap-1.5">
-          <select value={value} onChange={e => onChange(e.target.value)} className={`${selectClass} flex-1`} required={!field.nullable}>
+          <select value={value} onChange={e => onChange(e.target.value)} className={`${selectClass} flex-1`} required={isRequired}>
             {field.nullable && <option value="">— Selecione —</option>}
             {dynamicOptionValues.map(o => <option key={o} value={o}>{o}</option>)}
           </select>
@@ -859,7 +873,7 @@ function FieldInput({
     )
   } else if (field.type === 'select' && field.options) {
     input = (
-      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={selectClass}>
+      <select value={value} onChange={e => onChange(e.target.value)} required={isRequired} className={selectClass}>
         {field.nullable && <option value="">— Selecione —</option>}
         {field.options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -873,7 +887,7 @@ function FieldInput({
     )
   } else if (field.type === 'textarea') {
     input = (
-      <textarea value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} rows={3} className={`${inputClass} resize-y`} />
+      <textarea value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder} rows={3} className={`${inputClass} resize-y`} />
     )
   } else if (field.type === 'jsonb') {
     input = (
@@ -885,15 +899,15 @@ function FieldInput({
     )
   } else if (field.type === 'number') {
     input = (
-      <input type="number" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
+      <input type="number" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder} className={inputClass} />
     )
   } else if (field.type === 'decimal') {
     input = (
-      <input type="number" step="0.0001" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder || '0.0000'} className={inputClass} />
+      <input type="number" step="0.0001" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder || '0.0000'} className={inputClass} />
     )
   } else if (field.type === 'uuid') {
     input = (
-      <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder="UUID do registro relacionado" className={`${inputClass} font-mono`} />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder="UUID do registro relacionado" className={`${inputClass} font-mono`} />
     )
   } else if (onCascadeOpen) {
     input = (
@@ -902,7 +916,7 @@ function FieldInput({
           type="text"
           value={value}
           onChange={e => onChange(e.target.value)}
-          required={!field.nullable}
+          required={isRequired}
           placeholder={field.placeholder}
           className={`${inputClass} pr-9`}
         />
@@ -918,7 +932,7 @@ function FieldInput({
     )
   } else {
     input = (
-      <input type="text" value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} placeholder={field.placeholder} className={inputClass} />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder} className={inputClass} />
     )
   }
 
@@ -926,7 +940,7 @@ function FieldInput({
     <div className={isWide ? 'sm:col-span-2' : ''}>
       <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
         {field.label}
-        {!field.nullable && <span className="text-primary ml-1">*</span>}
+        {isRequired && <span className="text-primary ml-1">*</span>}
       </label>
       {input}
     </div>

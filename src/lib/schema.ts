@@ -68,6 +68,7 @@ export interface Field {
   excludeFromExport?: boolean // view-only column: leave out of "Exportar dados" too (Matriz/Import already excluded via hideInForm)
   countDuplicatesOf?: string // virtual, list-only field: shows how many rows (in the whole loaded table) share the same resolved value as this other field name
   hideInList?: boolean       // don't render as a column in the list view (field still resolvable for other virtual fields, e.g. countDuplicatesOf)
+  requiredWhen?: { field: string; values: (string | number)[] } // form-only: this field becomes required (client-side) when the named field's current value is one of these
 }
 
 export interface TableSchema {
@@ -244,10 +245,14 @@ export const tables: Record<string, TableSchema> = {
         validateExistsIn: { table: 'accessory_groups', field: 'legacy_id', displayField: 'name',
           errorMessage: 'Grupo não encontrado — coluna "Grupo" deve conter o ID numérico ou o nome exato do grupo de acessórios' } },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'deactive'], showInList: true },
-      { name: 'color',                    label: 'Cor',                  type: 'text',    nullable: true, dynamicOptions: 'accessory_color' },
-      { name: 'predominant_material',    label: 'Material Predom.',     type: 'text',    nullable: true, dynamicOptions: 'predominant_material' },
-      { name: 'dimensional_mm',          label: 'Dimensão (mm)',        type: 'number',  nullable: true },
-      { name: 'monitor_size',            label: 'Tam. Monitor (pol)',   type: 'decimal', nullable: true },
+      { name: 'color',                    label: 'Cor',                  type: 'text',    nullable: true, dynamicOptions: 'accessory_color',
+        requiredWhen: { field: 'legacy_group_id', values: [12, 13] } }, // MESAS DE ROLETES / EXTENSOES DE TUNEL
+      { name: 'predominant_material',    label: 'Material Predom.',     type: 'text',    nullable: true, dynamicOptions: 'predominant_material',
+        requiredWhen: { field: 'legacy_group_id', values: [12, 13] } }, // MESAS DE ROLETES / EXTENSOES DE TUNEL
+      { name: 'dimensional_mm',          label: 'Dimensão (mm)',        type: 'number',  nullable: true,
+        requiredWhen: { field: 'legacy_group_id', values: [12, 13] } }, // MESAS DE ROLETES / EXTENSOES DE TUNEL
+      { name: 'monitor_size',            label: 'Tam. Monitor (pol)',   type: 'decimal', nullable: true,
+        requiredWhen: { field: 'legacy_group_id', values: [11] } }, // MONITORES
       { name: 'quantity_monitor_totem',  label: 'Qtd. Monitor Totem',  type: 'number',  nullable: true },
       { name: 'cost_std',                label: 'Custo (R$)',           type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
       { name: 'description',             label: 'Descrição',            type: 'textarea',nullable: true },
