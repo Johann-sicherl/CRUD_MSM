@@ -54,4 +54,12 @@ BEGIN
 END;
 $$;
 
+-- CREATE FUNCTION concede EXECUTE a PUBLIC por padrão no Postgres — como esta
+-- função é SECURITY DEFINER (roda com privilégios do dono, aqui o bastante
+-- para apagar e recarregar a tabela inteira), isso deixava qualquer role
+-- (inclusive anon/authenticated, herdando de PUBLIC) capaz de chamá-la
+-- diretamente via API REST do Supabase. Revoga tudo e libera só para o
+-- backend (service_role).
+REVOKE EXECUTE ON FUNCTION global_table_replace(TEXT, JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION global_table_replace(TEXT, JSONB) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION global_table_replace(TEXT, JSONB) TO service_role;
