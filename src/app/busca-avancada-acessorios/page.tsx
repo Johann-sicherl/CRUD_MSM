@@ -290,6 +290,7 @@ export default function BuscaAvancadaAcessoriosPage() {
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [advancedCodeFilter, setAdvancedCodeFilter] = useState<string[]>([])
   const [advancedDescSearch, setAdvancedDescSearch] = useState('')
+  const [copyFeedback, setCopyFeedback] = useState('')
   // "Chave" de visualização: lista = lista plana de acessórios (sem
   // duplicatas); cascata = mantém o relacionamento de qual 26.xx cada item
   // veio, em árvore (26.xx → Embalagens/SubPA/Gastos Gerais → Equipamento/
@@ -620,6 +621,40 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   const displayedCascadeGroups = cascadeByEquip.filter(([name]) => !equipFilter || name === equipFilter)
 
+  // "Copiar lista" — mesma ideia do botão já usado em Auditoria (copia como
+  // texto separado por TAB, para colar direto numa planilha do Excel).
+  // Segue exatamente o que está sendo exibido no momento (já passou pelos
+  // filtros de Equipamento/Categoria/Filtro avançado), no formato do modo de
+  // visualização ativo — Lista de acessórios ou Visão em cascata.
+  const copyHeader = viewMode === 'lista'
+    ? ['Equipamento', 'Código', 'Denominação', 'Qtd Total', 'Categoria', 'Cadastro no MSM']
+    : ['Equipamento', 'Estrutura 26.xx', 'Nível', 'Código', 'Denominação', 'Qtd Total', 'Categoria', 'Cadastro no MSM']
+
+  const copyRows: string[][] = viewMode === 'lista'
+    ? dedupedGroups.flatMap(([equipType, items]) =>
+        items.map(item => [
+          equipType, item.codigo, item.denominacao || '', String(item.qtdTotal), item.categoria,
+          item.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM',
+        ])
+      )
+    : displayedCascadeGroups.flatMap(([equipType, headers]) =>
+        headers.flatMap(h => h.nivel2.flatMap(n2 => [
+          [equipType, h.estrutura, '2', n2.codigo, n2.denominacao || '', String(n2.qtdTotal), n2.categoria,
+            n2.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM'],
+          ...n2.children.map(n3 => [equipType, h.estrutura, '3', n3.codigo, n3.denominacao || '', String(n3.qtdTotal), n3.categoria,
+            n3.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM']),
+        ]))
+      )
+
+  const handleCopyList = () => {
+    if (copyRows.length === 0) return
+    const tsv = [copyHeader, ...copyRows].map(r => r.join('\t')).join('\n')
+    navigator.clipboard.writeText(tsv)
+      .then(() => setCopyFeedback(`${copyRows.length} linha${copyRows.length !== 1 ? 's' : ''} copiada${copyRows.length !== 1 ? 's' : ''} — cole no Excel`))
+      .catch(() => setCopyFeedback('Não foi possível copiar'))
+    setTimeout(() => setCopyFeedback(''), 2500)
+  }
+
   // Applying "Filtro avançado" auto-expands whatever groups/cabeçalhos it
   // left standing — otherwise the match would be sitting inside boxes that
   // are still collapsed by default, defeating the point of filtering.
@@ -802,6 +837,15 @@ export default function BuscaAvancadaAcessoriosPage() {
               ? ` (${(advancedCodeFilter.length > 0 ? 1 : 0) + (advancedDescSearch.trim() ? 1 : 0)})`
               : ''}
           </button>
+          <button
+            onClick={handleCopyList}
+            disabled={copyRows.length === 0}
+            title="Copia os itens exibidos (com os filtros aplicados) para colar direto no Excel"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-surface-container-low border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ⧉ Copiar lista ({copyRows.length})
+          </button>
+          {copyFeedback && <span className="text-xs text-green-400">{copyFeedback}</span>}
         </div>
       )}
 
