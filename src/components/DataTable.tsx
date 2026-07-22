@@ -34,10 +34,17 @@ function getDisplayValue(
   field: Field | undefined,
   lookups: LookupMap,
   allFields: Field[] = [],
+  duplicateCountMaps: Record<string, Map<string, number>> = {},
 ): string {
+  if (field?.countDuplicatesOf) {
+    const targetName = field.countDuplicatesOf
+    const targetField = allFields.find(f => f.name === targetName)
+    const targetValue = getDisplayValue(row, targetName, targetField, lookups, allFields, duplicateCountMaps)
+    return String(duplicateCountMaps[targetName]?.get(targetValue) ?? 1)
+  }
   if (field?.concatFrom) {
     const parts = field.concatFrom
-      .map(name => getDisplayValue(row, name, allFields.find(f => f.name === name), lookups, allFields))
+      .map(name => getDisplayValue(row, name, allFields.find(f => f.name === name), lookups, allFields, duplicateCountMaps))
       .filter(v => v && v !== 'N/A')
     return parts.length > 0 ? parts.join(' / ') : 'N/A'
   }
@@ -57,13 +64,14 @@ function applyFilters(
   filters: Record<string, string[]>,
   fields: Field[],
   lookups: LookupMap,
+  duplicateCountMaps: Record<string, Map<string, number>> = {},
 ): Record<string, unknown>[] {
   const active = Object.entries(filters).filter(([, v]) => v.length > 0)
   if (!active.length) return rows
   return rows.filter(row =>
     active.every(([name, vals]) => {
       const field = fields.find(f => f.name === name)
-      const display = getDisplayValue(row, name, field, lookups, fields)
+      const display = getDisplayValue(row, name, field, lookups, fields, duplicateCountMaps)
       return vals.includes(display)
     })
   )
@@ -182,11 +190,32 @@ export default function DataTable({ tableName, schema }: Props) {
     return () => ro.disconnect()
   }, [pageData, checkScroll])
 
+  // For a field with countDuplicatesOf set (e.g. "Repetições" counting
+  // Resumo), tallies how many rows across the whole loaded table (not just
+  // the currently column-filtered ones) share each resolved value of the
+  // target field — one map per distinct target, built once per data/lookup
+  // refresh instead of re-scanning per row.
+  const duplicateCountMaps = useMemo(() => {
+    const maps: Record<string, Map<string, number>> = {}
+    if (!pageData) return maps
+    const targets = new Set(listFields.filter(f => f.countDuplicatesOf).map(f => f.countDuplicatesOf as string))
+    for (const targetName of targets) {
+      const targetField = listFields.find(f => f.name === targetName)
+      const counts = new Map<string, number>()
+      for (const row of pageData.data) {
+        const val = getDisplayValue(row, targetName, targetField, lookups, listFields)
+        counts.set(val, (counts.get(val) ?? 0) + 1)
+      }
+      maps[targetName] = counts
+    }
+    return maps
+  }, [pageData, listFields, lookups])
+
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
     if (!pageData) return []
-    return applyFilters(pageData.data, colFilters, listFields, lookups)
-  }, [pageData, colFilters, lookups, listFields])
+    return applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps)
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible
@@ -197,10 +226,10 @@ export default function DataTable({ tableName, schema }: Props) {
       const otherFilters = Object.fromEntries(
         Object.entries(colFilters).filter(([name]) => name !== field.name)
       )
-      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups)
+      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups, duplicateCountMaps)
       const seen = new Set<string>()
       for (const row of candidateRows) {
-        const val = getDisplayValue(row, field.name, field, lookups, listFields)
+        const val = getDisplayValue(row, field.name, field, lookups, listFields, duplicateCountMaps)
         if (val !== '' && val !== 'null' && val !== 'undefined') seen.add(val)
       }
       // N/A first, rest alphabetical
@@ -211,7 +240,7 @@ export default function DataTable({ tableName, schema }: Props) {
       })
     }
     return result
-  }, [pageData, colFilters, lookups, listFields, schema.columnFilters])
+  }, [pageData, colFilters, lookups, listFields, schema.columnFilters, duplicateCountMaps])
 
   const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
 
@@ -272,7 +301,7 @@ export default function DataTable({ tableName, schema }: Props) {
     ]
     const rowData = filteredRows.map(row => [
       ...(includeProtheusFlag ? [getProtheusStatus(row) ?? 'Não encontrado'] : []),
-      ...exportableFields.map(f => getDisplayValue(row, f.name, f, lookups, listFields)),
+      ...exportableFields.map(f => getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps)),
     ])
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
     exportVisibleData(headers, rowData, `${safeLabel}.xlsx`)
@@ -616,8 +645,8 @@ export default function DataTable({ tableName, schema }: Props) {
                         )}
                         {listFields.map(f => {
                           let cell: React.ReactNode
-                          if ((f.lookupFrom && lookups[f.name]) || f.concatFrom) {
-                            const text = getDisplayValue(row, f.name, f, lookups, listFields) || '—'
+                          if ((f.lookupFrom && lookups[f.name]) || f.concatFrom || f.countDuplicatesOf) {
+                            const text = getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps) || '—'
                             cell = f.listExpand
                               ? <TruncatedCell text={text} maxLen={14} />
                               : <span title={text.length > 50 ? text : undefined}>{text}</span>
