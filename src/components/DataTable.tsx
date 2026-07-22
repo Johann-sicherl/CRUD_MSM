@@ -33,7 +33,14 @@ function getDisplayValue(
   fieldName: string,
   field: Field | undefined,
   lookups: LookupMap,
+  allFields: Field[] = [],
 ): string {
+  if (field?.concatFrom) {
+    const parts = field.concatFrom
+      .map(name => getDisplayValue(row, name, allFields.find(f => f.name === name), lookups, allFields))
+      .filter(v => v && v !== 'N/A')
+    return parts.length > 0 ? parts.join(' / ') : 'N/A'
+  }
   if (field?.lookupFrom && lookups[fieldName]) {
     const keyField = field.lookupFrom.sourceField ?? fieldName
     const key = String(row[keyField] ?? '')
@@ -56,7 +63,7 @@ function applyFilters(
   return rows.filter(row =>
     active.every(([name, vals]) => {
       const field = fields.find(f => f.name === name)
-      const display = getDisplayValue(row, name, field, lookups)
+      const display = getDisplayValue(row, name, field, lookups, fields)
       return vals.includes(display)
     })
   )
@@ -193,7 +200,7 @@ export default function DataTable({ tableName, schema }: Props) {
       const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups)
       const seen = new Set<string>()
       for (const row of candidateRows) {
-        const val = getDisplayValue(row, field.name, field, lookups)
+        const val = getDisplayValue(row, field.name, field, lookups, listFields)
         if (val !== '' && val !== 'null' && val !== 'undefined') seen.add(val)
       }
       // N/A first, rest alphabetical
@@ -255,13 +262,17 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const handleExportVisible = () => {
     const includeProtheusFlag = !!schema.protheusStatusCheckField && !!protheusStatusMap
+    // View-only columns (e.g. Resumo) never leave this screen — Exportar
+    // Matriz/Importar already exclude them via hideInForm; this is the
+    // equivalent guard for Exportar dados.
+    const exportableFields = listFields.filter(f => !f.excludeFromExport)
     const headers = [
       ...(includeProtheusFlag ? ['Status Protheus'] : []),
-      ...listFields.map(f => f.label),
+      ...exportableFields.map(f => f.label),
     ]
     const rowData = filteredRows.map(row => [
       ...(includeProtheusFlag ? [getProtheusStatus(row) ?? 'Não encontrado'] : []),
-      ...listFields.map(f => getDisplayValue(row, f.name, f, lookups)),
+      ...exportableFields.map(f => getDisplayValue(row, f.name, f, lookups, listFields)),
     ])
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
     exportVisibleData(headers, rowData, `${safeLabel}.xlsx`)
@@ -605,8 +616,8 @@ export default function DataTable({ tableName, schema }: Props) {
                         )}
                         {listFields.map(f => {
                           let cell: React.ReactNode
-                          if (f.lookupFrom && lookups[f.name]) {
-                            const text = getDisplayValue(row, f.name, f, lookups) || '—'
+                          if ((f.lookupFrom && lookups[f.name]) || f.concatFrom) {
+                            const text = getDisplayValue(row, f.name, f, lookups, listFields) || '—'
                             cell = f.listExpand
                               ? <TruncatedCell text={text} maxLen={14} />
                               : <span title={text.length > 50 ? text : undefined}>{text}</span>

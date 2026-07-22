@@ -64,6 +64,8 @@ export interface Field {
   listKeepWidth?: boolean    // preserve min-w even when table uses compactColumns
   listFilterType?: 'select' | 'text'  // override column filter style (default: select)
   dynamicOptions?: string    // key in /api/field-options; renders a managed select with + button
+  concatFrom?: string[]      // virtual, list-only field: joins the resolved display values of these other field names (same table) with " / ", skipping any that are empty
+  excludeFromExport?: boolean // view-only column: leave out of "Exportar dados" too (Matriz/Import already excluded via hideInForm)
 }
 
 export interface TableSchema {
@@ -207,6 +209,9 @@ export const tables: Record<string, TableSchema> = {
         validateExistsIn: { table: 'general_alerts', field: 'legacy_id', displayField: 'description',
           errorMessage: 'Alerta não encontrado — coluna "Alerta" deve conter o ID numérico ou o texto exato do alerta (ou ficar vazio/0 para nenhum)' } },
       { name: 'cost_std', label: 'Custo (R$)',type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
+      { name: 'resumo', label: 'Resumo', type: 'text', nullable: true, showInList: true, hideInForm: true, listFilterType: 'text', excludeFromExport: true,
+        concatFrom: ['legacy_equipment_id', 'protheus_code', 'processor', 'memory', 'storage', 'graphics_card', 'conveyor_belt_load_capacity_kg',
+          'tube_power_kv', 'certificate', 'conveyor_belt_type', 'motopolia_type', 'language', 'color', 'legacy_general_alert_id', 'status'] },
       { name: 'created_at', label: 'Criado em',     type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -540,12 +545,14 @@ export function getEditableFields(tableName: string): Field[] {
 
 // A field whose lookupFrom sets sourceField is entirely computed by joining
 // through ANOTHER field's value (e.g. accessory_name resolved from
-// protheus_code) — it has no column of its own in the real database table,
-// it only exists in this schema for the app's own list/form display. Used by
-// the Atualizador Global de Tabelas MSM to compare a CSV export (which only
-// has real columns) against the actual table structure, not the app's schema.
+// protheus_code), and a concatFrom field just joins other fields' own
+// resolved values — neither has a column of its own in the real database
+// table, they only exist in this schema for the app's own list/form display.
+// Used by the Atualizador Global de Tabelas MSM to compare a CSV export
+// (which only has real columns) against the actual table structure, not the
+// app's schema.
 export function isRealColumnField(field: Field): boolean {
-  return !field.lookupFrom?.sourceField
+  return !field.lookupFrom?.sourceField && !field.concatFrom
 }
 
 export function getRealColumnFields(schema: TableSchema): Field[] {
