@@ -43,10 +43,11 @@ function getDisplayValue(
     return String(duplicateCountMaps[targetName]?.get(targetValue) ?? 1)
   }
   if (field?.concatFrom) {
-    const parts = field.concatFrom
+    // Every field's value goes in, including "N/A" for whatever is unset —
+    // this is a literal concatenation of all of them, not just the filled-in ones.
+    return field.concatFrom
       .map(name => getDisplayValue(row, name, allFields.find(f => f.name === name), lookups, allFields, duplicateCountMaps))
-      .filter(v => v && v !== 'N/A')
-    return parts.length > 0 ? parts.join(' / ') : 'N/A'
+      .join(' / ')
   }
   if (field?.lookupFrom && lookups[fieldName]) {
     const keyField = field.lookupFrom.sourceField ?? fieldName
