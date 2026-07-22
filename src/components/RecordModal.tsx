@@ -784,12 +784,19 @@ function FieldInput({
 
   const isWide = ['textarea', 'jsonb'].includes(field.type) || !!field.formFullWidth
   const inputClass = "w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+  // Campos opcionais (nullable) parados em "— Selecione —" ficam com texto e
+  // borda levemente avermelhados — só um aviso visual de que esse campo
+  // segue vazio, nunca bloqueia o envio (nulo é um valor válido para eles).
+  const isEmptyNullable = field.nullable && !value
+  const selectClass = isEmptyNullable
+    ? "w-full bg-surface-container-low border border-error/50 rounded px-3 py-2 text-[16.8px] text-error/80 placeholder:text-outline focus:outline-none focus:border-error focus:ring-1 focus:ring-error/30 transition-colors"
+    : inputClass
 
   let input: React.ReactNode
 
   if (fetchedOptions) {
     input = (
-      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
+      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={selectClass}>
         <option value="">— Selecione —</option>
         {fetchedOptions.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -800,7 +807,7 @@ function FieldInput({
     input = (
       <div>
         <div className="flex gap-1.5">
-          <select value={value} onChange={e => onChange(e.target.value)} className={`${inputClass} flex-1`} required={!field.nullable}>
+          <select value={value} onChange={e => onChange(e.target.value)} className={`${selectClass} flex-1`} required={!field.nullable}>
             {field.nullable && <option value="">— Selecione —</option>}
             {dynamicOptionValues.map(o => <option key={o} value={o}>{o}</option>)}
           </select>
@@ -852,7 +859,7 @@ function FieldInput({
     )
   } else if (field.type === 'select' && field.options) {
     input = (
-      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={inputClass}>
+      <select value={value} onChange={e => onChange(e.target.value)} required={!field.nullable} className={selectClass}>
         {field.nullable && <option value="">— Selecione —</option>}
         {field.options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
