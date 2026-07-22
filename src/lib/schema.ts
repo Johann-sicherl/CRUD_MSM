@@ -64,9 +64,10 @@ export interface Field {
   listKeepWidth?: boolean    // preserve min-w even when table uses compactColumns
   listFilterType?: 'select' | 'text'  // override column filter style (default: select)
   dynamicOptions?: string    // key in /api/field-options; renders a managed select with + button
-  concatFrom?: string[]      // virtual, list-only field: joins the resolved display values of these other field names (same table) with " / ", skipping any that are empty
+  concatFrom?: string[]      // virtual, list-only field: joins the resolved display values of these other field names (same table) with " / "
   excludeFromExport?: boolean // view-only column: leave out of "Exportar dados" too (Matriz/Import already excluded via hideInForm)
   countDuplicatesOf?: string // virtual, list-only field: shows how many rows (in the whole loaded table) share the same resolved value as this other field name
+  hideInList?: boolean       // don't render as a column in the list view (field still resolvable for other virtual fields, e.g. countDuplicatesOf)
 }
 
 export interface TableSchema {
@@ -210,7 +211,7 @@ export const tables: Record<string, TableSchema> = {
         validateExistsIn: { table: 'general_alerts', field: 'legacy_id', displayField: 'description',
           errorMessage: 'Alerta não encontrado — coluna "Alerta" deve conter o ID numérico ou o texto exato do alerta (ou ficar vazio/0 para nenhum)' } },
       { name: 'cost_std', label: 'Custo (R$)',type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
-      { name: 'resumo', label: 'Resumo', type: 'text', nullable: true, showInList: true, hideInForm: true, listFilterType: 'text', excludeFromExport: true,
+      { name: 'resumo', label: 'Resumo', type: 'text', nullable: true, showInList: true, hideInForm: true, hideInList: true, listFilterType: 'text', excludeFromExport: true,
         concatFrom: ['legacy_equipment_id', 'processor', 'memory', 'storage', 'graphics_card', 'conveyor_belt_load_capacity_kg',
           'tube_power_kv', 'certificate', 'conveyor_belt_type', 'motopolia_type', 'language', 'color', 'status'] },
       { name: 'resumo_count', label: 'Repetições', type: 'number', nullable: true, showInList: true, hideInForm: true,

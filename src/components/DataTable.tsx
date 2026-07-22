@@ -114,6 +114,13 @@ export default function DataTable({ tableName, schema }: Props) {
   const [protheusError, setProtheusError] = useState('')
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
+  // Columns actually rendered — excludes hideInList fields (e.g. Resumo, kept
+  // in listFields only so countDuplicatesOf can still resolve it).
+  const visibleListFields = useMemo(() => listFields.filter(f => !f.hideInList), [listFields])
+  // Fields with countDuplicatesOf (e.g. Repetições) are pinned right before
+  // the Protheus status column; everything else renders in normal order.
+  const pinnedListFields = useMemo(() => visibleListFields.filter(f => f.countDuplicatesOf), [visibleListFields])
+  const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
   useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()) }, [tableName])
 
@@ -570,32 +577,38 @@ export default function DataTable({ tableName, schema }: Props) {
                         }}
                       />
                     </th>
-                    {schema.protheusStatusCheckField && (
-                      <th
-                        className="px-3 py-3 w-10 text-center text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono"
-                        title="Status do produto (ATIVO/BLOQUEADO) no Protheus"
-                      >
-                        Protheus
-                      </th>
-                    )}
-                    {listFields.map(f => (
-                      <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ` align-top${f.listKeepWidth ? ' min-w-[150px]' : ' min-w-[100px]'}` : ''}`}>
-                        <div>{f.label}</div>
-                        {schema.columnFilters && (
-                          <div className="mt-1.5">
-                            <ColumnFilter
-                              searchValue={filterSearch[f.name] ?? ''}
-                              onSearchChange={v => setFilterSearch(prev => ({ ...prev, [f.name]: v }))}
-                              selectedValues={colFilters[f.name] ?? []}
-                              onToggleValue={v => handleToggleFilter(f.name, v)}
-                              onClearValues={() => handleClearFilter(f.name)}
-                              options={columnOptions[f.name] ?? []}
-                              compact={schema.compactColumns && !f.listKeepWidth}
-                            />
-                          </div>
-                        )}
-                      </th>
-                    ))}
+                    {[...pinnedListFields, ...(schema.protheusStatusCheckField ? ['__protheus__' as const] : []), ...restListFields].map(entry => {
+                      if (entry === '__protheus__') {
+                        return (
+                          <th
+                            key="__protheus__"
+                            className="px-3 py-3 w-10 text-center text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono"
+                            title="Status do produto (ATIVO/BLOQUEADO) no Protheus"
+                          >
+                            Protheus
+                          </th>
+                        )
+                      }
+                      const f = entry as Field
+                      return (
+                        <th key={f.name} className={`px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] whitespace-nowrap font-mono${schema.columnFilters ? ` align-top${f.listKeepWidth ? ' min-w-[150px]' : ' min-w-[100px]'}` : ''}`}>
+                          <div>{f.label}</div>
+                          {schema.columnFilters && (
+                            <div className="mt-1.5">
+                              <ColumnFilter
+                                searchValue={filterSearch[f.name] ?? ''}
+                                onSearchChange={v => setFilterSearch(prev => ({ ...prev, [f.name]: v }))}
+                                selectedValues={colFilters[f.name] ?? []}
+                                onToggleValue={v => handleToggleFilter(f.name, v)}
+                                onClearValues={() => handleClearFilter(f.name)}
+                                options={columnOptions[f.name] ?? []}
+                                compact={schema.compactColumns && !f.listKeepWidth}
+                              />
+                            </div>
+                          )}
+                        </th>
+                      )
+                    })}
                     <th className="px-4 py-3 text-right text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono whitespace-nowrap sticky right-0 bg-surface-container-highest border-l border-outline-variant/40 z-10">
                       <div>Ações</div>
                       {canScrollRight && (
@@ -609,7 +622,7 @@ export default function DataTable({ tableName, schema }: Props) {
                 <tbody className="divide-y divide-outline-variant/30">
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={listFields.length + 2 + (schema.protheusStatusCheckField ? 1 : 0)} className="px-4 py-12 text-center text-outline text-sm">
+                      <td colSpan={visibleListFields.length + 2 + (schema.protheusStatusCheckField ? 1 : 0)} className="px-4 py-12 text-center text-outline text-sm">
                         Nenhum registro encontrado
                       </td>
                     </tr>
@@ -631,22 +644,28 @@ export default function DataTable({ tableName, schema }: Props) {
                             })}
                           />
                         </td>
-                        {schema.protheusStatusCheckField && (
-                          <td className="px-3 py-3 text-center">
-                            {(() => {
-                              const status = getProtheusStatus(row)
-                              if (status === null) {
-                                return <span className="inline-block w-2.5 h-2.5 rounded-full bg-outline-variant" title="Conecte ao Protheus para verificar (botão acima da tabela) — ou o código não é um produto registrado lá" />
-                              }
-                              return status === 'ATIVO'
-                                ? <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="ATIVO no Protheus" />
-                                : <span className="inline-block w-3 h-3 rounded-full bg-[#ff0000] shadow-[0_0_6px_rgba(255,0,0,0.7)]" title="BLOQUEADO no Protheus" />
-                            })()}
-                          </td>
-                        )}
-                        {listFields.map(f => {
+                        {[...pinnedListFields, ...(schema.protheusStatusCheckField ? ['__protheus__' as const] : []), ...restListFields].map(entry => {
+                          if (entry === '__protheus__') {
+                            return (
+                              <td key="__protheus__" className="px-3 py-3 text-center">
+                                {(() => {
+                                  const status = getProtheusStatus(row)
+                                  if (status === null) {
+                                    return <span className="inline-block w-2.5 h-2.5 rounded-full bg-outline-variant" title="Conecte ao Protheus para verificar (botão acima da tabela) — ou o código não é um produto registrado lá" />
+                                  }
+                                  return status === 'ATIVO'
+                                    ? <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="ATIVO no Protheus" />
+                                    : <span className="inline-block w-3 h-3 rounded-full bg-[#ff0000] shadow-[0_0_6px_rgba(255,0,0,0.7)]" title="BLOQUEADO no Protheus" />
+                                })()}
+                              </td>
+                            )
+                          }
+                          const f = entry as Field
                           let cell: React.ReactNode
-                          if ((f.lookupFrom && lookups[f.name]) || f.concatFrom || f.countDuplicatesOf) {
+                          if (f.countDuplicatesOf) {
+                            const text = getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps) || '—'
+                            cell = <span className={text === '1' ? 'text-green-500 font-semibold' : 'text-error font-semibold'}>{text}</span>
+                          } else if ((f.lookupFrom && lookups[f.name]) || f.concatFrom) {
                             const text = getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps) || '—'
                             cell = f.listExpand
                               ? <TruncatedCell text={text} maxLen={14} />
