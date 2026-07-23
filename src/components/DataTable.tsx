@@ -78,6 +78,42 @@ function applyFilters(
   )
 }
 
+// Numeric sort key for schema.listSortBy: a real column (e.g. legacy_equipment_id)
+// sorts by its own raw value — never the display name a lookupFrom would resolve
+// it to — while a virtual field (no property of its own on the row, e.g. a
+// sort-only lookup like group_legacy_id) resolves through getDisplayValue,
+// which for those fields is configured to return the numeric id itself.
+function getNumericSortValue(
+  row: Record<string, unknown>,
+  fieldName: string,
+  field: Field | undefined,
+  lookups: LookupMap,
+  allFields: Field[],
+): number {
+  const raw = row[fieldName]
+  const value = raw !== undefined ? raw : getDisplayValue(row, fieldName, field, lookups, allFields)
+  const n = Number(value)
+  return Number.isNaN(n) ? 0 : n
+}
+
+function applyListSortBy(
+  rows: Record<string, unknown>[],
+  sortBy: string[] | undefined,
+  fields: Field[],
+  lookups: LookupMap,
+): Record<string, unknown>[] {
+  if (!sortBy || sortBy.length === 0) return rows
+  const sortFields = sortBy.map(name => fields.find(f => f.name === name))
+  return [...rows].sort((a, b) => {
+    for (let i = 0; i < sortBy.length; i++) {
+      const diff = getNumericSortValue(a, sortBy[i], sortFields[i], lookups, fields)
+        - getNumericSortValue(b, sortBy[i], sortFields[i], lookups, fields)
+      if (diff !== 0) return diff
+    }
+    return 0
+  })
+}
+
 export default function DataTable({ tableName, schema }: Props) {
   const [pageData, setPageData] = useState<PageData | null>(null)
   const [page] = useState(1)
@@ -222,8 +258,9 @@ export default function DataTable({ tableName, schema }: Props) {
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
     if (!pageData) return []
-    return applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps)
-  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps])
+    const rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps)
+    return applyListSortBy(rows, schema.listSortBy, listFields, lookups)
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema.listSortBy])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible

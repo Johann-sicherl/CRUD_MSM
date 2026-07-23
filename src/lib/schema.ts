@@ -88,6 +88,7 @@ export interface TableSchema {
   auditQueries?: boolean    // log a ready-to-run SQL statement to audit_log on every insert/update/delete, for manual export to the production database
   auditKeyField?: string | string[]  // field(s) used to identify the row across environments in the generated SQL (defaults to the unique field, then autoIncrement, then all noBulkEdit fields as a composite key, then the PK)
   protheusStatusCheckField?: string  // field whose value is checked against the Protheus product master (SB1010) status (ATIVO/BLOQUEADO) — adds a view-only flag column (and, once connected, an extra "Exportar dados" column)
+  listSortBy?: string[]      // client-side tie-break sort applied on top of the server's `orderBy` — one field name per level, ascending numeric. Used for fields the DB alone can't order by (e.g. a value resolved through another table), see DataTable.tsx
 }
 
 // Financial multiplier fields that the Atualizador Global de Tabelas MSM always
@@ -299,6 +300,13 @@ export const tables: Record<string, TableSchema> = {
     compactHeader: true,
     bulkEdit: true,
     auditQueries: true,
+    // Equipamento already sorts by its own real column (legacy_equipment_id,
+    // via orderBy above); Grupo has no column of its own on this table (it's
+    // resolved from accessories.legacy_group_id through protheus_code), so it
+    // can't be added to a plain SQL ORDER BY — group_legacy_id below exists
+    // only to give this a numeric sort key, and listSortBy applies both as a
+    // client-side tie-break within each equipment.
+    listSortBy: ['legacy_equipment_id', 'group_legacy_id'],
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, noBulkEdit: true,
@@ -308,6 +316,8 @@ export const tables: Record<string, TableSchema> = {
       { name: 'group_name', label: 'Grupo', type: 'text', nullable: true, showInList: true, hideInForm: true,
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_code',
           through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } } },
+      { name: 'group_legacy_id', label: 'Grupo (ID)', type: 'number', nullable: true, hideInList: true, hideInForm: true, excludeFromExport: true,
+        lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_code' } },
       { name: 'protheus_code', label: 'Código Protheus Acessório', type: 'text', nullable: false, showInList: true,
         listFilterType: 'text', noBulkEdit: true,
         validateExistsIn: { table: 'accessories', field: 'protheus_code',
