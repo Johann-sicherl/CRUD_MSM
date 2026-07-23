@@ -108,6 +108,26 @@ const FIELD_LABELS: Record<string, string> = {
   color: 'Cor',
 }
 
+// After saving an edit through the "✎ Editar" button, refreshes that one
+// card's comparison against the DB — without a second Protheus round trip —
+// by recomputing dbValue/status per property from the freshly-reloaded
+// standard_equipment_items row. Mirrors exactly the same logic used server-side
+// in /api/analisador-estruturas (see route.ts): computedValue never changes
+// here (it only depends on the structure codes, untouched by this edit), only
+// dbValue and, consequently, mismatch/ok can flip. "duplicate"/"missing" are
+// purely structure-derived (matched.length / distinct expected values) and
+// never depend on the DB value, so they're left as-is.
+function recomputeFileAgainstFreshRow(file: AnalysisFile, freshRow: Record<string, unknown> | undefined): AnalysisFile {
+  const norm = (v: unknown) => String(v ?? '').trim().toLowerCase()
+  const properties = file.properties?.map(p => {
+    const dbValue = freshRow ? (freshRow[p.field] as string | null | undefined) ?? null : null
+    if (p.matched.length === 0 || p.status === 'duplicate') return { ...p, dbValue }
+    const mismatch = !!freshRow && p.computedValue !== null && norm(dbValue) !== norm(p.computedValue)
+    return { ...p, dbValue, status: (mismatch ? 'mismatch' : 'ok') as PropertyResult['status'] }
+  })
+  return { ...file, properties, equipmentFound: !!freshRow }
+}
+
 // The workbook has "2-Estruturas" (hierarchical BOM explosion) and
 // "FLAT-LIST" (deduplicated flat list) — both carry a "CÓDIGO" column with
 // the component codes that need to be checked against the parameter rules.
@@ -809,7 +829,10 @@ export default function AnalisadorEstruturasPage() {
   // card's classification belongs to before prefilling "Adicionar ao banco").
   // Extracted into a stable function so it can also be re-run right after a
   // new equipment is saved, instead of only ever loading once on mount.
-  const loadEquipmentFilterData = useCallback(async () => {
+  // Returns the freshly-loaded rows (keyed by uppercased protheus_code) so a
+  // caller that just saved an edit (see `editEquipmentFile` below) can
+  // recompute that one card's dbValue/status without a second Protheus round trip.
+  const loadEquipmentFilterData = useCallback(async (): Promise<Record<string, Record<string, unknown>> | null> => {
     try {
       const [itemsRes, eqRes, alertRes] = await Promise.all([
         fetch('/api/standard_equipment_items?limit=25000'),
@@ -837,8 +860,10 @@ export default function AnalisadorEstruturasPage() {
       for (const a of (alertJson.data || [])) lookups.legacy_general_alert_id[String(a.legacy_id)] = a.description || 'N/A'
       setAdvancedLookups(lookups)
       setEquipmentGroupsByName(groupsByName)
+      return rows
     } catch {
       // Filtro avançado / Adicionar ao banco simply have no data if this fails — doesn't block anything else on the page.
+      return null
     }
   }, [])
 
@@ -1235,9 +1260,13 @@ export default function AnalisadorEstruturasPage() {
           tableName="standard_equipment_items"
           record={equipmentRows[editEquipmentFile.protheusCode.trim().toUpperCase()] ?? null}
           onClose={() => setEditEquipmentFile(null)}
-          onSaved={() => {
+          onSaved={async () => {
+            const savedId = editEquipmentFile.id
+            const savedCode = editEquipmentFile.protheusCode.trim().toUpperCase()
             setEditEquipmentFile(null)
-            loadEquipmentFilterData()
+            const rows = await loadEquipmentFilterData()
+            const freshRow = rows?.[savedCode]
+            setFiles(prev => prev.map(f => f.id === savedId ? recomputeFileAgainstFreshRow(f, freshRow) : f))
           }}
         />
       )}
