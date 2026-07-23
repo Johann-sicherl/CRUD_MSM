@@ -95,7 +95,7 @@ export function buildUpdateSQL(
   for (const [name, val] of Object.entries(changedFields)) {
     if (keyNames.has(name)) continue
     const field = schema.fields.find(f => f.name === name)
-    if (!field) continue
+    if (!field || !isRealColumnField(field)) continue
     sets.push(`${name} = ${sqlLiteral(field, val)}`)
   }
   return `UPDATE ${table} SET ${sets.join(', ')} WHERE ${whereClause(keyFields, keyRow)};`

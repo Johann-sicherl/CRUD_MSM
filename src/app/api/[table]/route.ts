@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables, getSearchableFields } from '@/lib/schema'
+import { tables, getSearchableFields, isRealColumnField } from '@/lib/schema'
 import { recordInsertAudit } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string } }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const schema = tables[table]
   const insertBody: Record<string, unknown> = {}
 
-  for (const field of schema.fields.filter(f => !f.isPk && !f.isReadonly)) {
+  for (const field of schema.fields.filter(f => !f.isPk && !f.isReadonly && isRealColumnField(f))) {
     if (field.name === 'password' && !body[field.name]) continue
     const val = body[field.name]
     if (val !== undefined && val !== '') {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables } from '@/lib/schema'
+import { tables, isRealColumnField } from '@/lib/schema'
 import { recordUpdateAudit, recordDeleteAudit } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string; id: string } }
@@ -22,7 +22,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const schema = tables[table]
   const updateBody: Record<string, unknown> = {}
 
-  for (const field of schema.fields.filter(f => !f.isPk && !f.isReadonly)) {
+  for (const field of schema.fields.filter(f => !f.isPk && !f.isReadonly && isRealColumnField(f))) {
     if (field.name === 'password' && !body[field.name]) continue
     if (body[field.name] !== undefined) {
       updateBody[field.name] = parseValue(field.type, body[field.name])

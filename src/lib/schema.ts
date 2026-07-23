@@ -542,7 +542,7 @@ export function getSearchableFields(tableName: string): string[] {
   const schema = tables[tableName]
   if (!schema) return []
   return schema.fields
-    .filter(f => ['text', 'textarea', 'select'].includes(f.type) && !f.isPk && !f.isReadonly)
+    .filter(f => ['text', 'textarea', 'select'].includes(f.type) && !f.isPk && !f.isReadonly && isRealColumnField(f))
     .map(f => f.name)
 }
 
