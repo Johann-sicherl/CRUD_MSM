@@ -736,6 +736,12 @@ export default function AnalisadorEstruturasPage() {
   const [groupMissingAlert, setGroupMissingAlert] = useState<string | null>(null)
   const fieldOptionsCacheRef = useRef<Record<string, string[]> | null>(null)
 
+  // "Editar" — opens the exact same standard_equipment_items edit form used in
+  // Cadastro de Equipamentos, loaded with that card's real current DB row
+  // (from `equipmentRows`), for equipment already registered. Only touches
+  // standard_equipment_items — nothing about the structure analysis itself.
+  const [editEquipmentFile, setEditEquipmentFile] = useState<AnalysisFile | null>(null)
+
   // "Exportar Excel" — id of the card currently being exported, just to show
   // a small loading state on its button while the request is in flight.
   const [exportingId, setExportingId] = useState<string | null>(null)
@@ -1223,6 +1229,18 @@ export default function AnalisadorEstruturasPage() {
       {groupMissingAlert && (
         <GroupMissingAlert groupName={groupMissingAlert} onClose={() => setGroupMissingAlert(null)} />
       )}
+      {editEquipmentFile && (
+        <RecordModal
+          schema={tables.standard_equipment_items}
+          tableName="standard_equipment_items"
+          record={equipmentRows[editEquipmentFile.protheusCode.trim().toUpperCase()] ?? null}
+          onClose={() => setEditEquipmentFile(null)}
+          onSaved={() => {
+            setEditEquipmentFile(null)
+            loadEquipmentFilterData()
+          }}
+        />
+      )}
       {addModalFile && (
         <RecordModal
           schema={tables.standard_equipment_items}
@@ -1362,6 +1380,15 @@ export default function AnalisadorEstruturasPage() {
                         className="px-2.5 py-1 text-xs font-semibold text-on-surface-variant border border-outline-variant rounded hover:border-primary hover:text-primary disabled:opacity-50 transition-colors whitespace-nowrap"
                       >
                         {exportingId === file.id ? '⏳ Exportando…' : '⬇ Exportar Excel'}
+                      </button>
+                    )}
+                    {file.status === 'done' && file.equipmentFound === true && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setEditEquipmentFile(file) }}
+                        title="Edita este equipamento em Cadastro de Equipamentos sem sair desta tela"
+                        className="px-2.5 py-1 text-xs font-semibold text-on-surface-variant border border-outline-variant rounded hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
+                      >
+                        ✎ Editar
                       </button>
                     )}
                     {file.status === 'done' && file.equipmentFound === false && (
