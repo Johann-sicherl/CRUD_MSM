@@ -239,7 +239,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, unique: true, showInList: true, noBulkEdit: true },
       { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
-      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: true, showInList: true, noBulkEdit: true,
+      { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: false, showInList: true, noBulkEdit: true,
         lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
         validateExistsIn: { table: 'accessory_groups', field: 'legacy_id', displayField: 'name',
