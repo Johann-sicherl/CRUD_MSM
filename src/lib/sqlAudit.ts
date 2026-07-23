@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Field, TableSchema } from './schema'
+import { isRealColumnField } from './schema'
 
 /** Renders a JS value as a Postgres SQL literal, based on the field's type. */
 export function sqlLiteral(field: Field, value: unknown): string {
@@ -68,6 +69,12 @@ export function buildInsertSQL(table: string, schema: TableSchema, row: Record<s
     // (which the route computes a real value for) or created_at/updated_at
     // (which must always come from the production DB's own NOW() default).
     if (field.isReadonly && !field.autoIncrement) continue
+    // Virtual fields (concatFrom/countDuplicatesOf/lookupFrom via another
+    // field) have no column of their own in the real table — e.g. group_name
+    // and accessory_name on relationship_equip_accessory, or resumo/
+    // resumo_count on standard_equipment_items — including them here would
+    // generate an INSERT against a column that doesn't exist.
+    if (!isRealColumnField(field)) continue
     cols.push(field.name)
     vals.push(sqlLiteral(field, row[field.name]))
   }
