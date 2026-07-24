@@ -6,7 +6,14 @@ import ColumnFilter from './ColumnFilter'
 interface Equip     { legacy_id: number; name: string }
 interface Group     { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
+interface StdItem   { protheus_code: string; legacy_equipment_id: number }
 interface ItemCfg   { quantity: number; factor: string } // factor as string to allow '' → null
+
+// Synthetic "group" injected only into Grupo — Cód. Item (never Cód.
+// Dependente): instead of Cadastro de Componentes, lists every protheus_code
+// from Cadastro de Equipamentos (standard_equipment_items) tied to whatever
+// Equipamento is picked at the top of this same form.
+const EQUIPMENTS_GROUP_ID = '__equipamentos__'
 
 interface Props {
   onClose: () => void
@@ -17,6 +24,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const [equipments, setEquipments] = useState<Equip[]>([])
   const [groups,     setGroups]     = useState<Group[]>([])
   const [allAcc,     setAllAcc]     = useState<Accessory[]>([])
+  const [stdItems,   setStdItems]   = useState<StdItem[]>([])
   const [equipId,    setEquipId]    = useState('')
   const [g1,         setG1]         = useState('')
   const [g2,         setG2]         = useState('')
@@ -32,14 +40,23 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
       fetch('/api/equipments?limit=25000').then(r => r.json()),
       fetch('/api/accessory_groups?limit=25000').then(r => r.json()),
       fetch('/api/accessories?limit=25000').then(r => r.json()),
-    ]).then(([eq, gr, ac]) => {
+      fetch('/api/standard_equipment_items?limit=25000').then(r => r.json()),
+    ]).then(([eq, gr, ac, si]) => {
       setEquipments(eq.data || [])
       setGroups(gr.data || [])
       setAllAcc(ac.data || [])
+      setStdItems(si.data || [])
     })
   }, [])
 
-  const acc1 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g1), [allAcc, g1])
+  const acc1 = useMemo(() => {
+    if (g1 === EQUIPMENTS_GROUP_ID) {
+      return stdItems
+        .filter(r => String(r.legacy_equipment_id) === equipId)
+        .map(r => ({ protheus_code: r.protheus_code, name: r.protheus_code, legacy_group_id: null }))
+    }
+    return allAcc.filter(a => String(a.legacy_group_id) === g1)
+  }, [allAcc, g1, stdItems, equipId])
   const acc2 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g2), [allAcc, g2])
 
   // When the same group is selected: items chosen as trigger cannot be picked as dependent
@@ -126,9 +143,9 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
           {/* Group selectors */}
           <div className="grid grid-cols-2 gap-5">
             {([
-              { label: 'Grupo — Cód. Item',       val: g1, set: (v: string) => { setG1(v); setSel1(new Set()) } },
-              { label: 'Grupo — Cód. Dependente', val: g2, set: (v: string) => { setG2(v); setSel2(new Set()); setCfg2({}) } },
-            ] as const).map(({ label, val, set }) => (
+              { label: 'Grupo — Cód. Item',       val: g1, set: (v: string) => { setG1(v); setSel1(new Set()) }, showEquipments: true },
+              { label: 'Grupo — Cód. Dependente', val: g2, set: (v: string) => { setG2(v); setSel2(new Set()); setCfg2({}) }, showEquipments: false },
+            ] as const).map(({ label, val, set, showEquipments }) => (
               <div key={label}>
                 <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">{label}</label>
                 <select
@@ -137,6 +154,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
                   className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 >
                   <option value="">Selecione o grupo...</option>
+                  {showEquipments && <option value={EQUIPMENTS_GROUP_ID}>EQUIPAMENTOS</option>}
                   {groups.map(g => <option key={g.legacy_id} value={g.legacy_id}>{g.name}</option>)}
                 </select>
               </div>
