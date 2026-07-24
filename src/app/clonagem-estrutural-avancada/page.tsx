@@ -121,8 +121,11 @@ export default function ClonagemEstruturalAvancadaPage() {
       ])
 
       const matchesSource = (row: Record<string, unknown>) => String(row.legacy_equipment_id) === sourceId
+      // Only clone active rules — dependant_items and roller_tables have no
+      // status column at all, so they're unaffected and still bring everything.
+      const matchesSourceActive = (row: Record<string, unknown>) => matchesSource(row) && String(row.status) === 'active'
 
-      setRelRows((relJson.data || []).filter(matchesSource).map((r: Record<string, unknown>) => ({
+      setRelRows((relJson.data || []).filter(matchesSourceActive).map((r: Record<string, unknown>) => ({
         protheus_code: String(r.protheus_code ?? ''),
         description: r.description == null ? '' : String(r.description),
         legacy_general_alert_id: r.legacy_general_alert_id == null ? '0' : String(r.legacy_general_alert_id),
@@ -139,7 +142,7 @@ export default function ClonagemEstruturalAvancadaPage() {
         proportional_factor: r.proportional_factor == null ? '' : String(r.proportional_factor),
       })))
 
-      setNccRows((nccJson.data || []).filter(matchesSource).map((r: Record<string, unknown>) => ({
+      setNccRows((nccJson.data || []).filter(matchesSourceActive).map((r: Record<string, unknown>) => ({
         protheus_code: String(r.protheus_code ?? ''),
         remove_list_code: String(r.remove_list_code ?? ''),
         status: String(r.status ?? 'active'),
@@ -212,7 +215,9 @@ export default function ClonagemEstruturalAvancadaPage() {
           Copia, de um equipamento de origem para outro de destino, todas as regras cadastradas em Equipamento x
           Acessórios, Produtos Dependentes, Produtos Não Combináveis e Tipo Mesas de Roletes. Antes de efetivar,
           você revisa, edita ou remove qualquer linha — nada é gravado até clicar em &quot;Clonar&quot;. Um item que já
-          exista, idêntico, no equipamento de destino é automaticamente ignorado (não duplica).
+          exista, idêntico, no equipamento de destino é automaticamente ignorado (não duplica). Em Equipamento x
+          Acessórios e Produtos Não Combináveis, só são trazidas regras com status = active (Produtos Dependentes e
+          Tipo Mesas de Roletes não têm coluna de status, então trazem tudo).
         </p>
       </div>
 
