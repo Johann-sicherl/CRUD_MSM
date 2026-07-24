@@ -152,6 +152,16 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               <span className="truncate">Desenvolvedor de Queries</span>
             </Link>
             <Link
+              href="/clonagem-estrutural-avancada"
+              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                pathname === '/clonagem-estrutural-avancada'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+              }`}
+            >
+              <span className="truncate">Clonagem Estrut. Avançada</span>
+            </Link>
+            <Link
               href="/analisador-estruturas"
               className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
                 pathname === '/analisador-estruturas'
