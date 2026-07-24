@@ -192,7 +192,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
     if (cfg.extraGroup) {
       const eg = cfg.extraGroup
       const extraGroupId = `__extra__${eg.label}`
-      groups.push({ value: extraGroupId, label: eg.label })
+      groups.unshift({ value: extraGroupId, label: eg.label }) // pinned first — never buried at the bottom of a long group list
       const filterValue = form[eg.filterFromForm] ?? ''
       if (filterValue) {
         try {
