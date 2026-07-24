@@ -36,6 +36,13 @@ export interface CascadeLookupConfig {
   itemGroupField: string     // field in itemTable that references group key
   itemKeyField: string       // field whose value fills the form field
   itemDisplayField: string   // display label in picker list
+  extraGroup?: {             // one extra synthetic "group" in the picker, sourced from a different table entirely
+    label: string            // e.g. 'EQUIPAMENTOS' — shown as a normal option in the Grupo select
+    table: string            // e.g. 'standard_equipment_items'
+    itemKeyField: string     // field whose value fills the form field (also used as the item's display label — this table has no name column)
+    filterField: string      // column in `table` to filter by
+    filterFromForm: string   // name of the CURRENT record's own form field supplying the filter value (e.g. the "Equipamento" field already picked at the top of this same form)
+  }
 }
 
 export interface Field {
@@ -394,7 +401,13 @@ export const tables: Record<string, TableSchema> = {
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, listExpand: true, noBulkEdit: true,
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' } },
-      { name: 'protheus_code', label: 'Cód. Item', type: 'text', nullable: false, showInList: true, listFilterType: 'text', noBulkEdit: true },
+      { name: 'protheus_code', label: 'Cód. Item', type: 'text', nullable: false, showInList: true, listFilterType: 'text', noBulkEdit: true,
+        cascadeLookup: {
+          groupTable: 'accessory_groups', groupKeyField: 'legacy_id', groupDisplayField: 'name',
+          itemTable: 'accessories', itemGroupField: 'legacy_group_id', itemKeyField: 'protheus_code', itemDisplayField: 'name',
+          extraGroup: { label: 'EQUIPAMENTOS', table: 'standard_equipment_items', itemKeyField: 'protheus_code',
+            filterField: 'legacy_equipment_id', filterFromForm: 'legacy_equipment_id' },
+        } },
       { name: 'nome_item', label: 'Nome Item', type: 'text', nullable: true, showInList: true, hideInForm: true, listFilterType: 'text',
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
       { name: 'group_name_item', label: 'Grupo Item', type: 'text', nullable: true, showInList: true, hideInForm: true,

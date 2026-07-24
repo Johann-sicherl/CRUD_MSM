@@ -183,6 +183,32 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
       label: String(r[cfg.itemDisplayField]),
       groupId: String(r[cfg.itemGroupField]),
     }))
+
+    // Extra synthetic group sourced from a different table entirely (e.g.
+    // "EQUIPAMENTOS" pulling from standard_equipment_items instead of
+    // accessories), filtered by whatever value the form's own referenced
+    // field currently holds (e.g. the "Equipamento" picked at the top of
+    // this same record) — evaluated once, at the moment this picker opens.
+    if (cfg.extraGroup) {
+      const eg = cfg.extraGroup
+      const extraGroupId = `__extra__${eg.label}`
+      groups.push({ value: extraGroupId, label: eg.label })
+      const filterValue = form[eg.filterFromForm] ?? ''
+      if (filterValue) {
+        try {
+          const extraRes = await fetch(`/api/${eg.table}?limit=25000`)
+          if (extraRes.ok) {
+            const extraJson = await extraRes.json()
+            for (const r of (extraJson.data || []) as Record<string, unknown>[]) {
+              if (String(r[eg.filterField] ?? '') === filterValue) {
+                items.push({ value: String(r[eg.itemKeyField]), label: String(r[eg.itemKeyField]), groupId: extraGroupId })
+              }
+            }
+          }
+        } catch { /* extra group simply stays empty if this fetch fails */ }
+      }
+    }
+
     setCascade(prev => ({ ...prev, loading: false, groups, items }))
   }
 
