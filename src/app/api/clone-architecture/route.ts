@@ -46,6 +46,17 @@ function identityValue(table: string, row: Row): string {
   return IDENTITY_KEYS[table].map(k => String(row[k] ?? '').trim().toUpperCase()).join('|')
 }
 
+// Same coercion the generic POST/PUT routes already use (see parseValue in
+// src/app/api/[table]/route.ts) — an empty string from the review grid's
+// number/decimal inputs must become SQL NULL, never be sent through as "",
+// which Postgres rejects for an integer/numeric column.
+function parseCloneValue(type: string | undefined, value: unknown): unknown {
+  if (value === '' || value === null || value === undefined) return null
+  if (type === 'number')  { const n = parseInt(String(value));   return Number.isNaN(n) ? null : n }
+  if (type === 'decimal') { const n = parseFloat(String(value)); return Number.isNaN(n) ? null : n }
+  return value
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as Partial<ClonePayload>
 
@@ -65,7 +76,11 @@ export async function POST(request: NextRequest) {
 
   const [{ data: targetEquip }, { data: accessoryRows }] = await Promise.all([
     supabaseAdmin.from('equipments').select('legacy_id').eq('legacy_id', targetId).maybeSingle(),
-    supabaseAdmin.from('accessories').select('protheus_code, legacy_group_id'),
+    // Without an explicit limit, PostgREST caps this at its default page size
+    // (1000 rows) — Cadastro de Componentes can easily have more than that,
+    // which would silently drop real codes from groupByCode below and flag
+    // them as "inválido" even though they exist.
+    supabaseAdmin.from('accessories').select('protheus_code, legacy_group_id').limit(25000),
   ])
   if (!targetEquip) {
     return NextResponse.json({ error: 'Equipamento de destino não encontrado' }, { status: 400 })
@@ -90,6 +105,7 @@ export async function POST(request: NextRequest) {
       .from(tableName)
       .select('*')
       .eq('legacy_equipment_id', targetId)
+      .limit(25000)
     const existingKeys = new Set((existingTargetRows ?? []).map(r => identityValue(tableName, r as Row)))
 
     const toInsert: Row[] = []
@@ -118,7 +134,8 @@ export async function POST(request: NextRequest) {
 
       const insertBody: Row = { legacy_equipment_id: targetId }
       for (const f of COPY_FIELDS[tableName]) {
-        insertBody[f] = row[f] ?? null
+        const fieldDef = schema?.fields.find(x => x.name === f)
+        insertBody[f] = parseCloneValue(fieldDef?.type, row[f])
       }
       if (tableName === 'non_combinable_comps') {
         const code1 = String(row.protheus_code).trim().toUpperCase()
