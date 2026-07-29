@@ -6,6 +6,7 @@ import ColumnFilter from './ColumnFilter'
 interface Equip { legacy_id: number; name: string }
 interface Group { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
+interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
 
 interface Props {
   onClose: () => void
@@ -13,9 +14,10 @@ interface Props {
 }
 
 export default function NonCombinableModal({ onClose, onSaved }: Props) {
-  const [equipments, setEquipments] = useState<Equip[]>([])
-  const [groups,     setGroups]     = useState<Group[]>([])
-  const [allAcc,     setAllAcc]     = useState<Accessory[]>([])
+  const [equipments,       setEquipments]       = useState<Equip[]>([])
+  const [groups,           setGroups]           = useState<Group[]>([])
+  const [allAcc,           setAllAcc]           = useState<Accessory[]>([])
+  const [equipAccessories, setEquipAccessories] = useState<EquipAccessory[]>([])
   const [equipId,    setEquipId]    = useState('')
   const [g1,         setG1]         = useState('')
   const [g2,         setG2]         = useState('')
@@ -29,15 +31,37 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
       fetch('/api/equipments?limit=25000').then(r => r.json()),
       fetch('/api/accessory_groups?limit=25000').then(r => r.json()),
       fetch('/api/accessories?limit=25000').then(r => r.json()),
-    ]).then(([eq, gr, ac]) => {
+      fetch('/api/relationship_equip_accessory?limit=25000').then(r => r.json()),
+    ]).then(([eq, gr, ac, rel]) => {
       setEquipments(eq.data || [])
       setGroups(gr.data || [])
       setAllAcc(ac.data || [])
+      setEquipAccessories(rel.data || [])
     })
   }, [])
 
-  const acc1 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g1), [allAcc, g1])
-  const acc2 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g2), [allAcc, g2])
+  // Only accessories actually registered (via Equipamento x Acessórios) for
+  // the equipment picked above — a group can hold accessories that were
+  // never linked to this specific equipment, and those shouldn't be
+  // selectable here. null (instead of an empty Set) distinguishes "no
+  // equipment picked yet" from "picked, but nothing linked".
+  const linkedCodes = useMemo(() => {
+    if (!equipId) return null
+    return new Set(
+      equipAccessories
+        .filter(r => String(r.legacy_equipment_id) === equipId)
+        .map(r => r.protheus_code.trim().toUpperCase())
+    )
+  }, [equipAccessories, equipId])
+
+  const acc1 = useMemo(() => {
+    if (!linkedCodes) return []
+    return allAcc.filter(a => String(a.legacy_group_id) === g1 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+  }, [allAcc, g1, linkedCodes])
+  const acc2 = useMemo(() => {
+    if (!linkedCodes) return []
+    return allAcc.filter(a => String(a.legacy_group_id) === g2 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+  }, [allAcc, g2, linkedCodes])
 
   // When the same group is selected in both, items chosen in one box are blocked in the other
   const sameGroup = g1 !== '' && g1 === g2
@@ -150,6 +174,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
               onAll={visible => setSel1(new Set(visible.filter(a => !blocked1.has(a.protheus_code)).map(a => a.protheus_code)))}
               onNone={() => setSel1(new Set())}
               empty={!g1}
+              noEquip={!equipId}
             />
             <AccBox
               key={`box2-${g2}`}
@@ -161,6 +186,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
               onAll={visible => setSel2(new Set(visible.filter(a => !blocked2.has(a.protheus_code)).map(a => a.protheus_code)))}
               onNone={() => setSel2(new Set())}
               empty={!g2}
+              noEquip={!equipId}
             />
           </div>
 
@@ -213,7 +239,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
 // ── AccBox ────────────────────────────────────────────────────────────────────
 
 function AccBox({
-  title, items, selected, blockedCodes, onToggle, onAll, onNone, empty,
+  title, items, selected, blockedCodes, onToggle, onAll, onNone, empty, noEquip,
 }: {
   title: string
   items: Accessory[]
@@ -223,6 +249,7 @@ function AccBox({
   onAll: (visible: Accessory[]) => void
   onNone: () => void
   empty: boolean
+  noEquip: boolean
 }) {
   const [codeSearch,   setCodeSearch]   = useState('')
   const [codeSelected, setCodeSelected] = useState<string[]>([])
@@ -266,6 +293,8 @@ function AccBox({
 
       {empty ? (
         <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um grupo acima</div>
+      ) : noEquip ? (
+        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um equipamento acima</div>
       ) : (
         <>
           {/* Column headers + filters */}
