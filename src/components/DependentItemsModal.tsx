@@ -7,6 +7,7 @@ interface Equip     { legacy_id: number; name: string }
 interface Group     { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
 interface StdItem   { protheus_code: string; legacy_equipment_id: number }
+interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
 interface ItemCfg   { quantity: number; factor: string } // factor as string to allow '' → null
 interface AvulsoRow { id: string; code: string; quantity: string; cost: string; factor: string }
 
@@ -32,10 +33,11 @@ interface Props {
 }
 
 export default function DependentItemsModal({ onClose, onSaved }: Props) {
-  const [equipments, setEquipments] = useState<Equip[]>([])
-  const [groups,     setGroups]     = useState<Group[]>([])
-  const [allAcc,     setAllAcc]     = useState<Accessory[]>([])
-  const [stdItems,   setStdItems]   = useState<StdItem[]>([])
+  const [equipments,       setEquipments]       = useState<Equip[]>([])
+  const [groups,           setGroups]           = useState<Group[]>([])
+  const [allAcc,           setAllAcc]           = useState<Accessory[]>([])
+  const [stdItems,         setStdItems]         = useState<StdItem[]>([])
+  const [equipAccessories, setEquipAccessories] = useState<EquipAccessory[]>([])
   const [equipId,    setEquipId]    = useState('')
   const [g1,         setG1]         = useState('')
   const [g2,         setG2]         = useState('')
@@ -54,13 +56,31 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
       fetch('/api/accessory_groups?limit=25000').then(r => r.json()),
       fetch('/api/accessories?limit=25000').then(r => r.json()),
       fetch('/api/standard_equipment_items?limit=25000').then(r => r.json()),
-    ]).then(([eq, gr, ac, si]) => {
+      fetch('/api/relationship_equip_accessory?limit=25000').then(r => r.json()),
+    ]).then(([eq, gr, ac, si, rel]) => {
       setEquipments(eq.data || [])
       setGroups(gr.data || [])
       setAllAcc(ac.data || [])
       setStdItems(si.data || [])
+      setEquipAccessories(rel.data || [])
     })
   }, [])
+
+  // Only accessories actually registered (via Equipamento x Acessórios) for
+  // the equipment picked above — a group can hold accessories never linked
+  // to this specific equipment, and those shouldn't be selectable here.
+  // null (instead of an empty Set) distinguishes "no equipment picked yet"
+  // from "picked, but nothing linked". Doesn't apply to the EQUIPAMENTOS
+  // pseudo-group (already scoped to the equipment via standard_equipment_items
+  // itself) nor to CÓD. AVULSO (free typing, no group/join involved).
+  const linkedCodes = useMemo(() => {
+    if (!equipId) return null
+    return new Set(
+      equipAccessories
+        .filter(r => String(r.legacy_equipment_id) === equipId)
+        .map(r => r.protheus_code.trim().toUpperCase())
+    )
+  }, [equipAccessories, equipId])
 
   const acc1 = useMemo(() => {
     if (g1 === EQUIPMENTS_GROUP_ID) {
@@ -68,9 +88,13 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
         .filter(r => String(r.legacy_equipment_id) === equipId)
         .map(r => ({ protheus_code: r.protheus_code, name: r.protheus_code, legacy_group_id: null }))
     }
-    return allAcc.filter(a => String(a.legacy_group_id) === g1)
-  }, [allAcc, g1, stdItems, equipId])
-  const acc2 = useMemo(() => allAcc.filter(a => String(a.legacy_group_id) === g2), [allAcc, g2])
+    if (!linkedCodes) return []
+    return allAcc.filter(a => String(a.legacy_group_id) === g1 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+  }, [allAcc, g1, stdItems, equipId, linkedCodes])
+  const acc2 = useMemo(() => {
+    if (!linkedCodes) return []
+    return allAcc.filter(a => String(a.legacy_group_id) === g2 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+  }, [allAcc, g2, linkedCodes])
 
   // When the same group is selected: items chosen as trigger cannot be picked as dependent
   const sameGroup = g1 !== '' && g1 === g2
@@ -227,6 +251,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               onAll={visible => setSel1(new Set(visible.map(a => a.protheus_code)))}
               onNone={() => setSel1(new Set())}
               empty={!g1}
+              noEquip={!equipId}
             />
             {/* Box 2 — Cód. Dependente: manual rows (CÓD. AVULSO) or the usual group picker */}
             {isAvulso ? (
@@ -252,6 +277,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
                 onNone={() => setSel2(new Set())}
                 onCfgChange={setCfgField}
                 empty={!g2}
+                noEquip={!equipId}
               />
             )}
           </div>
@@ -301,10 +327,10 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 // ── TriggerBox (Cód. Item — standard, no extra columns) ──────────────────────
 
 function TriggerBox({
-  title, items, selected, onToggle, onAll, onNone, empty,
+  title, items, selected, onToggle, onAll, onNone, empty, noEquip,
 }: {
   title: string; items: Accessory[]; selected: Set<string>
-  onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void; empty: boolean
+  onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void; empty: boolean; noEquip: boolean
 }) {
   const [codeSearch,   setCodeSearch]   = useState('')
   const [codeSelected, setCodeSelected] = useState<string[]>([])
@@ -344,6 +370,8 @@ function TriggerBox({
       </div>
       {empty ? (
         <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um grupo acima</div>
+      ) : noEquip ? (
+        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um equipamento acima</div>
       ) : (
         <>
           <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[10px] font-semibold text-outline uppercase tracking-[0.1em]">
@@ -386,11 +414,11 @@ function TriggerBox({
 // ── DependentBox (Cód. Dependente — with QTD + Fator Prop per item) ──────────
 
 function DependentBox({
-  title, items, selected, blockedCodes, cfg, onToggle, onAll, onNone, onCfgChange, empty,
+  title, items, selected, blockedCodes, cfg, onToggle, onAll, onNone, onCfgChange, empty, noEquip,
 }: {
   title: string; items: Accessory[]; selected: Set<string>; blockedCodes: Set<string>; cfg: Record<string, ItemCfg>
   onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void
-  onCfgChange: (code: string, field: 'quantity' | 'factor', val: string) => void; empty: boolean
+  onCfgChange: (code: string, field: 'quantity' | 'factor', val: string) => void; empty: boolean; noEquip: boolean
 }) {
   const [codeSearch,   setCodeSearch]   = useState('')
   const [codeSelected, setCodeSelected] = useState<string[]>([])
@@ -431,6 +459,8 @@ function DependentBox({
       </div>
       {empty ? (
         <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um grupo acima</div>
+      ) : noEquip ? (
+        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um equipamento acima</div>
       ) : (
         <>
           {/* Column headers */}
