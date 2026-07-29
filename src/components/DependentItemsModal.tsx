@@ -50,6 +50,16 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const [saving,     setSaving]     = useState(false)
   const [result,     setResult]     = useState<{ ok: number; fail: number } | null>(null)
 
+  // Protheus connection — only needed to resolve display names for the
+  // EQUIPAMENTOS group (B1_DESC, falling back to DESC_ESTRUTURA, else 'N/A').
+  // Credentials live only in this component's state, never persisted.
+  const [dbCreds,        setDbCreds]        = useState<{ user: string; password: string } | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [loginError,     setLoginError]     = useState('')
+  const [connecting,     setConnecting]     = useState(false)
+  const [equipNames,     setEquipNames]     = useState<Record<string, string>>({})
+  const [loadingNames,   setLoadingNames]   = useState(false)
+
   useEffect(() => {
     Promise.all([
       fetch('/api/equipments?limit=25000').then(r => r.json()),
@@ -82,15 +92,44 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
     )
   }, [equipAccessories, equipId])
 
+  // Raw protheus_code list behind the EQUIPAMENTOS group, before Protheus
+  // names are resolved — also what drives the name-fetch effect below.
+  const equipCodes = useMemo(() => {
+    if (g1 !== EQUIPMENTS_GROUP_ID) return []
+    return stdItems.filter(r => String(r.legacy_equipment_id) === equipId).map(r => r.protheus_code)
+  }, [g1, stdItems, equipId])
+
+  useEffect(() => {
+    if (!dbCreds || equipCodes.length === 0) return
+    setLoadingNames(true)
+    fetch('/api/protheus-nomes-item', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, codes: equipCodes }),
+    })
+      .then(r => r.json())
+      .then(json => { if (json.names) setEquipNames(prev => ({ ...prev, ...json.names })) })
+      .catch(() => {})
+      .finally(() => setLoadingNames(false))
+  }, [dbCreds, equipCodes])
+
+  const handleConnect = (user: string, password: string) => {
+    setConnecting(true)
+    setLoginError('')
+    setDbCreds({ user, password })
+    setConnecting(false)
+    setShowLoginModal(false)
+  }
+
   const acc1 = useMemo(() => {
     if (g1 === EQUIPMENTS_GROUP_ID) {
-      return stdItems
-        .filter(r => String(r.legacy_equipment_id) === equipId)
-        .map(r => ({ protheus_code: r.protheus_code, name: r.protheus_code, legacy_group_id: null }))
+      // Falls back to the raw code (today's behavior) until Protheus is
+      // connected and the name for that specific code has come back.
+      return equipCodes.map(code => ({ protheus_code: code, name: equipNames[code] ?? code, legacy_group_id: null }))
     }
     if (!linkedCodes) return []
     return allAcc.filter(a => String(a.legacy_group_id) === g1 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
-  }, [allAcc, g1, stdItems, equipId, linkedCodes])
+  }, [allAcc, g1, equipCodes, equipNames, linkedCodes])
   const acc2 = useMemo(() => {
     if (!linkedCodes) return []
     return allAcc.filter(a => String(a.legacy_group_id) === g2 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
@@ -174,6 +213,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const canSubmit = !!(equipId && g1 && g2 && sel1.size && dependentCount)
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-surface-container rounded-lg border border-outline-variant shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col animate-fade-in">
 
@@ -232,6 +272,25 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               </select>
             </div>
           </div>
+
+          {/* Protheus connection — only relevant for EQUIPAMENTOS' names (B1_DESC / DESC_ESTRUTURA) */}
+          {g1 === EQUIPMENTS_GROUP_ID && (
+            <div className="flex items-center gap-3 -mt-2">
+              {dbCreds ? (
+                <span className="text-xs text-outline">
+                  {loadingNames ? '⏳ Buscando nomes no Protheus…' : '🔌 Conectado ao Protheus — nomes de EQUIPAMENTOS resolvidos por B1_DESC/DESC_ESTRUTURA'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowLoginModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-dashed border-outline-variant text-xs text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                >
+                  🔌 Conectar ao Protheus para ver os nomes reais de EQUIPAMENTOS
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Two accessory boxes */}
           <div className="grid grid-cols-2 gap-5">
@@ -313,6 +372,79 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
             </button>
           )}
         </div>
+      </div>
+    </div>
+    {showLoginModal && (
+      <DbLoginModal
+        onClose={() => setShowLoginModal(false)}
+        onConnect={handleConnect}
+        connecting={connecting}
+        error={loginError}
+      />
+    )}
+    </>
+  )
+}
+
+// ── DbLoginModal (Protheus credentials — never stored, only kept in state) ──
+
+function DbLoginModal({ onClose, onConnect, connecting, error }: {
+  onClose: () => void
+  onConnect: (user: string, password: string) => void
+  connecting: boolean
+  error: string
+}) {
+  const [user, setUser] = useState('')
+  const [password, setPassword] = useState('')
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-sm animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant">
+          <h2 className="text-base font-semibold text-on-surface">Conectar ao Banco Protheus</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+        <form
+          className="p-5 flex flex-col gap-3"
+          onSubmit={e => { e.preventDefault(); onConnect(user, password) }}
+        >
+          <p className="text-sm text-on-surface-variant">
+            Informe seu usuário e senha do SQL Server (PROTHEUS12). A conexão é aberta só para esta consulta e
+            fechada em seguida — nada fica salvo.
+          </p>
+          <label className="text-xs font-semibold text-on-surface-variant">
+            Usuário
+            <input
+              type="text"
+              autoFocus
+              value={user}
+              onChange={e => setUser(e.target.value)}
+              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+          </label>
+          <label className="text-xs font-semibold text-on-surface-variant">
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+          </label>
+          {error && <div className="text-error text-xs">⚠ {error}</div>}
+          <div className="flex items-center justify-end gap-2 mt-2">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={connecting || !user.trim() || !password}
+              className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
+            >
+              {connecting ? 'Conectando…' : 'Conectar'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

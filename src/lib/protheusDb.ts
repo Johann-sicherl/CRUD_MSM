@@ -274,6 +274,29 @@ export async function getProductDescription(code: string, creds: ProtheusCredent
   return infoByCode.get(code.trim().toUpperCase())?.description ?? null
 }
 
+/**
+ * Display name for a batch of codes — used by the EQUIPAMENTOS group in
+ * Produtos Dependentes (see DependentItemsModal.tsx), which lists
+ * protheus_code values straight from standard_equipment_items with no name
+ * column of its own. Tries B1_DESC (SB1010 product master, keyed by
+ * B1_COD) first, then falls back to DESC_ESTRUTURA (ESTRUTURAS); 'N/A' when
+ * the code is found in neither.
+ */
+export async function getEquipmentItemNames(codes: string[], creds: ProtheusCredentials): Promise<Record<string, string>> {
+  const [{ infoByCode }, { descriptions }] = await Promise.all([
+    loadProductInfoCache(creds),
+    loadStructureCache(creds),
+  ])
+  const names: Record<string, string> = {}
+  for (const code of codes) {
+    const trimmed = code.trim()
+    const productDesc = infoByCode.get(trimmed.toUpperCase())?.description
+    const structDesc = descriptions.get(trimmed)
+    names[code] = productDesc || structDesc || 'N/A'
+  }
+  return names
+}
+
 // ─── Full BOM detail (Excel export) ─────────────────────────────────────
 // Separate cache/query from everything above — feeds only the "Exportar
 // Excel" button in Busc. Itens Série Estrut. and needs several columns
