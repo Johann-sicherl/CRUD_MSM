@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
 import ColumnFilter from '@/components/ColumnFilter'
+import { useProtheusAuth } from '@/lib/protheusAuthContext'
 
 const STORAGE_KEY = 'busca-avancada-acessorios-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
@@ -94,74 +95,6 @@ function Badge({ tone, children }: { tone: 'error' | 'success' | 'outline' | 'am
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
       {children}
     </span>
-  )
-}
-
-// ─── Protheus DB login popup ────────────────────────────────────────────
-// Credentials never touch localStorage/sessionStorage — kept only in React
-// state for the current page visit, sent per-request to the backend, which
-// opens a short-lived connection and closes it right away. Duplicated here
-// (rather than shared with analisador-estruturas/page.tsx) on purpose, to
-// avoid touching that already-working file for this unrelated page.
-function DbLoginModal({ onClose, onConnect, connecting, error }: {
-  onClose: () => void
-  onConnect: (user: string, password: string) => void
-  connecting: boolean
-  error: string
-}) {
-  const [user, setUser] = useState('')
-  const [password, setPassword] = useState('')
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-sm animate-fade-in">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant">
-          <h2 className="text-base font-semibold text-on-surface">Conectar ao Banco Protheus</h2>
-          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
-        </div>
-        <form
-          className="p-5 flex flex-col gap-3"
-          onSubmit={e => { e.preventDefault(); onConnect(user, password) }}
-        >
-          <p className="text-sm text-on-surface-variant">
-            Informe seu usuário e senha do SQL Server (PROTHEUS12). A conexão é aberta só para esta consulta e
-            fechada em seguida — nada fica salvo.
-          </p>
-          <label className="text-xs font-semibold text-on-surface-variant">
-            Usuário
-            <input
-              type="text"
-              autoFocus
-              value={user}
-              onChange={e => setUser(e.target.value)}
-              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-            />
-          </label>
-          <label className="text-xs font-semibold text-on-surface-variant">
-            Senha
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-            />
-          </label>
-          {error && <div className="text-error text-xs">⚠ {error}</div>}
-          <div className="flex items-center justify-end gap-2 mt-2">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={connecting || !user.trim() || !password}
-              className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
-            >
-              {connecting ? 'Conectando…' : 'Conectar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   )
 }
 
@@ -269,10 +202,9 @@ function AdvancedFilterModal({
 }
 
 export default function BuscaAvancadaAcessoriosPage() {
-  const [dbCreds, setDbCreds] = useState<{ user: string; password: string } | null>(null)
-  const [showLoginModal, setShowLoginModal] = useState(true)
-  const [loginError, setLoginError] = useState('')
-  const [connecting, setConnecting] = useState(false)
+  // Single app-wide Protheus connection (see Sidebar) — this page no longer
+  // has its own connect/disconnect button or login modal.
+  const { creds: dbCreds, openPrompt: openProtheusPrompt } = useProtheusAuth()
 
   const [headerPrefixInput, setHeaderPrefixInput] = useState(DEFAULT_HEADER_PREFIXES)
   const [nivel2PrefixInput, setNivel2PrefixInput] = useState(DEFAULT_NIVEL2_PREFIXES)
@@ -372,16 +304,8 @@ export default function BuscaAvancadaAcessoriosPage() {
     })()
   }, [])
 
-  const handleConnect = (user: string, password: string) => {
-    setConnecting(true)
-    setLoginError('')
-    setDbCreds({ user, password })
-    setConnecting(false)
-    setShowLoginModal(false)
-  }
-
   const runScan = async () => {
-    if (!dbCreds) { setShowLoginModal(true); return }
+    if (!dbCreds) { openProtheusPrompt(); return }
     const headerPrefixes = headerPrefixInput.split(',').map(p => p.trim()).filter(Boolean)
     const nivel2Prefixes = nivel2PrefixInput.split(',').map(p => p.trim()).filter(Boolean)
     if (headerPrefixes.length === 0) { setScanError('Informe ao menos um prefixo de estrutura'); return }
@@ -686,22 +610,9 @@ export default function BuscaAvancadaAcessoriosPage() {
 
       <div className="mb-1 flex items-center gap-3 flex-wrap">
         {dbCreds ? (
-          <>
-            <Badge tone="success">Conectado ao Protheus</Badge>
-            <button
-              onClick={() => { setDbCreds(null); setShowLoginModal(true) }}
-              className="text-xs text-outline hover:text-error"
-            >
-              desconectar
-            </button>
-          </>
+          <Badge tone="success">Conectado ao Protheus</Badge>
         ) : (
-          <button
-            onClick={() => setShowLoginModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary cursor-pointer transition-colors text-sm font-semibold"
-          >
-            🔌 Conectar ao Banco Protheus
-          </button>
+          <p className="text-xs text-outline">Conecte ao Protheus (barra lateral) para escanear as estruturas.</p>
         )}
       </div>
       {dbCreds && (
@@ -709,15 +620,6 @@ export default function BuscaAvancadaAcessoriosPage() {
           A primeira busca carrega a tabela ESTRUTURAS inteira para a memória (pode levar até 1–2 min); as buscas
           seguintes usam esse cache e ficam quase instantâneas.
         </p>
-      )}
-
-      {showLoginModal && (
-        <DbLoginModal
-          onClose={() => setShowLoginModal(false)}
-          onConnect={handleConnect}
-          connecting={connecting}
-          error={loginError}
-        />
       )}
       {advancedFilterOpen && (
         <AdvancedFilterModal

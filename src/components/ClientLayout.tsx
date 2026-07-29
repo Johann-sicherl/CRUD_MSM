@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import ThemeZoomBar from '@/components/ThemeZoomBar'
+import { ProtheusAuthProvider } from '@/lib/protheusAuthContext'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [pinned, setPinned] = useState(true)
@@ -42,7 +43,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }, [])
 
   return (
-    <>
+    <ProtheusAuthProvider>
       <Sidebar pinned={pinned} onPinChange={handlePinChange} />
       <main
         className={`relative z-10 min-h-screen flex flex-col transition-[margin-left] duration-200 ${
@@ -52,6 +53,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <ThemeZoomBar />
         {children}
       </main>
-    </>
+    </ProtheusAuthProvider>
   )
 }

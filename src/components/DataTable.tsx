@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
+import { useProtheusAuth } from '@/lib/protheusAuthContext'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -143,11 +144,11 @@ export default function DataTable({ tableName, schema }: Props) {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
   // View-only Protheus status flag column (see schema.protheusStatusCheckField) — ATIVO/BLOQUEADO
-  // per product code (SB1010). Credentials are never stored, only used to pull the status map once per connect.
+  // per product code (SB1010). Uses the single app-wide Protheus connection
+  // (see Sidebar) — no per-table connect button/modal anymore.
+  const { creds: protheusCreds } = useProtheusAuth()
   const [protheusStatusMap, setProtheusStatusMap] = useState<Map<string, ProtheusProductStatus> | null>(null)
-  const [protheusModalOpen, setProtheusModalOpen] = useState(false)
-  const [protheusConnecting, setProtheusConnecting] = useState(false)
-  const [protheusError, setProtheusError] = useState('')
+  const [protheusChecking, setProtheusChecking] = useState(false)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
   // Columns actually rendered — excludes hideInList fields (e.g. Resumo, kept
@@ -158,7 +159,7 @@ export default function DataTable({ tableName, schema }: Props) {
   const pinnedListFields = useMemo(() => visibleListFields.filter(f => f.countDuplicatesOf), [visibleListFields])
   const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
-  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()) }, [tableName])
+  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null) }, [tableName])
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -314,25 +315,32 @@ export default function DataTable({ tableName, schema }: Props) {
     return protheusStatusMap.get(code) ?? null
   }, [schema.protheusStatusCheckField, protheusStatusMap])
 
-  const handleProtheusConnect = async (user: string, password: string) => {
-    setProtheusConnecting(true)
-    setProtheusError('')
+  const checkProtheusStatus = useCallback(async () => {
+    if (!protheusCreds) return
+    setProtheusChecking(true)
     try {
       const res = await fetch('/api/protheus-produto-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user, password }),
+        body: JSON.stringify({ user: protheusCreds.user, password: protheusCreds.password }),
       })
+      if (!res.ok) return
       const json = await res.json()
-      if (!res.ok) { setProtheusError(json.error || 'Falha ao consultar o banco Protheus'); return }
       setProtheusStatusMap(new Map(Object.entries(json.statuses as Record<string, ProtheusProductStatus>)))
-      setProtheusModalOpen(false)
     } catch {
-      setProtheusError('Erro de comunicação com o banco Protheus')
+      // Status flag just stays unverified if this fails — nothing else on the page depends on it.
     } finally {
-      setProtheusConnecting(false)
+      setProtheusChecking(false)
     }
-  }
+  }, [protheusCreds])
+
+  // Runs once the single app-wide Protheus connection (see Sidebar) is
+  // available — no per-table connect button anymore.
+  useEffect(() => {
+    if (!schema.protheusStatusCheckField || !protheusCreds || protheusStatusMap) return
+    checkProtheusStatus()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema.protheusStatusCheckField, protheusCreds, protheusStatusMap])
 
   const handleExportVisible = () => {
     const includeProtheusFlag = !!schema.protheusStatusCheckField && !!protheusStatusMap
@@ -417,19 +425,17 @@ export default function DataTable({ tableName, schema }: Props) {
       {schema.protheusStatusCheckField && (
         protheusStatusMap ? (
           <button
-            onClick={() => setProtheusModalOpen(true)}
+            onClick={checkProtheusStatus}
+            disabled={protheusChecking}
             title="Consultar novamente o banco Protheus"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-green-400 border border-green-500/30 rounded bg-green-500/10 hover:bg-green-500/20 transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-green-400 border border-green-500/30 rounded bg-green-500/10 hover:bg-green-500/20 disabled:opacity-60 transition-colors whitespace-nowrap"
           >
-            ✓ Verificado no Protheus
+            {protheusChecking ? '⏳ Verificando…' : '✓ Verificado no Protheus'}
           </button>
+        ) : protheusCreds ? (
+          <span className="text-xs text-outline">⏳ Verificando no Protheus…</span>
         ) : (
-          <button
-            onClick={() => setProtheusModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
-          >
-            🔌 Verificar no Protheus
-          </button>
+          <span className="text-xs text-outline">Conecte ao Protheus (barra lateral) para ver o status ATIVO/BLOQUEADO</span>
         )
       )}
       {schema.bulkEdit && selectedIds.size > 0 && (
@@ -753,60 +759,6 @@ export default function DataTable({ tableName, schema }: Props) {
           </>
         )}
       </div>
-
-      {/* Protheus structure-check login */}
-      {protheusModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl p-6 w-full max-w-sm animate-fade-in">
-            <h3 className="text-base font-semibold text-on-surface mb-2">Conectar ao Banco Protheus</h3>
-            <p className="text-on-surface-variant text-sm mb-4">
-              Verifica o status (ATIVO/BLOQUEADO) de cada código desta lista no cadastro de produtos do
-              Protheus. A conexão é aberta só para esta consulta e fechada em seguida — nada fica salvo.
-            </p>
-            <form
-              className="flex flex-col gap-3"
-              onSubmit={e => {
-                e.preventDefault()
-                const form = e.target as HTMLFormElement
-                const user = (form.elements.namedItem('protheusUser') as HTMLInputElement).value
-                const password = (form.elements.namedItem('protheusPassword') as HTMLInputElement).value
-                handleProtheusConnect(user, password)
-              }}
-            >
-              <input
-                name="protheusUser"
-                type="text"
-                placeholder="Usuário"
-                autoFocus
-                className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-              />
-              <input
-                name="protheusPassword"
-                type="password"
-                placeholder="Senha"
-                className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-              />
-              {protheusError && <div className="text-error text-xs">⚠ {protheusError}</div>}
-              <div className="flex justify-end gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setProtheusModalOpen(false)}
-                  className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={protheusConnecting}
-                  className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
-                >
-                  {protheusConnecting ? 'Conectando…' : 'Conectar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Bulk delete confirmation */}
       {bulkDeleteOpen && (

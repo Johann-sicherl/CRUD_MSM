@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
+import { useProtheusAuth } from '@/lib/protheusAuthContext'
 
 interface Props {
   pinned: boolean
@@ -17,6 +18,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const pathname = usePathname()
   const [hovered, setHovered] = useState(false)
   const expanded = pinned || hovered
+  const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
 
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
@@ -211,15 +213,31 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
         </nav>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-outline-variant text-[10px] text-outline font-mono flex items-center justify-between">
-          <span>10 tabelas · v3.1</span>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${
-            pinned
-              ? 'text-primary border-primary/30 bg-primary/10'
-              : 'text-outline border-outline-variant'
-          }`}>
-            {pinned ? 'FIXADO' : 'AUTO'}
-          </span>
+        <div className="px-5 py-3 border-t border-outline-variant text-[10px] text-outline font-mono flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span>10 tabelas · v3.1</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${
+              pinned
+                ? 'text-primary border-primary/30 bg-primary/10'
+                : 'text-outline border-outline-variant'
+            }`}>
+              {pinned ? 'FIXADO' : 'AUTO'}
+            </span>
+          </div>
+          {/* Única conexão ao Protheus da aplicação inteira — usada por todas as
+              telas que consultam o banco (verificação de status, buscas de
+              estrutura, nomes de equipamento etc.) */}
+          <button
+            onClick={() => protheusCreds ? disconnectProtheus() : openProtheusPrompt()}
+            title={protheusCreds ? 'Desconectar do Protheus' : 'Conectar ao Protheus'}
+            className={`flex items-center justify-center gap-1.5 px-2 py-1 rounded border text-[9px] font-mono transition-colors ${
+              protheusCreds
+                ? 'text-green-400 border-green-500/30 bg-green-500/10 hover:bg-green-500/20'
+                : 'text-outline border-outline-variant hover:border-primary hover:text-primary'
+            }`}
+          >
+            {protheusCreds ? '✓ Protheus conectado' : '🔌 Conectar ao Protheus'}
+          </button>
         </div>
       </aside>
     </>
