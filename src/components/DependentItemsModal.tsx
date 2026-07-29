@@ -17,8 +17,8 @@ interface AvulsoRow { id: string; code: string; quantity: string; cost: string; 
 // Equipamento is picked at the top of this same form.
 const EQUIPMENTS_GROUP_ID = '__equipamentos__'
 
-// Synthetic "group" injected only into Grupo — Cód. Dependente, and only
-// once EQUIPAMENTOS is picked on the Cód. Item side — lets the user type in
+// Synthetic "group" injected into Grupo — Cód. Dependente, always available
+// regardless of what's picked on the Cód. Item side — lets the user type in
 // dependent codes by hand instead of picking from a real group's item list.
 const CODIGO_AVULSO_ID = '__avulso__'
 
@@ -207,13 +207,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">Grupo — Cód. Item</label>
               <select
                 value={g1}
-                onChange={e => {
-                  const v = e.target.value
-                  setG1(v); setSel1(new Set())
-                  // CÓD. AVULSO only makes sense with EQUIPAMENTOS on this side —
-                  // drop it if it was picked and the user switches away
-                  if (v !== EQUIPMENTS_GROUP_ID && g2 === CODIGO_AVULSO_ID) { setG2(''); setSel2(new Set()); setCfg2({}) }
-                }}
+                onChange={e => { setG1(e.target.value); setSel1(new Set()) }}
                 className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
               >
                 <option value="">Selecione o grupo...</option>
@@ -233,7 +227,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
                 className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
               >
                 <option value="">Selecione o grupo...</option>
-                {g1 === EQUIPMENTS_GROUP_ID && <option value={CODIGO_AVULSO_ID}>CÓD. AVULSO</option>}
+                <option value={CODIGO_AVULSO_ID}>CÓD. AVULSO</option>
                 {groups.map(g => <option key={g.legacy_id} value={g.legacy_id}>{g.name}</option>)}
               </select>
             </div>
