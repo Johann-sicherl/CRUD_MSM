@@ -466,6 +466,49 @@ export async function explodeBomForExport(
   return { rows, descEstrutura: rootDesc, found: byEstrutura.has(root) || descByEstrutura.has(root) }
 }
 
+// ─── BOM cost summary (Busc. Itens Série Estrut. card badges) ───────────
+// Separate, narrower calculation from explodeBomForExport above: only counts
+// cost from raw-material lines (B1_TIPO = 'MP') at ANY level, excluding
+// phantom structures (FANTASMA = 'S') — this is deliberately not "every
+// line, every level" (which double-counts: a sub-assembly's own CUSTO_STD
+// already reflects its children's cost). Reuses the same BomDetailCache, no
+// extra Protheus round trip beyond the one shared full-table load.
+
+export interface BomCostSummary {
+  custoStdTotal: number   // soma de QTD TOTAL × CUSTO_STD, só linhas MP não-fantasma
+  custoPondTotal: number  // idem, usando C_ULT_ENTRADA
+  hasMissingCost: boolean // alguma linha MP não-fantasma com custo (std ou última entrada) zerado
+}
+
+export async function calculateBomCost(protheusCode: string, creds: ProtheusCredentials): Promise<BomCostSummary> {
+  const { byEstrutura } = await loadBomDetailCache(creds)
+  const root = protheusCode.trim()
+
+  let custoStdTotal = 0
+  let custoPondTotal = 0
+  let hasMissingCost = false
+
+  const visit = (codPai: string, fator: number, path: Set<string>) => {
+    const children = byEstrutura.get(codPai)
+    if (!children || path.has(codPai)) return
+    const nextPath = new Set(path)
+    nextPath.add(codPai)
+
+    for (const child of children) {
+      const qtdTotal = child.quant * fator
+      if (child.tipo === 'MP' && child.fantasma !== 'S') {
+        custoStdTotal += qtdTotal * child.custoStd
+        custoPondTotal += qtdTotal * child.custoPond
+        if (child.custoStd === 0 || child.custoPond === 0) hasMissingCost = true
+      }
+      visit(child.componente, qtdTotal, nextPath)
+    }
+  }
+
+  visit(root, 1, new Set())
+  return { custoStdTotal, custoPondTotal, hasMissingCost }
+}
+
 // ─── Acessórios por equipamento (Busc. Avançada Acessórios) ─────────────
 // Reuses the same BomDetailCache built for "Exportar Excel" above — no new
 // Protheus query needed. The company's own hierarchy: a "26.xx" header is

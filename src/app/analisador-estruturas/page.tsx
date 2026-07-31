@@ -81,6 +81,12 @@ interface PropertyResult {
   status: 'ok' | 'mismatch' | 'duplicate' | 'missing'
 }
 
+interface BomCostSummary {
+  custoStdTotal: number
+  custoPondTotal: number
+  hasMissingCost: boolean
+}
+
 interface AnalysisFile {
   id: string
   name: string
@@ -93,7 +99,10 @@ interface AnalysisFile {
   properties?: PropertyResult[]
   description?: string | null
   foundInProtheus?: boolean
+  bomCost?: BomCostSummary | 'loading' | 'error'
 }
+
+const fmtBRL = (n: number) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const FIELD_LABELS: Record<string, string> = {
   processor: 'Processador',
@@ -219,7 +228,6 @@ async function buildAndDownloadStructureWorkbook(
   const custoStandard = rows.reduce((sum, r) => sum + r.stdTotal, 0)
   const custoUltimoPreco = rows.reduce((sum, r) => sum + r.pondTotal, 0)
   const semPreco = rows.filter(r => r.alerta === 'PRECIFICAR')
-  const fmtBRL = (n: number) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const wsPropriedades = XLSX.utils.aoa_to_sheet([
     ['CÓDIGO DA ESTRUTURA', protheusCode],
     ['DENOMINAÇÃO DA ESTRUTURA', descEstrutura || ''],
@@ -724,6 +732,33 @@ export default function AnalisadorEstruturasPage() {
     if (!hydrated.current) return
     idbSet(STORAGE_KEY, { files, expandedId }).catch(() => {})
   }, [files, expandedId])
+
+  // Custo BOM (badges no card) — calculado sob demanda para cada equipamento
+  // já analisado, assim que a conexão Protheus (barra lateral) estiver
+  // disponível. Não depende de "Exportar Excel"; funciona tanto para cards
+  // vindos de upload de Excel quanto de busca direta no banco, já que o
+  // cálculo em si sempre consulta o Protheus ao vivo pelo protheusCode.
+  useEffect(() => {
+    if (!dbCreds) return
+    const pending = files.filter(f => f.status === 'done' && f.bomCost === undefined)
+    if (pending.length === 0) return
+    setFiles(prev => prev.map(f => pending.some(p => p.id === f.id) ? { ...f, bomCost: 'loading' } : f))
+    pending.forEach(file => {
+      fetch('/api/protheus-custo-bom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, protheusCode: file.protheusCode }),
+      })
+        .then(res => res.json().then(json => ({ ok: res.ok, json })))
+        .then(({ ok, json }) => {
+          setFiles(prev => prev.map(f => f.id === file.id ? { ...f, bomCost: ok ? (json as BomCostSummary) : 'error' } : f))
+        })
+        .catch(() => {
+          setFiles(prev => prev.map(f => f.id === file.id ? { ...f, bomCost: 'error' } : f))
+        })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, dbCreds])
 
   // Load the equipment-group membership once, so picking a group can run
   // the DB search for every equipment code inside it. Only active items —
@@ -1303,6 +1338,14 @@ export default function AnalisadorEstruturasPage() {
                         {duplicateCount > 0 && <Badge tone="amber">{duplicateCount} duplicidade(s)</Badge>}
                         {missingCount > 0 && <Badge tone="amber">{missingCount} propriedade(s) sem código</Badge>}
                         {errorCount === 0 && duplicateCount === 0 && missingCount === 0 && <Badge tone="success">Tudo OK</Badge>}
+                        {file.bomCost === 'loading' && <Badge tone="outline">⏳ Calculando custo BOM…</Badge>}
+                        {file.bomCost && file.bomCost !== 'loading' && file.bomCost !== 'error' && (
+                          <>
+                            <Badge tone="outline">Custo Padrão: {fmtBRL(file.bomCost.custoStdTotal)}</Badge>
+                            <Badge tone="outline">Última Entrada: {fmtBRL(file.bomCost.custoPondTotal)}</Badge>
+                            {file.bomCost.hasMissingCost && <Badge tone="amber">Possui MP sem custo</Badge>}
+                          </>
+                        )}
                       </>
                     )}
                   </div>
