@@ -21,20 +21,21 @@ function Badge({ tone, children }: { tone: 'outline' | 'success' | 'amber'; chil
 
 function buildCleanText(result: ParseResult): string {
   const lines: string[] = []
+  const PREFIX = 'BD MSM - Cadastrar '
   if (result.items.length > 0) {
     lines.push('ITENS')
     for (const it of result.items) {
       const parts = [it.codes.join(' + '), '—', it.name]
       if (it.qty) parts.push(`(Qtd: ${it.qty})`)
       if (it.label) parts.push(`[${it.label}]`)
-      lines.push(parts.join(' '))
+      lines.push(PREFIX + parts.join(' '))
     }
   }
   if (result.freeText.length > 0) {
     if (lines.length > 0) lines.push('')
     lines.push('OBSERVAÇÕES / ESPECIFICAÇÕES SEM CÓDIGO')
     for (const ft of result.freeText) {
-      lines.push(ft.label ? `[${ft.label}] ${ft.text}` : ft.text)
+      lines.push(PREFIX + (ft.label ? `[${ft.label}] ${ft.text}` : ft.text))
     }
   }
   return lines.join('\n')
