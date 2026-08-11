@@ -117,6 +117,10 @@ export default function ColumnFilter({
     }
   }
 
+  const selectAllFiltered = () => {
+    filtered.forEach(o => { if (!selectedValues.includes(o)) onToggleValue(o) })
+  }
+
   // Rendered into document.body via portal — fully escapes overflow/stacking context
   const dropdown = open && pos && mounted ? createPortal(
     <div
@@ -187,7 +191,17 @@ export default function ColumnFilter({
           value={searchValue}
           onChange={e => onSearchChange(e.target.value)}
           onFocus={openDropdown}
-          onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setOpen(false)
+            else if (e.key === 'Enter' && searchValue.trim()) {
+              // Digitou e apertou Enter: seleciona tudo que bate com o texto
+              // digitado — equivalente a marcar "Selecionar todos" na lista.
+              e.preventDefault()
+              selectAllFiltered()
+              onSearchChange('')
+              setOpen(false)
+            }
+          }}
           placeholder={hasSelection ? `${selectedValues.length} sel.` : placeholder}
           size={compact ? 1 : undefined}
           className={`w-full h-[1.75rem]${compact ? '' : ' min-w-[120px]'} bg-surface-container border rounded px-2 py-1 pr-7 text-[10px] font-normal normal-case tracking-normal focus:outline-none focus:ring-1 focus:ring-primary/20 transition-colors ${
