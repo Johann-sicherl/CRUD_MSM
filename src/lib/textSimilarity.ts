@@ -92,3 +92,25 @@ export function findSimilarTexts(
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, limit)
 }
+
+// Sugestão "fantasma" (autocomplete estilo barra de endereço) — só
+// candidatos que realmente COMEÇAM com o que já foi digitado (comparação
+// sem acento/maiúscula) servem aqui, porque o texto sugerido precisa
+// aparecer visualmente colado logo depois do que a pessoa já escreveu, na
+// mesma linha; um candidato "parecido" mas que diverge no meio não dá pra
+// mostrar assim sem confundir. Entre os que servem, o de maior similaridade
+// vence. `normalizeText` não muda a quantidade de caracteres (só maiúscula/
+// remove acento), então o índice `query.length` cai no lugar certo do texto
+// original do candidato ao fatiar o restante.
+export function bestGhostSuggestion(query: string, candidates: string[]): string | null {
+  const nq = normalizeText(query)
+  if (!nq) return null
+  let best: { text: string; score: number } | null = null
+  for (const c of candidates) {
+    const nc = normalizeText(c)
+    if (nc.length <= nq.length || !nc.startsWith(nq)) continue
+    const score = similarity(query, c)
+    if (!best || score > best.score) best = { text: c, score }
+  }
+  return best ? best.text : null
+}
