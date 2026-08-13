@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Field, TableSchema } from '@/lib/schema'
+import { findSimilarTexts } from '@/lib/textSimilarity'
 
 interface Props {
   schema: TableSchema
@@ -81,6 +82,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   const [error, setError] = useState('')
   const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
   const [fetchedDynamic, setFetchedDynamic] = useState<Record<string, string[]>>({})
+  const [similarCandidates, setSimilarCandidates] = useState<Record<string, string[]>>({})
   const [cascade, setCascade] = useState<CascadeState>(EMPTY_CASCADE)
 
   // Batch queue state
@@ -148,6 +150,37 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableName])
+
+  // Padronização de nomenclatura ("+ Novo Registro" apenas — editar um
+  // registro existente não precisa se comparar consigo mesmo): busca todos
+  // os valores já cadastrados nas colunas marcadas com similarTextSuggest
+  // (ex.: accessories.name) uma única vez, ao abrir o formulário — o
+  // ranking em si (findSimilarTexts) roda no navegador a cada tecla, sem
+  // round-trip nenhum, pra ficar instantâneo.
+  useEffect(() => {
+    if (isEdit) return
+    const fields = editableFields.filter(f => f.similarTextSuggest)
+    if (fields.length === 0) return
+    fetch(`/api/${tableName}?limit=25000`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json) return
+        const rows = (json.data || []) as Record<string, unknown>[]
+        const result: Record<string, string[]> = {}
+        for (const f of fields) {
+          const seen = new Set<string>()
+          const values: string[] = []
+          for (const row of rows) {
+            const v = row[f.name]
+            if (typeof v === 'string' && v.trim() && !seen.has(v)) { seen.add(v); values.push(v) }
+          }
+          result[f.name] = values
+        }
+        setSimilarCandidates(result)
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName, isEdit])
 
   const addDynamicOption = async (fieldName: string, key: string, value: string) => {
     const res = await fetch('/api/field-options', {
@@ -422,6 +455,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
                   onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
                   forceRequired={forceRequired}
+                  similarCandidates={field.similarTextSuggest ? similarCandidates[field.name] : undefined}
                 />
               )
             })}
@@ -792,6 +826,7 @@ function FieldInput({
   onAddOption,
   onCascadeOpen,
   forceRequired,
+  similarCandidates,
 }: {
   field: Field
   value: string
@@ -801,10 +836,19 @@ function FieldInput({
   onAddOption?: (value: string) => Promise<void>
   onCascadeOpen?: () => void
   forceRequired?: boolean
+  similarCandidates?: string[]
 }) {
   const [addingOpt, setAddingOpt] = useState(false)
   const [newOptInput, setNewOptInput] = useState('')
   const [addingLoading, setAddingLoading] = useState(false)
+
+  // Só busca similares a partir de 3 caracteres — abaixo disso o ranking é
+  // ruído (tudo "parece" com tudo). Puramente client-side, recalculado a
+  // cada tecla — o candidato já está todo em memória (ver useEffect acima).
+  const similarSuggestions = useMemo(() => {
+    if (!similarCandidates || value.trim().length < 3) return []
+    return findSimilarTexts(value, similarCandidates)
+  }, [similarCandidates, value])
 
   const commitNewOpt = async () => {
     const v = newOptInput.trim().toUpperCase()
@@ -954,6 +998,31 @@ function FieldInput({
         >
           🔍
         </button>
+      </div>
+    )
+  } else if (similarCandidates) {
+    const exactMatch = similarSuggestions[0]?.score === 1
+    input = (
+      <div>
+        <input type="text" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder} className={inputClass} />
+        {similarSuggestions.length > 0 && (
+          <div className={`mt-1.5 flex flex-col gap-1 rounded px-2.5 py-2 border ${exactMatch ? 'bg-error-container/15 border-error/40' : 'bg-surface-container-low border-outline-variant'}`}>
+            <div className={`text-[11px] font-mono uppercase tracking-wide ${exactMatch ? 'text-error' : 'text-outline'}`}>
+              {exactMatch ? '⚠ já existe cadastrado exatamente assim — clique pra reaproveitar:' : 'nomes parecidos já cadastrados — clique pra usar:'}
+            </div>
+            {similarSuggestions.map(s => (
+              <button
+                key={s.text}
+                type="button"
+                onClick={() => onChange(s.text)}
+                className="text-left text-[13px] text-on-surface-variant hover:text-primary transition-colors truncate"
+                title={s.text}
+              >
+                {s.text} <span className="text-outline">· {Math.round(s.score * 100)}%</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     )
   } else {

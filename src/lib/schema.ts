@@ -76,6 +76,7 @@ export interface Field {
   countDuplicatesOf?: string // virtual, list-only field: shows how many rows (in the whole loaded table) share the same resolved value as this other field name
   hideInList?: boolean       // don't render as a column in the list view (field still resolvable for other virtual fields, e.g. countDuplicatesOf)
   requiredWhen?: { field: string; values: (string | number)[] } // form-only: this field becomes required (client-side) when the named field's current value is one of these
+  similarTextSuggest?: boolean // text field, "+ Novo Registro" only: as the user types, suggests the closest existing values already in this same column (fuzzy match — catches near-duplicates like singular/plural variants), to keep naming standardized
 }
 
 export interface TableSchema {
@@ -246,7 +247,7 @@ export const tables: Record<string, TableSchema> = {
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'protheus_code', label: 'Código Protheus', type: 'text', nullable: false, unique: true, showInList: true, noBulkEdit: true },
-      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true },
+      { name: 'name', label: 'Nome', type: 'text', nullable: false, showInList: true, similarTextSuggest: true },
       { name: 'legacy_group_id', label: 'Grupo', type: 'number', nullable: false, showInList: true, noBulkEdit: true,
         lookupFrom: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' },
