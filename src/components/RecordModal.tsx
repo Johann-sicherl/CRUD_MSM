@@ -841,14 +841,7 @@ function FieldInput({
   const [addingOpt, setAddingOpt] = useState(false)
   const [newOptInput, setNewOptInput] = useState('')
   const [addingLoading, setAddingLoading] = useState(false)
-
-  // Só busca similares a partir de 3 caracteres — abaixo disso o ranking é
-  // ruído (tudo "parece" com tudo). Puramente client-side, recalculado a
-  // cada tecla — o candidato já está todo em memória (ver useEffect acima).
-  const similarSuggestions = useMemo(() => {
-    if (!similarCandidates || value.trim().length < 3) return []
-    return findSimilarTexts(value, similarCandidates)
-  }, [similarCandidates, value])
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const commitNewOpt = async () => {
     const v = newOptInput.trim().toUpperCase()
@@ -1000,31 +993,6 @@ function FieldInput({
         </button>
       </div>
     )
-  } else if (similarCandidates) {
-    const exactMatch = similarSuggestions[0]?.score === 1
-    input = (
-      <div>
-        <input type="text" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder} className={inputClass} />
-        {similarSuggestions.length > 0 && (
-          <div className={`mt-1.5 flex flex-col gap-1 rounded px-2.5 py-2 border ${exactMatch ? 'bg-error-container/15 border-error/40' : 'bg-surface-container-low border-outline-variant'}`}>
-            <div className={`text-[11px] font-mono uppercase tracking-wide ${exactMatch ? 'text-error' : 'text-outline'}`}>
-              {exactMatch ? '⚠ já existe cadastrado exatamente assim — clique pra reaproveitar:' : 'nomes parecidos já cadastrados — clique pra usar:'}
-            </div>
-            {similarSuggestions.map(s => (
-              <button
-                key={s.text}
-                type="button"
-                onClick={() => onChange(s.text)}
-                className="text-left text-[13px] text-on-surface-variant hover:text-primary transition-colors truncate"
-                title={s.text}
-              >
-                {s.text} <span className="text-outline">· {Math.round(s.score * 100)}%</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    )
   } else {
     input = (
       <input type="text" value={value} onChange={e => onChange(e.target.value)} required={isRequired} placeholder={field.placeholder} className={inputClass} />
@@ -1033,11 +1001,118 @@ function FieldInput({
 
   return (
     <div className={isWide ? 'sm:col-span-2' : ''}>
-      <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
-        {field.label}
-        {isRequired && <span className="text-primary ml-1">*</span>}
-      </label>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="block text-[14.4px] font-medium text-on-surface-variant">
+          {field.label}
+          {isRequired && <span className="text-primary ml-1">*</span>}
+        </label>
+        {similarCandidates && (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="shrink-0 text-[11.5px] font-mono text-outline hover:text-primary transition-colors"
+            title="Buscar nomes parecidos já cadastrados, pra manter a padronização"
+          >
+            🔎 padronizar
+          </button>
+        )}
+      </div>
+      {pickerOpen && similarCandidates && (
+        <SimilarTextPickerModal
+          value={value}
+          onChange={onChange}
+          candidates={similarCandidates}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {input}
+    </div>
+  )
+}
+
+// Pop-up de padronização de nome (ex.: Nome em Cadastro de Componentes) —
+// aberto pelo botão "🔎 padronizar" ao lado do rótulo do campo, em vez de
+// uma caixa de sugestões grudada embaixo do input (essa versão anterior
+// empurrava o formulário inteiro pra baixo). O campo de busca aqui dentro é
+// o PRÓPRIO campo do formulário (mesmo value/onChange) — digitar aqui já é
+// digitar no Nome; clicar numa sugestão preenche e fecha. Ranking roda no
+// navegador a cada tecla (candidatos já vieram inteiros do banco quando o
+// formulário abriu — ver useEffect de similarCandidates, acima), sem round-trip.
+function SimilarTextPickerModal({
+  value,
+  onChange,
+  candidates,
+  onClose,
+}: {
+  value: string
+  onChange: (v: string) => void
+  candidates: string[]
+  onClose: () => void
+}) {
+  const suggestions = useMemo(() => findSimilarTexts(value, candidates, { limit: 12 }), [value, candidates])
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col animate-fade-in"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-outline-variant flex items-center justify-between">
+          <h3 className="text-[15px] font-semibold text-on-surface">Padronizar nome</h3>
+          <button type="button" onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none transition-colors">✕</button>
+        </div>
+
+        <div className="px-5 py-4 flex flex-col gap-3 overflow-hidden">
+          <input
+            type="text"
+            autoFocus
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Digite o nome do componente..."
+            className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+          />
+
+          <div className="overflow-y-auto flex flex-col gap-1.5 -mx-1 px-1">
+            {value.trim().length < 3 ? (
+              <div className="text-[13px] text-outline italic py-6 text-center">
+                Digite ao menos 3 letras para ver os nomes parecidos já cadastrados.
+              </div>
+            ) : suggestions.length === 0 ? (
+              <div className="text-[13px] text-outline italic py-6 text-center">
+                Nenhum nome parecido encontrado — esse pode ser um nome novo mesmo.
+              </div>
+            ) : (
+              suggestions.map(s => (
+                <button
+                  key={s.text}
+                  type="button"
+                  onClick={() => { onChange(s.text); onClose() }}
+                  className={`text-left px-3 py-2 rounded border text-[14px] transition-colors ${
+                    s.score === 1
+                      ? 'bg-error-container/15 border-error/40 text-on-surface hover:bg-error-container/25'
+                      : 'bg-surface-container-low border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate">{s.text}</span>
+                    <span className="text-[11px] text-outline font-mono shrink-0">{Math.round(s.score * 100)}%</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-outline-variant flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow"
+          >
+            Usar &quot;{value || '—'}&quot;
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
