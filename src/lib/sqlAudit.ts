@@ -47,7 +47,7 @@ export function getAuditKeyFields(schema: TableSchema): Field[] {
   return [schema.fields.find(f => f.isPk)!]
 }
 
-function keyValueString(keyFields: Field[], row: Record<string, unknown>): string {
+export function keyValueString(keyFields: Field[], row: Record<string, unknown>): string {
   return keyFields.map(f => String(row[f.name] ?? '')).join('|')
 }
 

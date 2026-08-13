@@ -5,7 +5,7 @@ import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
-import { shouldCompareField, valuesEqual } from '@/lib/csvBaseline'
+import { shouldCompareField, valuesEqual, getRowKey } from '@/lib/csvBaseline'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -270,18 +270,20 @@ export default function DataTable({ tableName, schema }: Props) {
     return maps
   }, [pageData, listFields, lookups])
 
-  // id -> linha, do retrato do último import CSV (ver csv_baseline_snapshots).
-  // null = tabela nunca passou pelo Atualizador Global — nesse caso nada é
-  // destacado (ausência de baseline não é a mesma coisa que "tudo é novo").
-  const baselineById = useMemo(() => {
+  // chave de negócio (mesma da Auditoria — NUNCA o id/uuid interno, que é
+  // regenerado a cada import CSV e por isso nunca repetiria entre o
+  // snapshot e o banco) -> linha, do retrato do último import CSV (ver
+  // csv_baseline_snapshots). null = tabela nunca passou pelo Atualizador
+  // Global — nesse caso nada é destacado (ausência de baseline não é a
+  // mesma coisa que "tudo é novo").
+  const baselineByKey = useMemo(() => {
     if (!baselineRows) return null
     const map = new Map<string, Record<string, unknown>>()
     for (const row of baselineRows) {
-      const id = String(row.id ?? '')
-      if (id) map.set(id, row)
+      map.set(getRowKey(schema, row), row)
     }
     return map
-  }, [baselineRows])
+  }, [baselineRows, schema])
 
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
@@ -614,7 +616,7 @@ export default function DataTable({ tableName, schema }: Props) {
         )}
       </div>
 
-      {baselineById !== null && (
+      {baselineByKey !== null && (
         <div className="flex items-center gap-1.5 text-[11px] text-outline">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
           registro/campo em amarelo = criado ou alterado depois do último import no Atualizador Global de Tabelas
@@ -707,11 +709,11 @@ export default function DataTable({ tableName, schema }: Props) {
                     filteredRows.map((row, i) => {
                       const rowId = String(row.id)
                       const isSelected = selectedIds.has(rowId)
-                      const baselineRow = baselineById?.get(rowId)
+                      const baselineRow = baselineByKey?.get(getRowKey(schema, row))
                       // Linha criada depois do último import CSV (não existia no
                       // retrato) — destaque na linha inteira. Só faz sentido
-                      // quando a tabela já tem baseline (baselineById !== null).
-                      const isNewRow = baselineById !== null && !baselineRow
+                      // quando a tabela já tem baseline (baselineByKey !== null).
+                      const isNewRow = baselineByKey !== null && !baselineRow
                       return (
                       <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : ''}`}>
                         <td className="px-3 py-3 w-8">

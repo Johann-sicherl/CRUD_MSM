@@ -1,5 +1,5 @@
 import { isRealColumnField, type Field, type TableSchema } from './schema'
-import { getAuditKeyFields } from './sqlAudit'
+import { getAuditKeyFields, keyValueString } from './sqlAudit'
 
 // Compartilhado entre o destaque amarelo das telas de Cadastro (DataTable)
 // e a comparação "CSV novo vs. banco atual" do Atualizador Global — as duas
@@ -8,10 +8,12 @@ import { getAuditKeyFields } from './sqlAudit'
 
 // created_at/updated_at (e afins, como last_login) são metadado de
 // bookkeeping — mudam sozinhos a cada gravação e não são "informação" de
-// verdade; incluí-los destacaria tudo em amarelo à toa. id é a própria
-// chave de comparação, não um valor a comparar. Senha nunca aparece num
-// alerta. Campos virtuais (lookup/concat/countDuplicatesOf) não têm coluna
-// própria na tabela real.
+// verdade; incluí-los destacaria tudo em amarelo à toa. id (uuid interno)
+// nunca é comparado — é regenerado a cada import CSV, então nunca é igual
+// entre o banco e o baseline mesmo quando a linha é exatamente a mesma (ver
+// getRowKey, abaixo, que é quem de fato casa as linhas). Senha nunca aparece
+// num alerta. Campos virtuais (lookup/concat/countDuplicatesOf) não têm
+// coluna própria na tabela real.
 export function shouldCompareField(field: Field): boolean {
   if (!isRealColumnField(field)) return false
   if (field.isPk) return false
@@ -61,9 +63,20 @@ export function formatDiffValue(field: Field, v: unknown): string {
   return String(v)
 }
 
-// Identificador legível de uma linha para exibir num alerta — reaproveita a
-// mesma chave de negócio já usada pela Auditoria (protheus_code, legacy_id
-// etc.), nunca o uuid interno, que não diz nada pra quem está lendo.
+// Chave para CASAR uma linha entre o banco ao vivo, o baseline salvo e um
+// CSV novo — nunca o uuid interno (id), que o Postgres gera de novo a cada
+// import e por isso NUNCA repete entre uma tabela recarregada e o snapshot
+// do import anterior, mesmo quando a linha é idêntica. Reaproveita a mesma
+// chave de negócio que a Auditoria já usa pra este exato problema
+// ("identificar uma linha across imports/ambientes" — ver getAuditKeyFields
+// em sqlAudit.ts): protheus_code, legacy_id, ou a chave composta de campos
+// noBulkEdit, dependendo da tabela.
+export function getRowKey(schema: TableSchema, row: Record<string, unknown>): string {
+  return keyValueString(getAuditKeyFields(schema), row)
+}
+
+// Identificador legível de uma linha para exibir num alerta — mesma chave
+// acima, só que formatada como "Rótulo: valor" para leitura humana.
 export function getRowLabel(schema: TableSchema, row: Record<string, unknown>): string {
   const keyFields = getAuditKeyFields(schema)
   const parts = keyFields.map(f => `${f.label}: ${row[f.name] ?? '—'}`)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
 import { convertCsvRows } from '@/lib/globalUpdateConvert'
-import { shouldCompareField, valuesEqual, formatDiffValue, getRowLabel } from '@/lib/csvBaseline'
+import { shouldCompareField, valuesEqual, formatDiffValue, getRowLabel, getRowKey } from '@/lib/csvBaseline'
 
 type RouteParams = { params: { table: string } }
 
@@ -35,26 +35,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { data: liveRows, error } = await supabaseAdmin.from(table).select('*').range(0, 24999)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // Assume, como o resto do fluxo do Atualizador Global (global_table_replace,
-  // csv_baseline_snapshots), que o CSV é uma exportação oficial da própria
-  // tabela e sempre traz o id de cada linha — é isso que permite comparar
-  // linha com linha sem ambiguidade.
-  const liveById = new Map<string, Record<string, unknown>>()
+  // Casa as linhas pela mesma chave de negócio que a Auditoria usa (ex.:
+  // protheus_code) — NUNCA pelo id/uuid interno, que o Postgres gera de novo
+  // a cada import e por isso nunca repetiria entre o CSV e o banco mesmo
+  // quando a linha é idêntica (ver getRowKey em csvBaseline.ts).
+  const liveByKey = new Map<string, Record<string, unknown>>()
   for (const row of (liveRows ?? []) as Record<string, unknown>[]) {
-    const id = String(row.id ?? '')
-    if (id) liveById.set(id, row)
+    liveByKey.set(getRowKey(schema, row), row)
   }
-  const incomingById = new Map<string, Record<string, unknown>>()
+  const incomingByKey = new Map<string, Record<string, unknown>>()
   for (const row of incomingRows) {
-    const id = String(row.id ?? '')
-    if (id) incomingById.set(id, row)
+    incomingByKey.set(getRowKey(schema, row), row)
   }
 
   const compareFields = schema.fields.filter(shouldCompareField)
   const diffs: CompareDiff[] = []
 
-  for (const [id, liveRow] of liveById) {
-    const incomingRow = incomingById.get(id)
+  for (const [key, liveRow] of liveByKey) {
+    const incomingRow = incomingByKey.get(key)
     if (!incomingRow) {
       diffs.push({
         rowLabel: getRowLabel(schema, liveRow),
@@ -80,8 +78,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  for (const [id, incomingRow] of incomingById) {
-    if (liveById.has(id)) continue
+  for (const [key, incomingRow] of incomingByKey) {
+    if (liveByKey.has(key)) continue
     diffs.push({
       rowLabel: getRowLabel(schema, incomingRow),
       fieldLabel: '(registro inteiro)',
