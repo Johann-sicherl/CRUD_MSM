@@ -18,6 +18,7 @@ ALTER TABLE relationship_equip_accessory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE roller_tables                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE standard_equipment_items     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log                    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE csv_baseline_snapshots       ENABLE ROW LEVEL SECURITY;
 
 -- ── 2. REVOGAR PERMISSÕES PÚBLICAS ───────────────────────────
 -- Remove qualquer grant padrão para roles anon/authenticated
@@ -31,6 +32,7 @@ REVOKE ALL ON relationship_equip_accessory FROM anon, authenticated;
 REVOKE ALL ON roller_tables                FROM anon, authenticated;
 REVOKE ALL ON standard_equipment_items     FROM anon, authenticated;
 REVOKE ALL ON audit_log                    FROM anon, authenticated;
+REVOKE ALL ON csv_baseline_snapshots       FROM anon, authenticated;
 
 -- ── 3. VERIFICAR SE FICOU CORRETO ────────────────────────────
 -- Rode esta query para confirmar: todas devem mostrar TRUE
@@ -43,6 +45,6 @@ WHERE schemaname = 'public'
     'accessories', 'accessory_groups', 'dependant_items',
     'equipments', 'general_alerts', 'non_combinable_comps',
     'relationship_equip_accessory', 'roller_tables',
-    'standard_equipment_items', 'audit_log'
+    'standard_equipment_items', 'audit_log', 'csv_baseline_snapshots'
   )
 ORDER BY tablename;

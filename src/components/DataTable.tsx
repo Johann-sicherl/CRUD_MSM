@@ -5,6 +5,7 @@ import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
+import { shouldCompareField, valuesEqual } from '@/lib/csvBaseline'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -149,6 +150,10 @@ export default function DataTable({ tableName, schema }: Props) {
   const { creds: protheusCreds } = useProtheusAuth()
   const [protheusStatusMap, setProtheusStatusMap] = useState<Map<string, ProtheusProductStatus> | null>(null)
   const [protheusChecking, setProtheusChecking] = useState(false)
+  // Retrato do último import do Atualizador Global de Tabelas para esta
+  // tabela (null = a tabela nunca passou por lá — nesse caso nada é
+  // destacado). Usado só para o destaque amarelo de linha/célula.
+  const [baselineRows, setBaselineRows] = useState<Record<string, unknown>[] | null>(null)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
   // Columns actually rendered — excludes hideInList fields (e.g. Resumo, kept
@@ -159,7 +164,16 @@ export default function DataTable({ tableName, schema }: Props) {
   const pinnedListFields = useMemo(() => visibleListFields.filter(f => f.countDuplicatesOf), [visibleListFields])
   const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
-  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null) }, [tableName])
+  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null) }, [tableName])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/csv-baseline/${tableName}`)
+      .then(res => res.ok ? res.json() : { snapshot: null })
+      .then(json => { if (!cancelled) setBaselineRows(json?.snapshot ?? null) })
+      .catch(() => { if (!cancelled) setBaselineRows(null) })
+    return () => { cancelled = true }
+  }, [tableName])
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -255,6 +269,19 @@ export default function DataTable({ tableName, schema }: Props) {
     }
     return maps
   }, [pageData, listFields, lookups])
+
+  // id -> linha, do retrato do último import CSV (ver csv_baseline_snapshots).
+  // null = tabela nunca passou pelo Atualizador Global — nesse caso nada é
+  // destacado (ausência de baseline não é a mesma coisa que "tudo é novo").
+  const baselineById = useMemo(() => {
+    if (!baselineRows) return null
+    const map = new Map<string, Record<string, unknown>>()
+    for (const row of baselineRows) {
+      const id = String(row.id ?? '')
+      if (id) map.set(id, row)
+    }
+    return map
+  }, [baselineRows])
 
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
@@ -587,6 +614,13 @@ export default function DataTable({ tableName, schema }: Props) {
         )}
       </div>
 
+      {baselineById !== null && (
+        <div className="flex items-center gap-1.5 text-[11px] text-outline">
+          <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
+          registro/campo em amarelo = criado ou alterado depois do último import no Atualizador Global de Tabelas
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-surface-container rounded border border-outline-variant overflow-hidden min-h-[70vh]">
         {loading && (
@@ -673,8 +707,13 @@ export default function DataTable({ tableName, schema }: Props) {
                     filteredRows.map((row, i) => {
                       const rowId = String(row.id)
                       const isSelected = selectedIds.has(rowId)
+                      const baselineRow = baselineById?.get(rowId)
+                      // Linha criada depois do último import CSV (não existia no
+                      // retrato) — destaque na linha inteira. Só faz sentido
+                      // quando a tabela já tem baseline (baselineById !== null).
+                      const isNewRow = baselineById !== null && !baselineRow
                       return (
-                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : ''}`}>
+                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : ''}`}>
                         <td className="px-3 py-3 w-8">
                           <input
                             type="checkbox"
@@ -716,13 +755,18 @@ export default function DataTable({ tableName, schema }: Props) {
                           } else {
                             cell = <CellValue value={row[f.name]} type={f.type} />
                           }
+                          // Campo pontual editado depois do último import CSV —
+                          // só a célula fica amarela (não a linha inteira, que já
+                          // está tratada acima se o registro for novo).
+                          const fieldChanged = !isNewRow && !!baselineRow &&
+                            shouldCompareField(f) && !valuesEqual(f, row[f.name], baselineRow[f.name])
                           return (
-                            <td key={f.name} className={`px-4 py-3 text-on-surface-variant whitespace-nowrap${schema.columnFilters ? f.listKeepWidth ? ' min-w-[150px]' : ' min-w-[100px]' : ''}`}>
+                            <td key={f.name} className={`px-4 py-3 text-on-surface-variant whitespace-nowrap${schema.columnFilters ? f.listKeepWidth ? ' min-w-[150px]' : ' min-w-[100px]' : ''}${fieldChanged ? ' bg-amber-500/15' : ''}`}>
                               {cell}
                             </td>
                           )
                         })}
-                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary/5 group-hover:bg-primary/10' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
+                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary/5 group-hover:bg-primary/10' : isNewRow ? 'bg-amber-500/10 group-hover:bg-amber-500/15' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
                             className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"

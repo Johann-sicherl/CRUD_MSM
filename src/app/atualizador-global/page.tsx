@@ -20,6 +20,21 @@ interface SelectInvalidDetail {
   values: { value: string; count: number }[]
 }
 
+// Mesmo formato devolvido por POST /api/global-update/[table]/compare —
+// redeclarado aqui (não importado da rota) seguindo o mesmo padrão já usado
+// nesta tela para SelectInvalidDetail, um tipo puramente local à UI.
+interface CompareDiff {
+  rowLabel: string
+  fieldLabel: string
+  current: string
+  received: string
+  kind: 'changed' | 'new' | 'missing'
+}
+
+interface CompareAlert extends CompareDiff {
+  tableLabel: string
+}
+
 interface UploadedFile {
   id: string
   name: string
@@ -189,6 +204,13 @@ export default function AtualizadorGlobalPage() {
   const [confirmChecked, setConfirmChecked] = useState(false)
   const [sendingAll, setSendingAll] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Checkbox "Comparar valores recebidos com o banco de dados atual" — opt-in,
+  // desligado por padrão para não mudar o comportamento de hoje.
+  const [compareChecked, setCompareChecked] = useState(false)
+  const [comparing, setComparing] = useState(false)
+  // null = pop-up fechado. Array vazio é um resultado válido (comparação
+  // rodou e não achou nada) — o pop-up ainda abre nesse caso, sem alertas.
+  const [compareAlerts, setCompareAlerts] = useState<CompareAlert[] | null>(null)
 
   const handleFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
@@ -252,8 +274,7 @@ export default function AtualizadorGlobalPage() {
   const readyFiles = pendingFiles.filter(f => !isBlocking(f))
   const anyBlocking = pendingFiles.some(isBlocking)
 
-  const confirmReplaceAll = async () => {
-    if (readyFiles.length === 0) return
+  const runReplaceAll = async () => {
     const ok = window.confirm(
       `Tem certeza? Isso vai APAGAR todos os registros atuais de ${readyFiles.length} tabela(s) — ` +
       `${readyFiles.map(f => f.detection!.schema.label).join(', ')} — e substituir pelo conteúdo destes arquivos. ` +
@@ -266,6 +287,46 @@ export default function AtualizadorGlobalPage() {
       await replaceOne(file)
     }
     setSendingAll(false)
+  }
+
+  // Roda a comparação (CSV novo vs. banco atual) de TODOS os arquivos prontos
+  // de uma vez, reunindo tudo num único pop-up. Se achar qualquer diferença
+  // em qualquer tabela, aborta o lote inteiro — nenhuma tabela é tocada até
+  // o usuário revisar e decidir (ou corrigir os dados, ou desmarcar o
+  // checkbox e confirmar de novo).
+  const runCompare = async () => {
+    setComparing(true)
+    const allAlerts: CompareAlert[] = []
+    try {
+      for (const file of readyFiles) {
+        const res = await fetch(`/api/global-update/${file.detection!.tableName}/compare`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: file.rows }),
+        })
+        const json = await res.json()
+        if (!res.ok) {
+          setComparing(false)
+          window.alert(`Falha ao comparar "${file.name}" (${file.detection!.schema.label}): ${json.error || 'erro desconhecido'}`)
+          return
+        }
+        for (const d of (json.diffs as CompareDiff[])) {
+          allAlerts.push({ ...d, tableLabel: file.detection!.schema.label })
+        }
+      }
+    } catch {
+      setComparing(false)
+      window.alert('Falha de rede ao comparar os arquivos com o banco de dados.')
+      return
+    }
+    setComparing(false)
+    setCompareAlerts(allAlerts) // abre o pop-up sempre — mesmo vazio
+  }
+
+  const confirmReplaceAll = async () => {
+    if (readyFiles.length === 0) return
+    if (compareChecked) { await runCompare(); return }
+    await runReplaceAll()
   }
 
   return (
@@ -464,17 +525,141 @@ export default function AtualizadorGlobalPage() {
             Entendo que TODOS os dados atuais das tabelas identificadas acima serão apagados e
             substituídos pelos dados dos respectivos arquivos, e que essa ação não passa pela Auditoria.
           </label>
+          <label className="flex items-start gap-2 text-sm text-on-surface-variant cursor-pointer">
+            <input
+              type="checkbox"
+              checked={compareChecked}
+              onChange={() => setCompareChecked(v => !v)}
+              className="mt-0.5"
+            />
+            Comparar valores recebidos com o banco de dados atual antes de substituir — se houver
+            qualquer diferença, a substituição é cancelada e um alerta detalhado é exibido.
+          </label>
           <div>
             <button
               onClick={confirmReplaceAll}
-              disabled={readyFiles.length === 0 || !confirmChecked || sendingAll}
+              disabled={readyFiles.length === 0 || !confirmChecked || sendingAll || comparing}
               className="px-4 py-2 rounded-lg bg-error text-on-error text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
             >
-              {sendingAll ? 'Substituindo…' : `Confirmar e Substituir Tudo (${readyFiles.length})`}
+              {comparing
+                ? 'Comparando…'
+                : sendingAll
+                ? 'Substituindo…'
+                : compareChecked
+                ? `Comparar e Substituir Tudo (${readyFiles.length})`
+                : `Confirmar e Substituir Tudo (${readyFiles.length})`}
             </button>
           </div>
         </div>
       )}
+
+      {compareAlerts !== null && (
+        <ComparePopup
+          alerts={compareAlerts}
+          onClose={() => setCompareAlerts(null)}
+          onProceed={() => { setCompareAlerts(null); runReplaceAll() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ComparePopup({
+  alerts,
+  onClose,
+  onProceed,
+}: {
+  alerts: CompareAlert[]
+  onClose: () => void
+  onProceed: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const hasAlerts = alerts.length > 0
+
+  const buildText = () => {
+    if (!hasAlerts) return 'Nenhuma diferença encontrada — o(s) CSV(s) batem exatamente com o banco de dados atual.'
+    return alerts.map(a =>
+      `Tabela: ${a.tableLabel} | Registro: ${a.rowLabel} | Campo: ${a.fieldLabel} | Valor atual: ${a.current} | Valor recebido: ${a.received}`
+    ).join('\n')
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(buildText()).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  const kindLabel = (kind: CompareDiff['kind']) =>
+    kind === 'new' ? 'novo no CSV' : kind === 'missing' ? 'ausente no CSV' : 'alterado'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-fade-in">
+        <div className="px-6 py-4 border-b border-outline-variant flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-on-surface">
+              {hasAlerts ? `⚠ ${alerts.length} diferença(s) encontrada(s)` : '✓ Nenhuma diferença encontrada'}
+            </h3>
+            <p className="text-xs text-outline mt-0.5">
+              {hasAlerts
+                ? 'A substituição foi cancelada — nenhuma tabela foi alterada. Revise abaixo, copie se precisar, e corrija os dados ou desmarque a comparação antes de tentar de novo.'
+                : 'O(s) CSV(s) batem exatamente com o banco de dados atual — pode prosseguir com segurança.'}
+            </p>
+          </div>
+          <button onClick={handleCopy} className="px-3 py-1.5 text-xs rounded border border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary transition-colors shrink-0">
+            {copied ? '✓ Copiado' : '📋 Copiar alertas'}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {hasAlerts ? (
+            <div className="overflow-auto border border-outline-variant rounded-lg">
+              <table className="text-xs w-full">
+                <thead className="sticky top-0 bg-surface-container-highest">
+                  <tr>
+                    <th className="text-left px-2 py-1.5 font-mono text-on-surface-variant border-b border-outline-variant whitespace-nowrap">Tabela</th>
+                    <th className="text-left px-2 py-1.5 font-mono text-on-surface-variant border-b border-outline-variant whitespace-nowrap">Registro</th>
+                    <th className="text-left px-2 py-1.5 font-mono text-on-surface-variant border-b border-outline-variant whitespace-nowrap">Campo</th>
+                    <th className="text-left px-2 py-1.5 font-mono text-on-surface-variant border-b border-outline-variant whitespace-nowrap">Valor atual</th>
+                    <th className="text-left px-2 py-1.5 font-mono text-on-surface-variant border-b border-outline-variant whitespace-nowrap">Valor recebido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alerts.map((a, i) => (
+                    <tr key={i} className="border-b border-outline-variant/50 odd:bg-surface-container-low align-top">
+                      <td className="px-2 py-1.5 whitespace-nowrap text-on-surface">{a.tableLabel}</td>
+                      <td className="px-2 py-1.5 text-on-surface-variant">{a.rowLabel}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">
+                        {a.fieldLabel}
+                        <span className="ml-1.5 text-[10px] text-amber-400">({kindLabel(a.kind)})</span>
+                      </td>
+                      <td className="px-2 py-1.5 text-on-surface-variant break-all">{a.current}</td>
+                      <td className="px-2 py-1.5 text-amber-400 break-all">{a.received}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-sm text-on-surface-variant italic py-8 text-center">Nada para revisar.</div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-outline-variant flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            Fechar
+          </button>
+          {!hasAlerts && (
+            <button
+              onClick={onProceed}
+              className="px-4 py-2 rounded-lg bg-error text-on-error text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Continuar e Substituir Tudo
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

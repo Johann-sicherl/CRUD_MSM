@@ -1,45 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables, FORCE_TO_ONE_FIELDS, getRealColumnFields, type Field } from '@/lib/schema'
+import { tables } from '@/lib/schema'
+import { convertCsvRows } from '@/lib/globalUpdateConvert'
 
 type RouteParams = { params: { table: string } }
 
 // Deliberately does not import anything from '@/lib/sqlAudit' — a full-table
 // replace from the official CSV export must never appear in Auditoria.
-
-// Official CSV exports often spell an absent value out as the literal text
-// "NULL" instead of leaving the cell empty — treat both as no value.
-function isBlankCell(raw: unknown): boolean {
-  const s = String(raw ?? '').trim()
-  return s === '' || s.toUpperCase() === 'NULL'
-}
-
-// A blank/"NULL" cell on a NOT NULL column that has a schema default falls
-// back to that default (mirrors the regular POST /api/[table] route) instead
-// of being sent as SQL NULL, which would fail the column's NOT NULL
-// constraint since jsonb_populate_recordset never applies table-level
-// DEFAULTs on its own.
-function toCellValue(field: Field, raw: unknown): unknown {
-  const fallback = () => (!field.nullable && field.defaultValue !== undefined ? field.defaultValue : null)
-  if (isBlankCell(raw)) return fallback()
-
-  const s = String(raw).trim()
-  if (field.type === 'jsonb') {
-    try { return JSON.parse(s) } catch { return s }
-  }
-  // Real integer columns reject decimal-looking text ("350.0"), which CSV
-  // export tools commonly produce even for whole numbers — parse into an
-  // actual number instead of passing raw text through to Postgres.
-  if (field.type === 'number') {
-    const n = parseInt(s, 10)
-    return Number.isNaN(n) ? fallback() : n
-  }
-  if (field.type === 'decimal') {
-    const n = parseFloat(s)
-    return Number.isNaN(n) ? fallback() : n
-  }
-  return s
-}
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { table } = params
@@ -53,21 +20,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Only real database columns — excludes join-derived display fields
   // (e.g. accessory_name resolved from protheus_code), which don't exist as
   // columns in the actual table and would make the insert fail.
-  const fieldByLowerName = new Map(getRealColumnFields(schema).map(f => [f.name.toLowerCase(), f]))
-
-  const insertRows = rows.map(row => {
-    const out: Record<string, unknown> = {}
-    for (const [key, raw] of Object.entries(row)) {
-      const field = fieldByLowerName.get(key.trim().toLowerCase())
-      if (!field) continue // column not part of this table's schema — dropped
-      out[field.name] = toCellValue(field, raw)
-    }
-    // Financial multipliers must always be 1, regardless of the CSV value
-    for (const f of FORCE_TO_ONE_FIELDS) {
-      if (fieldByLowerName.has(f)) out[f] = 1
-    }
-    return out
-  })
+  const insertRows = convertCsvRows(schema, rows)
 
   // Atomic wipe + reload — see msm_global_table_replace.sql. If the insert
   // fails, the delete rolls back too and the table keeps its original data.

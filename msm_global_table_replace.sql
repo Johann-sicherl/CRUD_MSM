@@ -9,7 +9,13 @@
 -- estado original. Opera sempre na MESMA tabela (nunca cria, renomeia ou
 -- troca tabelas) — não afeta RLS, políticas nem permissões (GRANT/REVOKE)
 -- já configuradas nela. Não usa src/lib/sqlAudit.ts — não gera entradas em
--- audit_log.
+-- audit_log. Também grava o retrato do import em csv_baseline_snapshots
+-- (ver msm_csv_baseline_snapshots.sql), na mesma transação — usado pelo
+-- destaque amarelo nas telas de Cadastro e pela comparação do Atualizador
+-- Global.
+--
+-- PRÉ-REQUISITO: execute msm_csv_baseline_snapshots.sql (cria a tabela
+-- csv_baseline_snapshots) ANTES deste arquivo — a função abaixo grava nela.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION global_table_replace(target_table TEXT, new_rows JSONB)
@@ -49,6 +55,16 @@ BEGIN
     RAISE EXCEPTION 'Esperava gravar % linha(s), mas % foram gravadas — operação cancelada, nada foi alterado.',
       expected_count, inserted_count;
   END IF;
+
+  -- Retrato do import bem-sucedido — base de comparação para o destaque
+  -- amarelo nas telas de Cadastro e para o "Comparar" do Atualizador
+  -- Global. Mesma transação da função: se o replace acima falhar e for
+  -- desfeito, este INSERT/UPDATE também é, e o retrato antigo continua
+  -- valendo.
+  INSERT INTO csv_baseline_snapshots (table_name, snapshot, imported_at)
+  VALUES (target_table, new_rows, NOW())
+  ON CONFLICT (table_name) DO UPDATE
+    SET snapshot = EXCLUDED.snapshot, imported_at = EXCLUDED.imported_at;
 
   RETURN inserted_count;
 END;
