@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
 import { convertCsvRows } from '@/lib/globalUpdateConvert'
-import { shouldCompareField, valuesEqual, formatDiffValue, getRowLabel, getRowKey } from '@/lib/csvBaseline'
+import { shouldCompareField, valuesEqual, formatDiffValue, getRowLabel, groupRowsByKey } from '@/lib/csvBaseline'
 
 type RouteParams = { params: { table: string } }
 
@@ -16,7 +16,7 @@ export interface CompareDiff {
   fieldLabel: string
   current: string
   received: string
-  kind: 'changed' | 'new' | 'missing'
+  kind: 'changed' | 'new' | 'missing' | 'ambiguous'
 }
 
 // Compara o CSV que está prestes a ser importado contra o que está no banco
@@ -43,21 +43,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Casa as linhas pela mesma chave de negócio que a Auditoria usa (ex.:
   // protheus_code) — NUNCA pelo id/uuid interno, que o Postgres gera de novo
   // a cada import e por isso nunca repetiria entre o CSV e o banco mesmo
-  // quando a linha é idêntica (ver getRowKey em csvBaseline.ts).
-  const liveByKey = new Map<string, Record<string, unknown>>()
-  for (const row of (liveRows ?? []) as Record<string, unknown>[]) {
-    liveByKey.set(getRowKey(schema, row), row)
-  }
-  const incomingByKey = new Map<string, Record<string, unknown>>()
-  for (const row of incomingRows) {
-    incomingByKey.set(getRowKey(schema, row), row)
-  }
+  // quando a linha é idêntica (ver getRowKey em csvBaseline.ts). Algumas
+  // tabelas legitimamente têm a mesma chave em mais de uma linha de verdade
+  // (ex.: relationship_equip_accessory) — groupRowsByKey separa essas em
+  // `ambiguousKeys` em vez de deixar uma "atropelar" a outra; essas ficam de
+  // fora da comparação campo a campo (não dá pra saber qual casa com qual)
+  // e entram como um alerta à parte, pra nunca ficarem silenciosamente sem
+  // checagem nenhuma numa rota cujo propósito é justamente evitar perda de
+  // dado silenciosa.
+  const live = groupRowsByKey(schema, (liveRows ?? []) as Record<string, unknown>[])
+  const incoming = groupRowsByKey(schema, incomingRows)
 
   const compareFields = schema.fields.filter(shouldCompareField)
   const diffs: CompareDiff[] = []
 
-  for (const [key, liveRow] of liveByKey) {
-    const incomingRow = incomingByKey.get(key)
+  for (const [key, liveRow] of live.byKey) {
+    if (incoming.ambiguousKeys.has(key)) continue // reportado abaixo, uma vez
+    const incomingRow = incoming.byKey.get(key)
     if (!incomingRow) {
       diffs.push({
         rowLabel: getRowLabel(schema, liveRow),
@@ -83,14 +85,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  for (const [key, incomingRow] of incomingByKey) {
-    if (liveByKey.has(key)) continue
+  for (const [key, incomingRow] of incoming.byKey) {
+    if (live.byKey.has(key) || live.ambiguousKeys.has(key)) continue
     diffs.push({
       rowLabel: getRowLabel(schema, incomingRow),
       fieldLabel: '(registro inteiro)',
       current: 'não existe no banco',
       received: 'novo no CSV — seria inserido',
       kind: 'new',
+    })
+  }
+
+  const ambiguousKeys = new Set([...live.ambiguousKeys, ...incoming.ambiguousKeys])
+  for (const key of ambiguousKeys) {
+    diffs.push({
+      rowLabel: key,
+      fieldLabel: '(chave repetida)',
+      current: live.ambiguousKeys.has(key) ? 'mais de uma linha no banco com esta chave' : '—',
+      received: incoming.ambiguousKeys.has(key) ? 'mais de uma linha no CSV com esta chave' : '—',
+      kind: 'ambiguous',
     })
   }
 

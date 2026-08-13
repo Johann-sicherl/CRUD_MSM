@@ -82,3 +82,28 @@ export function getRowLabel(schema: TableSchema, row: Record<string, unknown>): 
   const parts = keyFields.map(f => `${f.label}: ${row[f.name] ?? '—'}`)
   return parts.join(', ') || String(row.id ?? '')
 }
+
+export interface KeyedRows {
+  byKey: Map<string, Record<string, unknown>>
+  // Chaves que aparecem em MAIS DE UMA linha do conjunto — algumas tabelas
+  // (ex.: relationship_equip_accessory) legitimamente têm o mesmo
+  // Equipamento+Código repetido em linhas de verdade diferentes, cada uma
+  // com outros campos distintos. Quando isso acontece, não dá pra saber com
+  // segurança qual linha de um lado corresponde a qual linha do outro — a
+  // chave inteira fica de fora de `byKey` e entra aqui, pra quem for
+  // comparar tratar essas linhas como "sem veredito" em vez de arriscar um
+  // pareamento errado.
+  ambiguousKeys: Set<string>
+}
+
+export function groupRowsByKey(schema: TableSchema, rows: Record<string, unknown>[]): KeyedRows {
+  const byKey = new Map<string, Record<string, unknown>>()
+  const ambiguousKeys = new Set<string>()
+  for (const row of rows) {
+    const key = getRowKey(schema, row)
+    if (ambiguousKeys.has(key)) continue
+    if (byKey.has(key)) { byKey.delete(key); ambiguousKeys.add(key) }
+    else byKey.set(key, row)
+  }
+  return { byKey, ambiguousKeys }
+}

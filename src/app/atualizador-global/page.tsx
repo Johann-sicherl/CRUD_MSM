@@ -28,7 +28,7 @@ interface CompareDiff {
   fieldLabel: string
   current: string
   received: string
-  kind: 'changed' | 'new' | 'missing'
+  kind: 'changed' | 'new' | 'missing' | 'ambiguous'
 }
 
 interface CompareAlert extends CompareDiff {
@@ -591,7 +591,7 @@ function ComparePopup({
   }
 
   const kindLabel = (kind: CompareDiff['kind']) =>
-    kind === 'new' ? 'novo no CSV' : kind === 'missing' ? 'ausente no CSV' : 'alterado'
+    kind === 'new' ? 'novo no CSV' : kind === 'missing' ? 'ausente no CSV' : kind === 'ambiguous' ? 'chave repetida — não comparável' : 'alterado'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">

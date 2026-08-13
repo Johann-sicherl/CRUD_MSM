@@ -5,7 +5,7 @@ import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
-import { shouldCompareField, valuesEqual, getRowKey } from '@/lib/csvBaseline'
+import { shouldCompareField, valuesEqual, getRowKey, groupRowsByKey } from '@/lib/csvBaseline'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -289,14 +289,26 @@ export default function DataTable({ tableName, schema }: Props) {
   // csv_baseline_snapshots). null = tabela nunca passou pelo Atualizador
   // Global — nesse caso nada é destacado (ausência de baseline não é a
   // mesma coisa que "tudo é novo").
-  const baselineByKey = useMemo(() => {
+  //
+  // Em algumas tabelas (ex.: relationship_equip_accessory) a chave de
+  // negócio NÃO é de fato única — o mesmo Equipamento+Código Protheus pode
+  // aparecer em mais de uma linha de verdade, com outros campos diferentes.
+  // Quando isso acontece, guardamos em `ambiguousKeys` em vez de deixar uma
+  // linha "atropelar" a outra no Map — para essas chaves a comparação fica
+  // indefinida (nem nova, nem alterada) em vez de arriscar um veredito
+  // errado numa linha que ninguém tocou.
+  const baseline = useMemo(() => {
     if (!baselineRows) return null
-    const map = new Map<string, Record<string, unknown>>()
-    for (const row of baselineRows) {
-      map.set(getRowKey(schema, row), row)
-    }
-    return map
+    return groupRowsByKey(schema, baselineRows)
   }, [baselineRows, schema])
+
+  // Mesma ambiguidade, mas do lado do banco ao vivo (tabela inteira, não só
+  // o que está filtrado na tela agora) — se a chave se repete aqui também,
+  // nenhuma das linhas repetidas pode ser comparada com segurança.
+  const liveDuplicateKeys = useMemo(() => {
+    if (!pageData) return new Set<string>()
+    return groupRowsByKey(schema, pageData.data).ambiguousKeys
+  }, [pageData, schema])
 
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
@@ -629,7 +641,7 @@ export default function DataTable({ tableName, schema }: Props) {
         )}
       </div>
 
-      {baselineByKey !== null && (
+      {baseline !== null && (
         <div className="flex items-center gap-1.5 text-[11px] text-outline">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
           registro/campo em amarelo = criado ou alterado depois do último import no Atualizador Global de Tabelas
@@ -727,11 +739,16 @@ export default function DataTable({ tableName, schema }: Props) {
                     filteredRows.map((row, i) => {
                       const rowId = String(row.id)
                       const isSelected = selectedIds.has(rowId)
-                      const baselineRow = baselineByKey?.get(getRowKey(schema, row))
+                      const rowKey = getRowKey(schema, row)
+                      // Chave repetida (no retrato ou no banco ao vivo) — não dá
+                      // pra saber com segurança a qual linha comparar, então essa
+                      // linha fica sem veredito (nem nova, nem alterada).
+                      const keyIsAmbiguous = !!baseline?.ambiguousKeys.has(rowKey) || liveDuplicateKeys.has(rowKey)
+                      const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(rowKey)
                       // Linha criada depois do último import CSV (não existia no
                       // retrato) — destaque na linha inteira. Só faz sentido
-                      // quando a tabela já tem baseline (baselineByKey !== null).
-                      const isNewRow = baselineByKey !== null && !baselineRow
+                      // quando a tabela já tem baseline (baseline !== null).
+                      const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
                       return (
                       <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : ''}`}>
                         <td className="px-3 py-3 w-8">
