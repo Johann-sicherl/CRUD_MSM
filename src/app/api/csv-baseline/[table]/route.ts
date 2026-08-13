@@ -4,6 +4,17 @@ import { tables } from '@/lib/schema'
 
 type RouteParams = { params: { table: string } }
 
+// Esta rota não lê searchParams/cookies/headers (só o segmento dinâmico
+// [table]), então o Next.js não tem nenhum "Dynamic API" óbvio pra detectar
+// e pode cachear a resposta do fetch() interno do supabase-js indefinidamente
+// (Data Cache do App Router) — diferente de /api/[table], que usa
+// searchParams e por isso já escapa desse cache sozinho. Sem isso, depois de
+// um reimport pelo Atualizador Global o snapshot muda no banco mas esta
+// rota podia continuar servindo a resposta antiga pra sempre. Força sempre
+// buscar de novo.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 // Retrato do último import feito pelo Atualizador Global de Tabelas para
 // esta tabela (gravado atomicamente por global_table_replace — ver
 // msm_global_table_replace.sql). Usado pelo DataTable para destacar em

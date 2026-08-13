@@ -6,6 +6,11 @@ import { shouldCompareField, valuesEqual, formatDiffValue, getRowLabel, getRowKe
 
 type RouteParams = { params: { table: string } }
 
+// POST não é alvo do Data Cache do Next.js, mas força mesmo assim — esta
+// rota sempre precisa refletir o banco no exato momento da chamada.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 export interface CompareDiff {
   rowLabel: string
   fieldLabel: string
