@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Field, TableSchema } from '@/lib/schema'
+import { Field, TableSchema, shouldUppercaseField } from '@/lib/schema'
 import { bestGhostSuggestion } from '@/lib/textSimilarity'
 
 interface Props {
@@ -449,7 +449,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   key={field.name}
                   field={field}
                   value={form[field.name] ?? ''}
-                  onChange={(v) => handleChange(field.name, v)}
+                  onChange={(v) => handleChange(field.name, shouldUppercaseField(field) ? v.toUpperCase() : v)}
                   fetchedOptions={fetchedOptions[field.name]}
                   dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
                   onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}

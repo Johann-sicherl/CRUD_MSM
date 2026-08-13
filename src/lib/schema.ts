@@ -589,6 +589,14 @@ export function isRealColumnField(field: Field): boolean {
   return !field.lookupFrom?.sourceField && !field.concatFrom && !field.countDuplicatesOf
 }
 
+// Regra da aplicação inteira (não específica de nenhuma tabela): todo texto
+// livre de cadastro (Nome, Descrição etc.) é gravado em maiúsculas, pra
+// manter os dados padronizados. Vale só pra texto/textarea de verdade — não
+// pra senha (case sensível) nem pros demais tipos (número, select, etc.).
+export function shouldUppercaseField(field: Field): boolean {
+  return field.type === 'text' || field.type === 'textarea'
+}
+
 export function getRealColumnFields(schema: TableSchema): Field[] {
   return schema.fields.filter(isRealColumnField)
 }

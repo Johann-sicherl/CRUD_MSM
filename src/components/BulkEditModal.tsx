@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Field, TableSchema } from '@/lib/schema'
+import { Field, TableSchema, shouldUppercaseField } from '@/lib/schema'
 
 interface Props {
   schema: TableSchema
@@ -147,7 +147,7 @@ export default function BulkEditModal({ schema, tableName, selectedIds, onClose,
                 value={form[field.name] ?? ''}
                 enabled={!!enabled[field.name]}
                 onToggle={(on) => handleToggle(field.name, on)}
-                onChange={(v) => handleChange(field.name, v)}
+                onChange={(v) => handleChange(field.name, shouldUppercaseField(field) ? v.toUpperCase() : v)}
                 fetchedOptions={fetchedOptions[field.name]}
                 dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
               />
