@@ -154,6 +154,10 @@ export default function DataTable({ tableName, schema }: Props) {
   // tabela (null = a tabela nunca passou por lá — nesse caso nada é
   // destacado). Usado só para o destaque amarelo de linha/célula.
   const [baselineRows, setBaselineRows] = useState<Record<string, unknown>[] | null>(null)
+  // Só pra diagnóstico — distingue "tabela nunca teve import" (silencioso,
+  // por design) de "a busca do retrato falhou de verdade" (mostra um aviso,
+  // em vez de ficar indistinguível dos dois casos).
+  const [baselineError, setBaselineError] = useState<string | null>(null)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
   // Columns actually rendered — excludes hideInList fields (e.g. Resumo, kept
@@ -164,14 +168,23 @@ export default function DataTable({ tableName, schema }: Props) {
   const pinnedListFields = useMemo(() => visibleListFields.filter(f => f.countDuplicatesOf), [visibleListFields])
   const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
-  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null) }, [tableName])
+  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null) }, [tableName])
 
   useEffect(() => {
     let cancelled = false
     fetch(`/api/csv-baseline/${tableName}`)
-      .then(res => res.ok ? res.json() : { snapshot: null })
-      .then(json => { if (!cancelled) setBaselineRows(json?.snapshot ?? null) })
-      .catch(() => { if (!cancelled) setBaselineRows(null) })
+      .then(async res => {
+        const json = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
+        return json
+      })
+      .then(json => { if (!cancelled) { setBaselineRows(json?.snapshot ?? null); setBaselineError(null) } })
+      .catch((err: Error) => {
+        if (cancelled) return
+        setBaselineRows(null)
+        setBaselineError(err.message)
+        console.error(`[csv-baseline/${tableName}]`, err.message)
+      })
     return () => { cancelled = true }
   }, [tableName])
 
@@ -620,6 +633,11 @@ export default function DataTable({ tableName, schema }: Props) {
         <div className="flex items-center gap-1.5 text-[11px] text-outline">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
           registro/campo em amarelo = criado ou alterado depois do último import no Atualizador Global de Tabelas
+        </div>
+      )}
+      {baselineError && (
+        <div className="flex items-center gap-1.5 text-[11px] text-error" title={baselineError}>
+          ⚠ não foi possível carregar o comparativo de import desta tabela ({baselineError}) — destaque amarelo desligado por ora
         </div>
       )}
 
