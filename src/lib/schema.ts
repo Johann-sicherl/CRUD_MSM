@@ -345,7 +345,7 @@ export const tables: Record<string, TableSchema> = {
         validateExistsIn: { table: 'general_alerts', field: 'legacy_id', displayField: 'description',
           errorMessage: 'Alerta não encontrado — coluna "Alerta" deve conter o ID numérico ou o texto exato do alerta (ou ficar vazio/0 para nenhum)' } },
       { name: 'operation_time',   label: 'Tempo Oper. (min)', type: 'number', nullable: true },
-      { name: 'maximum_quantity', label: 'Qtd. Máxima',       type: 'number', nullable: true },
+      { name: 'maximum_quantity', label: 'Qtd. Máxima',       type: 'number', nullable: true, defaultValue: 1 },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'deactive'], showInList: true },
       { name: 'created_at', label: 'Criado em',     type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
