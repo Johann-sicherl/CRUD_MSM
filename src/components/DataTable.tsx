@@ -37,7 +37,17 @@ function getDisplayValue(
   lookups: LookupMap,
   allFields: Field[] = [],
   duplicateCountMaps: Record<string, Map<string, number>> = {},
+  // Colunas financeiras (FORCE_TO_ONE_FIELDS): o Supabase sempre tem 1 aí —
+  // com localCosts+schema informados, filtro de coluna e opções do dropdown
+  // passam a considerar o valor real guardado localmente, não o "1" bruto.
+  localCosts?: Record<string, { values: Record<string, number | null> }> | null,
+  schema?: TableSchema,
 ): string {
+  if (field && localCosts && schema && FORCE_TO_ONE_FIELDS.includes(field.name)) {
+    const key = getRowKey(schema, row)
+    const v = localCosts[key]?.values[field.name]
+    if (v !== undefined) return v === null ? 'N/A' : String(v)
+  }
   if (field?.countDuplicatesOf) {
     const targetName = field.countDuplicatesOf
     const targetField = allFields.find(f => f.name === targetName)
@@ -68,13 +78,15 @@ function applyFilters(
   fields: Field[],
   lookups: LookupMap,
   duplicateCountMaps: Record<string, Map<string, number>> = {},
+  localCosts?: Record<string, { values: Record<string, number | null> }> | null,
+  schema?: TableSchema,
 ): Record<string, unknown>[] {
   const active = Object.entries(filters).filter(([, v]) => v.length > 0)
   if (!active.length) return rows
   return rows.filter(row =>
     active.every(([name, vals]) => {
       const field = fields.find(f => f.name === name)
-      const display = getDisplayValue(row, name, field, lookups, fields, duplicateCountMaps)
+      const display = getDisplayValue(row, name, field, lookups, fields, duplicateCountMaps, localCosts, schema)
       return vals.includes(display)
     })
   )
@@ -343,9 +355,9 @@ export default function DataTable({ tableName, schema }: Props) {
   // Rows that pass ALL active column filters
   const filteredRows = useMemo(() => {
     if (!pageData) return []
-    const rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps)
+    const rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps, localCosts, schema)
     return applyListSortBy(rows, schema.listSortBy, listFields, lookups)
-  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema.listSortBy])
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible
@@ -356,10 +368,10 @@ export default function DataTable({ tableName, schema }: Props) {
       const otherFilters = Object.fromEntries(
         Object.entries(colFilters).filter(([name]) => name !== field.name)
       )
-      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups, duplicateCountMaps)
+      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups, duplicateCountMaps, localCosts, schema)
       const seen = new Set<string>()
       for (const row of candidateRows) {
-        const val = getDisplayValue(row, field.name, field, lookups, listFields, duplicateCountMaps)
+        const val = getDisplayValue(row, field.name, field, lookups, listFields, duplicateCountMaps, localCosts, schema)
         if (val !== '' && val !== 'null' && val !== 'undefined') seen.add(val)
       }
       // N/A first, rest alphabetical
@@ -370,7 +382,7 @@ export default function DataTable({ tableName, schema }: Props) {
       })
     }
     return result
-  }, [pageData, colFilters, lookups, listFields, schema.columnFilters, duplicateCountMaps])
+  }, [pageData, colFilters, lookups, listFields, schema, duplicateCountMaps, localCosts])
 
   const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
 
