@@ -77,6 +77,7 @@ export interface Field {
   hideInList?: boolean       // don't render as a column in the list view (field still resolvable for other virtual fields, e.g. countDuplicatesOf)
   requiredWhen?: { field: string; values: (string | number)[] } // form-only: this field becomes required (client-side) when the named field's current value is one of these
   similarTextSuggest?: boolean // text field, "+ Novo Registro" only: as the user types, suggests the closest existing values already in this same column (fuzzy match — catches near-duplicates like singular/plural variants), to keep naming standardized
+  batchMultiSelect?: boolean // batchInsert tables only, "+ Novo Registro" (not editing a single queued item): renders this field as a checkbox list (using its fetchOptions) instead of a single dropdown — every value checked here is crossed with whatever else varies (ex.: accessories picked via cascadeLookup) when items are added to the queue, producing one queue item per combination
 }
 
 export interface TableSchema {
@@ -317,7 +318,7 @@ export const tables: Record<string, TableSchema> = {
     listSortBy: ['legacy_equipment_id', 'group_legacy_id'],
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, noBulkEdit: true,
+      { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, noBulkEdit: true, batchMultiSelect: true,
         lookupFrom: { table: 'equipments', keyField: 'legacy_id', displayField: 'name' },
         fetchOptions: { table: 'equipments', keyField: 'legacy_id', displayField: 'name',
           filterVia: { table: 'standard_equipment_items', joinField: 'legacy_equipment_id', filterField: 'status', filterValue: 'active' } } },

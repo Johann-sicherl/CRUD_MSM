@@ -40,6 +40,8 @@ const EMPTY_CASCADE: CascadeState = {
   selected: new Set(),
 }
 
+const EMPTY_SELECTED: Set<string> = new Set()
+
 export default function RecordModal({ schema, tableName, record, prefill, onClose, onSaved }: Props) {
   const isEdit = !!record
   const isBatch = !!schema.batchInsert && !isEdit
@@ -91,6 +93,13 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   const [batchLoading, setBatchLoading] = useState(false)
   const [batchError, setBatchError] = useState('')
   const [queueSelected, setQueueSelected] = useState<Set<string>>(new Set())
+  // Campos batchMultiSelect (ex.: Equipamento em Equipamento x Acessórios):
+  // valores marcados por checkbox, por nome de campo — cada valor marcado
+  // aqui é cruzado com o que mais variar (ex.: acessórios escolhidos na
+  // busca em cascata) na hora de montar a fila, virando um item por
+  // combinação (N equipamentos × M acessórios).
+  const [multiSelected, setMultiSelected] = useState<Record<string, Set<string>>>({})
+  const batchMultiFields = editableFields.filter(f => f.batchMultiSelect)
 
   useEffect(() => {
     setForm(buildInitial())
@@ -283,11 +292,55 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
     })
   }
 
+  const toggleMultiSelect = (fieldName: string, value: string) => {
+    setMultiSelected(prev => {
+      const s = new Set(prev[fieldName] ?? [])
+      s.has(value) ? s.delete(value) : s.add(value)
+      return { ...prev, [fieldName]: s }
+    })
+  }
+
+  // "Selecionar/desmarcar todos" age só sobre os itens visíveis no momento
+  // (ex.: filtrados por busca) — soma/remove desses, sem apagar seleções
+  // feitas antes com outro filtro aplicado.
+  const setMultiSelectAll = (fieldName: string, values: string[], checked: boolean) => {
+    setMultiSelected(prev => {
+      const s = new Set(prev[fieldName] ?? [])
+      values.forEach(v => checked ? s.add(v) : s.delete(v))
+      return { ...prev, [fieldName]: s }
+    })
+  }
+
+  // Cruza cada linha-base com todo campo batchMultiSelect que tiver algum
+  // valor marcado (ex.: Equipamento) — uma linha-base vira N linhas, uma por
+  // valor marcado. Campo sem nada marcado não cruza (a linha-base segue como
+  // está), então isto nunca esvazia a lista sozinho — quem chama valida
+  // antes que exista PELO MENOS um valor marcado em cada campo assim.
+  const expandMultiSelect = (baseList: Record<string, string>[]): Record<string, string>[] => {
+    let list = baseList
+    for (const f of batchMultiFields) {
+      const values = multiSelected[f.name]
+      if (!values || values.size === 0) continue
+      const expanded: Record<string, string>[] = []
+      for (const data of list) {
+        for (const val of values) expanded.push({ ...data, [f.name]: val })
+      }
+      list = expanded
+    }
+    return list
+  }
+
+  const missingMultiSelectField = () =>
+    batchMultiFields.find(f => !multiSelected[f.name] || multiSelected[f.name]!.size === 0)
+
   const addCascadeSelectionsToQueue = () => {
-    const newItems: QueueItem[] = Array.from(cascade.selected).map(val => ({
-      qid: crypto.randomUUID(),
-      data: { ...form, [cascade.fieldName]: val },
-    }))
+    const missing = missingMultiSelectField()
+    if (missing) {
+      window.alert(`Selecione pelo menos um "${missing.label}" antes de adicionar à lista.`)
+      return
+    }
+    const base = Array.from(cascade.selected).map(val => ({ ...form, [cascade.fieldName]: val }))
+    const newItems: QueueItem[] = expandMultiSelect(base).map(data => ({ qid: crypto.randomUUID(), data }))
     setQueue(prev => [...prev, ...newItems])
     setCascade(EMPTY_CASCADE)
   }
@@ -323,7 +376,10 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
         ))
         setEditingQid(null)
       } else {
-        setQueue(prev => [...prev, { qid: crypto.randomUUID(), data: { ...form } }])
+        const missing = missingMultiSelectField()
+        if (missing) { setError(`Selecione pelo menos um "${missing.label}"`); return }
+        const newItems: QueueItem[] = expandMultiSelect([{ ...form }]).map(data => ({ qid: crypto.randomUUID(), data }))
+        setQueue(prev => [...prev, ...newItems])
       }
       setForm(buildInitial())
       return
@@ -444,6 +500,23 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
               const forceRequired = field.requiredWhen
                 ? field.requiredWhen.values.map(String).includes(String(form[field.requiredWhen.field] ?? ''))
                 : false
+              // Só vira lista de checkbox em "+ Novo Registro" (isBatch),
+              // e só enquanto NÃO se está editando um item específico já
+              // colocado na fila — editar um item da fila continua sendo
+              // um único Equipamento, exatamente como qualquer outro campo
+              // (mesma lógica de hoje).
+              if (isBatch && !editingQid && field.batchMultiSelect) {
+                return (
+                  <MultiCheckboxField
+                    key={field.name}
+                    field={field}
+                    options={fetchedOptions[field.name] ?? []}
+                    selected={multiSelected[field.name] ?? EMPTY_SELECTED}
+                    onToggle={(v) => toggleMultiSelect(field.name, v)}
+                    onToggleAll={(values, checked) => setMultiSelectAll(field.name, values, checked)}
+                  />
+                )
+              }
               return (
                 <FieldInput
                   key={field.name}
@@ -1054,6 +1127,83 @@ function FieldInput({
         {isRequired && <span className="text-primary ml-1">*</span>}
       </label>
       {input}
+    </div>
+  )
+}
+
+// Campo batchMultiSelect (ex.: Equipamento em Equipamento x Acessórios,
+// "+ Novo Registro"): lista de checkbox em vez de um único <select> — cada
+// equipamento marcado aqui será cruzado com o que mais variar (acessórios
+// da busca em cascata) na hora de montar a fila, um item por combinação.
+function MultiCheckboxField({
+  field,
+  options,
+  selected,
+  onToggle,
+  onToggleAll,
+}: {
+  field: Field
+  options: Array<{ value: string; label: string }>
+  selected: Set<string>
+  onToggle: (value: string) => void
+  onToggleAll: (values: string[], checked: boolean) => void
+}) {
+  const [search, setSearch] = useState('')
+  const visible = search
+    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()) || o.value.toLowerCase().includes(search.toLowerCase()))
+    : options
+  const allVisibleSelected = visible.length > 0 && visible.every(o => selected.has(o.value))
+
+  return (
+    <div className="sm:col-span-2">
+      <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
+        {field.label}
+        <span className="text-primary ml-1">*</span>
+        {selected.size > 0 && (
+          <span className="ml-2 text-primary font-semibold">{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span>
+        )}
+      </label>
+      <p className="text-[12px] text-outline mb-1.5">
+        Marque um ou mais — cada um será combinado com os acessórios que você selecionar mais abaixo, um item na fila por combinação.
+      </p>
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Filtrar..."
+        className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[14.4px] text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors mb-1.5"
+      />
+      <div className="border border-outline-variant rounded overflow-hidden">
+        {visible.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onToggleAll(visible.map(o => o.value), !allVisibleSelected)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-outline hover:text-on-surface bg-surface-container-high border-b border-outline-variant transition-colors"
+          >
+            <input type="checkbox" checked={allVisibleSelected} readOnly className="pointer-events-none accent-yellow-400" />
+            {allVisibleSelected ? 'Desmarcar todos' : `Selecionar todos${search ? ' (filtrados)' : ''}`}
+          </button>
+        )}
+        <div className="max-h-56 overflow-y-auto">
+          {visible.length === 0 ? (
+            <div className="px-3 py-6 text-center text-outline text-[13px] font-mono">Nenhum resultado</div>
+          ) : (
+            visible.map(opt => (
+              <div
+                key={opt.value}
+                onClick={() => onToggle(opt.value)}
+                className={`flex items-center gap-3 px-3 py-2 cursor-pointer text-[14.4px] transition-colors border-b border-outline-variant/20 last:border-0 ${
+                  selected.has(opt.value) ? 'bg-primary/10 text-on-surface' : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                }`}
+              >
+                <input type="checkbox" checked={selected.has(opt.value)} readOnly className="pointer-events-none shrink-0 accent-yellow-400" />
+                <span className="flex-1 truncate">{opt.label}</span>
+                <span className="text-[12px] font-mono text-outline shrink-0">{opt.value}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   )
 }
