@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { TableSchema, Field, getListFields, DOMAIN_LABELS } from '@/lib/schema'
+import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
@@ -158,6 +158,11 @@ export default function DataTable({ tableName, schema }: Props) {
   // por design) de "a busca do retrato falhou de verdade" (mostra um aviso,
   // em vez de ficar indistinguível dos dois casos).
   const [baselineError, setBaselineError] = useState<string | null>(null)
+  // Valores financeiros reais capturados do CSV (nunca vão pro Supabase —
+  // lá esses campos sempre ficam 1) — chave de negócio -> {label, values,
+  // updatedAt}. null = ainda carregando (ou tabela sem coluna financeira,
+  // caso em que a busca nem dispara e fica null pra sempre).
+  const [localCosts, setLocalCosts] = useState<Record<string, { label: string; values: Record<string, number | null>; updatedAt: string }> | null>(null)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
   // Columns actually rendered — excludes hideInList fields (e.g. Resumo, kept
@@ -168,7 +173,7 @@ export default function DataTable({ tableName, schema }: Props) {
   const pinnedListFields = useMemo(() => visibleListFields.filter(f => f.countDuplicatesOf), [visibleListFields])
   const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
-  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null) }, [tableName])
+  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null) }, [tableName])
 
   useEffect(() => {
     let cancelled = false
@@ -186,6 +191,31 @@ export default function DataTable({ tableName, schema }: Props) {
         console.error(`[csv-baseline/${tableName}]`, err.message)
       })
     return () => { cancelled = true }
+  }, [tableName])
+
+  // Só busca se a tabela realmente tem alguma coluna financeira (as que o
+  // Atualizador Global sempre grava como 1 no Supabase) — nas demais fica
+  // null pra sempre, e a coluna renderiza normal (não existe pra elas).
+  useEffect(() => {
+    if (!schema.fields.some(f => FORCE_TO_ONE_FIELDS.includes(f.name))) return
+    let cancelled = false
+    fetch(`/api/local-costs?table=${tableName}`)
+      .then(r => r.ok ? r.json() : {})
+      .then(json => { if (!cancelled) setLocalCosts(json) })
+      .catch(() => { if (!cancelled) setLocalCosts({}) })
+    return () => { cancelled = true }
+  }, [tableName, schema])
+
+  const updateLocalCost = useCallback(async (key: string, fieldName: string, value: number | null): Promise<boolean> => {
+    const res = await fetch(`/api/local-costs/${tableName}/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: { [fieldName]: value } }),
+    })
+    if (!res.ok) return false
+    const row = await res.json()
+    setLocalCosts(prev => ({ ...(prev ?? {}), [key]: row }))
+    return true
   }, [tableName])
 
   useEffect(() => {
@@ -781,7 +811,18 @@ export default function DataTable({ tableName, schema }: Props) {
                           }
                           const f = entry as Field
                           let cell: React.ReactNode
-                          if (f.countDuplicatesOf) {
+                          if (localCosts !== null && FORCE_TO_ONE_FIELDS.includes(f.name)) {
+                            // Coluna financeira: o Supabase sempre tem 1 aqui (sigilo) — mostra
+                            // o valor real capturado localmente no lugar, editável na hora.
+                            const rowKey = getRowKey(schema, row)
+                            const localValue = localCosts[rowKey]?.values[f.name] ?? null
+                            cell = (
+                              <LocalCostCell
+                                value={localValue}
+                                onSave={(v) => updateLocalCost(rowKey, f.name, v)}
+                              />
+                            )
+                          } else if (f.countDuplicatesOf) {
                             const text = getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps) || '—'
                             cell = <span className={text === '1' ? 'text-green-500 font-semibold' : 'text-error font-semibold'}>{text}</span>
                           } else if ((f.lookupFrom && lookups[f.name]) || f.concatFrom) {
@@ -992,6 +1033,68 @@ export default function DataTable({ tableName, schema }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+// Coluna financeira (ex.: Custo (R$)) na própria tela de Cadastro — o
+// Supabase sempre tem 1 aí (sigilo, ver FORCE_TO_ONE_FIELDS); esta célula
+// mostra o valor real capturado do CSV, guardado só localmente, e permite
+// editar clicando nela. Salvar aqui nunca chama a API do Supabase — só
+// /api/local-costs, que grava no arquivo local.
+function LocalCostCell({
+  value,
+  onSave,
+}: {
+  value: number | null
+  onSave: (v: number | null) => Promise<boolean>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const commit = async () => {
+    setSaving(true)
+    const trimmed = draft.trim()
+    const n = trimmed === '' ? null : Number(trimmed)
+    const ok = await onSave(n !== null && Number.isNaN(n) ? value : n)
+    setSaving(false)
+    if (ok) setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+        <input
+          type="number"
+          step="0.0001"
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit() }
+            if (e.key === 'Escape') setEditing(false)
+          }}
+          className="w-24 bg-surface-container border border-primary rounded px-1.5 py-0.5 text-xs text-on-surface focus:outline-none"
+        />
+        {saving && <span className="text-outline text-[10px]">…</span>}
+      </span>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); setDraft(value === null ? '' : String(value)); setEditing(true) }}
+      title="Valor real, guardado só localmente — o Supabase mantém 1 por sigilo. Clique para editar."
+      className={`text-xs font-mono px-1.5 py-0.5 rounded border transition-colors ${
+        value === null
+          ? 'text-outline border-outline-variant/50 hover:border-primary hover:text-primary'
+          : 'text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20'
+      }`}
+    >
+      {value === null ? '+ custo real' : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+    </button>
   )
 }
 
