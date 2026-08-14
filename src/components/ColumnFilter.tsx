@@ -41,6 +41,11 @@ export default function ColumnFilter({
   const [open, setOpen]     = useState(false)
   const [pos, setPos]       = useState<DropdownPos | null>(null)
   const [mounted, setMounted] = useState(false)
+  // Estilo Excel: por padrão, digitar e apertar Enter SUBSTITUI o filtro
+  // pelo que bateu com o texto digitado. Só soma à seleção já marcada
+  // quando esta caixa está marcada — sem ela, uma segunda filtragem
+  // acumulava com a primeira em vez de virar um filtro novo.
+  const [addToFilter, setAddToFilter] = useState(false)
   const triggerRef  = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -121,6 +126,13 @@ export default function ColumnFilter({
     filtered.forEach(o => { if (!selectedValues.includes(o)) onToggleValue(o) })
   }
 
+  // Zera a seleção atual e marca só o que bate com o texto digitado agora —
+  // o comportamento padrão (addToFilter desmarcado) do Enter na caixa de busca.
+  const replaceWithFiltered = () => {
+    onClearValues()
+    filtered.forEach(o => onToggleValue(o))
+  }
+
   // Rendered into document.body via portal — fully escapes overflow/stacking context
   const dropdown = open && pos && mounted ? createPortal(
     <div
@@ -128,6 +140,20 @@ export default function ColumnFilter({
       style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
       className="bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto"
     >
+      {/* Estilo Excel: controla se apertar Enter na busca soma ao filtro
+          atual ou substitui por só o que foi digitado agora (padrão). */}
+      <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none bg-surface-container-high/50">
+        <input
+          type="checkbox"
+          checked={addToFilter}
+          onChange={() => setAddToFilter(v => !v)}
+          className="accent-primary"
+        />
+        <span className={`font-mono ${addToFilter ? 'text-primary font-semibold' : 'text-outline'}`}>
+          Adicionar ao filtro
+        </span>
+      </label>
+
       {/* Todos — clears selection */}
       <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none">
         <input
@@ -194,10 +220,14 @@ export default function ColumnFilter({
           onKeyDown={e => {
             if (e.key === 'Escape') setOpen(false)
             else if (e.key === 'Enter' && searchValue.trim()) {
-              // Digitou e apertou Enter: seleciona tudo que bate com o texto
-              // digitado — equivalente a marcar "Selecionar todos" na lista.
+              // Digitou e apertou Enter: com "Adicionar ao filtro" marcado,
+              // soma tudo que bate com o texto ao que já estava selecionado
+              // (equivalente a "Selecionar todos" na lista); desmarcado
+              // (padrão, estilo Excel), substitui a seleção por só o que
+              // bateu agora.
               e.preventDefault()
-              selectAllFiltered()
+              if (addToFilter) selectAllFiltered()
+              else replaceWithFiltered()
               onSearchChange('')
               setOpen(false)
             }
