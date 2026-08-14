@@ -469,7 +469,11 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
-      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-6xl my-8 animate-fade-in">
+      {/* Equipamento x Acessórios ("Novo", isBatch) pediu 40% a mais de
+          largura — max-w-6xl (72rem) × 1.4 = 100.8rem. Só afeta essa tela
+          (isBatch é exclusivo dela hoje); as demais tabelas continuam com
+          max-w-6xl de sempre. */}
+      <div className={`bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full ${isBatch ? 'max-w-[100.8rem]' : 'max-w-6xl'} my-8 animate-fade-in`}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
