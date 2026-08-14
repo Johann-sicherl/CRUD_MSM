@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables } from '@/lib/schema'
 import { convertCsvRows } from '@/lib/globalUpdateConvert'
+import { extractRealCosts } from '@/lib/localCostExtract'
+import { replaceTableCosts } from '@/lib/localCostStore'
 
 type RouteParams = { params: { table: string } }
 
@@ -36,6 +38,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       hint: error.hint || undefined,
       code: error.code || undefined,
     }, { status: 400 })
+  }
+
+  // Captura os valores financeiros reais do CSV (antes de virarem 1 acima)
+  // num arquivo local — nunca vão pro Supabase. Melhor esforço: a
+  // substituição real já aconteceu com sucesso, então uma falha aqui (ex.:
+  // disco cheio) nunca deve derrubar a resposta de sucesso do import.
+  try {
+    const realCosts = extractRealCosts(schema, rows)
+    if (realCosts) replaceTableCosts(table, realCosts)
+  } catch (e) {
+    console.error(`[local-costs] falha ao gravar custos reais locais de "${table}"`, e)
   }
 
   return NextResponse.json({ inserted: data ?? insertRows.length })

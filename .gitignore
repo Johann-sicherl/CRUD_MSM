@@ -4,3 +4,7 @@ package-lock.json
 tsconfig.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# Custos/valores fiscais reais capturados do CSV (nunca vão pro Supabase por
+# sigilo, nunca devem ir pro Git também — ver src/lib/localCostStore.ts)
+local-data/
