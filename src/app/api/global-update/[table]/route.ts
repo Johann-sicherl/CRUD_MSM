@@ -44,12 +44,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // num arquivo local — nunca vão pro Supabase. Melhor esforço: a
   // substituição real já aconteceu com sucesso, então uma falha aqui (ex.:
   // disco cheio) nunca deve derrubar a resposta de sucesso do import.
+  // localCosts na resposta deixa isso visível na própria tela do Atualizador
+  // Global, em vez de só no terminal — null = esta tabela não tem nenhuma
+  // coluna financeira (nada a capturar, normal); número = quantas linhas
+  // tiveram algum valor real capturado; localCostsError = a gravação local
+  // falhou (raríssimo — problema de disco/permissão na máquina).
+  let localCosts: number | null = null
+  let localCostsError: string | undefined
   try {
     const realCosts = extractRealCosts(schema, rows)
-    if (realCosts) replaceTableCosts(table, realCosts)
+    if (realCosts) {
+      replaceTableCosts(table, realCosts)
+      localCosts = Object.keys(realCosts).length
+    }
   } catch (e) {
+    const message = e instanceof Error ? e.message : 'erro desconhecido'
     console.error(`[local-costs] falha ao gravar custos reais locais de "${table}"`, e)
+    localCostsError = message
   }
 
-  return NextResponse.json({ inserted: data ?? insertRows.length })
+  return NextResponse.json({ inserted: data ?? insertRows.length, localCosts, localCostsError })
 }

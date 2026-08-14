@@ -46,6 +46,10 @@ interface UploadedFile {
   selectInvalidDetails: SelectInvalidDetail[]
   status: 'reviewing' | 'sending' | 'success' | 'error'
   resultMessage?: string
+  // null = tabela sem coluna financeira (normal); número = quantas linhas
+  // tiveram custo/valor fiscal real capturado no arquivo local desta vez.
+  localCosts?: number | null
+  localCostsError?: string
 }
 
 const isBlocking = (file: UploadedFile) =>
@@ -261,7 +265,13 @@ export default function AtualizadorGlobalPage() {
         return
       }
       setFiles(prev => prev.map(f => f.id === file.id
-        ? { ...f, status: 'success', resultMessage: `${json.inserted} registro(s) gravado(s) com sucesso` }
+        ? {
+            ...f,
+            status: 'success',
+            resultMessage: `${json.inserted} registro(s) gravado(s) com sucesso`,
+            localCosts: json.localCosts ?? null,
+            localCostsError: json.localCostsError,
+          }
         : f))
     } catch {
       setFiles(prev => prev.map(f => f.id === file.id
@@ -393,6 +403,14 @@ export default function AtualizadorGlobalPage() {
                     {d && d.extraColumns.length > 0 && <Badge tone="amber">{d.extraColumns.length} coluna(s) extra(s) (ignorada(s))</Badge>}
                     {d && file.selectInvalidCount > 0 && <Badge tone="amber">{file.selectInvalidCount} valor(es) fora da lista</Badge>}
                     {file.status === 'success' && <Badge tone="outline">✓ {file.resultMessage}</Badge>}
+                    {file.status === 'success' && file.localCostsError && (
+                      <Badge tone="error">⚠ custo local não gravado: {file.localCostsError}</Badge>
+                    )}
+                    {file.status === 'success' && !file.localCostsError && typeof file.localCosts === 'number' && (
+                      <Badge tone={file.localCosts > 0 ? 'outline' : 'amber'}>
+                        💰 {file.localCosts} custo(s) real(is) capturado(s) localmente
+                      </Badge>
+                    )}
                     {file.status === 'error' && <Badge tone="error">{file.resultMessage}</Badge>}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
