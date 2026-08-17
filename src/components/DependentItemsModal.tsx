@@ -70,11 +70,10 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
     equipments.filter(eq => activeEquipIds.has(eq.legacy_id))
   , [equipments, activeEquipIds])
 
-  // Códigos vinculados a este equipamento via Equipamento x Acessórios — não
-  // usado mais pra restringir Cód. Item (agora sempre lista tudo do
-  // Cadastro de Componentes), só pra EXCLUIR de Cód. Dependente: um
-  // componente já vinculado ao equipamento por lá nunca pode ser escolhido
-  // como dependente aqui. null (instead of an empty Set) distinguishes "no
+  // Códigos vinculados a este equipamento via Equipamento x Acessórios —
+  // usado pra RESTRINGIR Cód. Item a esses componentes, e pra EXCLUIR os
+  // mesmos de Cód. Dependente (um componente já vinculado por lá nunca pode
+  // virar dependente aqui). null (instead of an empty Set) distinguishes "no
   // equipment picked yet" from "picked, but nothing linked".
   const linkedCodes = useMemo(() => {
     if (!equipId) return null
@@ -106,16 +105,24 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
       .finally(() => setLoadingNames(false))
   }, [dbCreds, equipCodes])
 
-  // Cód. Item: sempre lista todos os itens do grupo direto do Cadastro de
-  // Componentes, sem nenhuma restrição por Equipamento x Acessórios.
+  // Cód. Item: só os itens do grupo que ESTÃO vinculados a este equipamento
+  // em Equipamento x Acessórios. Exceção: grupos como EMBALAGEM nunca
+  // aparecem em Equipamento x Acessórios pra nenhum equipamento — quando o
+  // grupo escolhido não tem NENHUM item vinculado, cai pra listar todos os
+  // itens do grupo direto do Cadastro de Componentes (accessories), sem
+  // restrição; grupos com pelo menos um item vinculado continuam
+  // restritos a esses.
   const acc1 = useMemo(() => {
     if (g1 === EQUIPMENTS_GROUP_ID) {
       // Falls back to the raw code (today's behavior) until Protheus is
       // connected and the name for that specific code has come back.
       return equipCodes.map(code => ({ protheus_code: code, name: equipNames[code] ?? code, legacy_group_id: null }))
     }
+    if (!linkedCodes) return []
+    const linked = allAcc.filter(a => String(a.legacy_group_id) === g1 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+    if (linked.length > 0) return linked
     return allAcc.filter(a => String(a.legacy_group_id) === g1)
-  }, [allAcc, g1, equipCodes, equipNames])
+  }, [allAcc, g1, equipCodes, equipNames, linkedCodes])
   // Cód. Dependente: o oposto — só itens do grupo que NÃO estão vinculados a
   // este equipamento em Equipamento x Acessórios (nunca pode repetir o que
   // já está lá).
@@ -160,12 +167,23 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const findByCode = (code: string) =>
     allAcc.find(a => a.protheus_code.trim().toUpperCase() === code.trim().toUpperCase())
 
+  // Mesma exceção do fallback de acc1: um grupo sem nenhum item vinculado ao
+  // equipamento (ex.: EMBALAGEM) libera todos os itens daquele grupo.
+  const groupHasAnyLinked = (group: string) =>
+    !!linkedCodes && allAcc.some(a => String(a.legacy_group_id) === group && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+
   const handleSearchCode1 = () => {
     const code = codeSearch1.trim()
     if (!code) return
     const found = findByCode(code)
     if (!found) { setSearchErr1(`"${code}" não encontrado em Cadastro de Componentes`); return }
     const groupStr = String(found.legacy_group_id)
+    const codeUpper = found.protheus_code.trim().toUpperCase()
+    const eligible = !!linkedCodes && (linkedCodes.has(codeUpper) || !groupHasAnyLinked(groupStr))
+    if (!eligible) {
+      setSearchErr1(`"${found.protheus_code}" não está vinculado a este equipamento em Equipamento x Acessórios`)
+      return
+    }
     const isSameGroupAsG2 = g2 !== '' && g2 === groupStr
     if (isSameGroupAsG2 && sel2.has(found.protheus_code)) {
       setSearchErr1(`"${found.protheus_code}" já está selecionado como dependente (Cód. Dependente)`)
