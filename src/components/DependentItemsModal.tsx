@@ -10,23 +10,12 @@ interface Accessory { protheus_code: string; name: string; legacy_group_id: numb
 interface StdItem   { protheus_code: string; legacy_equipment_id: number; status: string }
 interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
 interface ItemCfg   { quantity: number; factor: string } // factor as string to allow '' → null
-interface AvulsoRow { id: string; code: string; quantity: string; cost: string; factor: string }
 
 // Synthetic "group" injected only into Grupo — Cód. Item (never Cód.
 // Dependente): instead of Cadastro de Componentes, lists every protheus_code
 // from Cadastro de Equipamentos (standard_equipment_items) tied to whatever
 // Equipamento is picked at the top of this same form.
 const EQUIPMENTS_GROUP_ID = '__equipamentos__'
-
-// Synthetic "group" injected into Grupo — Cód. Dependente, always available
-// regardless of what's picked on the Cód. Item side — lets the user type in
-// dependent codes by hand instead of picking from a real group's item list.
-const CODIGO_AVULSO_ID = '__avulso__'
-
-const makeEmptyAvulsoRow = (): AvulsoRow => ({
-  id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
-  code: '', quantity: '1', cost: '0', factor: '1',
-})
 
 interface Props {
   onClose: () => void
@@ -46,8 +35,6 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const [sel2,       setSel2]       = useState<Set<string>>(new Set())
   // Per-item settings for box 2 (quantity + proportional_factor)
   const [cfg2,       setCfg2]       = useState<Record<string, ItemCfg>>({})
-  // Manual rows for box 2 when Grupo — Cód. Dependente = CÓD. AVULSO
-  const [avulsoRows, setAvulsoRows] = useState<AvulsoRow[]>([])
   const [saving,     setSaving]     = useState(false)
   const [result,     setResult]     = useState<{ ok: number; fail: number } | null>(null)
 
@@ -89,7 +76,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   // null (instead of an empty Set) distinguishes "no equipment picked yet"
   // from "picked, but nothing linked". Doesn't apply to the EQUIPAMENTOS
   // pseudo-group (already scoped to the equipment via standard_equipment_items
-  // itself) nor to CÓD. AVULSO (free typing, no group/join involved).
+  // itself).
   const linkedCodes = useMemo(() => {
     if (!equipId) return null
     return new Set(
@@ -167,14 +154,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
   const setCfgField = (code: string, field: 'quantity' | 'factor', val: string) =>
     setCfg2(prev => ({ ...prev, [code]: { ...prev[code] ?? { quantity: 1, factor: '1' }, [field]: field === 'quantity' ? Math.max(1, Number(val) || 1) : val } }))
 
-  const addAvulsoRow    = () => setAvulsoRows(prev => [...prev, makeEmptyAvulsoRow()])
-  const removeAvulsoRow = (id: string) => setAvulsoRows(prev => prev.filter(r => r.id !== id))
-  const updateAvulsoRow = (id: string, field: keyof Omit<AvulsoRow, 'id'>, val: string) =>
-    setAvulsoRows(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r))
-
-  const isAvulso = g2 === CODIGO_AVULSO_ID
-  const validAvulsoRows = useMemo(() => avulsoRows.filter(r => r.code.trim() !== ''), [avulsoRows])
-  const dependentCount = isAvulso ? validAvulsoRows.length : sel2.size
+  const dependentCount = sel2.size
   const pairs = sel1.size * dependentCount
 
   const handleSubmit = async () => {
@@ -184,30 +164,16 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 
     type Payload = { protheus_code: string; protheus_item_code: string; quantity: number; cost_std: number; proportional_factor: number | null }
     const payloads: Payload[] = []
-    if (isAvulso) {
-      for (const c1 of sel1) {
-        for (const row of validAvulsoRows) {
-          payloads.push({
-            protheus_code: c1,
-            protheus_item_code: row.code.trim(),
-            quantity: Math.max(1, Number(row.quantity) || 1),
-            cost_std: Number(row.cost) || 0,
-            proportional_factor: row.factor.trim() !== '' ? Number(row.factor) : null,
-          })
-        }
-      }
-    } else {
-      for (const c1 of sel1) {
-        for (const c2 of sel2) {
-          const settings = cfg2[c2] ?? { quantity: 1, factor: '1' }
-          payloads.push({
-            protheus_code: c1,
-            protheus_item_code: c2,
-            quantity: settings.quantity,
-            cost_std: 0,
-            proportional_factor: settings.factor !== '' ? Number(settings.factor) : null,
-          })
-        }
+    for (const c1 of sel1) {
+      for (const c2 of sel2) {
+        const settings = cfg2[c2] ?? { quantity: 1, factor: '1' }
+        payloads.push({
+          protheus_code: c1,
+          protheus_item_code: c2,
+          quantity: settings.quantity,
+          cost_std: 0,
+          proportional_factor: settings.factor !== '' ? Number(settings.factor) : null,
+        })
       }
     }
 
@@ -274,15 +240,10 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">Grupo — Cód. Dependente</label>
               <select
                 value={g2}
-                onChange={e => {
-                  const v = e.target.value
-                  setG2(v); setSel2(new Set()); setCfg2({})
-                  if (v === CODIGO_AVULSO_ID) setAvulsoRows(prev => prev.length ? prev : [makeEmptyAvulsoRow()])
-                }}
+                onChange={e => { setG2(e.target.value); setSel2(new Set()); setCfg2({}) }}
                 className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
               >
                 <option value="">Selecione o grupo...</option>
-                <option value={CODIGO_AVULSO_ID}>CÓD. AVULSO</option>
                 {groups.map(g => <option key={g.legacy_id} value={g.legacy_id}>{g.name}</option>)}
               </select>
             </div>
@@ -315,33 +276,29 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               empty={!g1}
               noEquip={!equipId}
             />
-            {/* Box 2 — Cód. Dependente: manual rows (CÓD. AVULSO) or the usual group picker */}
-            {isAvulso ? (
-              <AvulsoBox rows={avulsoRows} onAdd={addAvulsoRow} onRemove={removeAvulsoRow} onChange={updateAvulsoRow} />
-            ) : (
-              <DependentBox
-                key={`dep-${g2}`}
-                title="Cód. Dependente"
-                items={acc2}
-                selected={sel2}
-                blockedCodes={blocked2}
-                cfg={cfg2}
-                onToggle={toggle2}
-                onAll={visible => {
-                  const allowed = visible.filter(a => !blocked2.has(a.protheus_code))
-                  setSel2(new Set(allowed.map(a => a.protheus_code)))
-                  setCfg2(prev => {
-                    const n = { ...prev }
-                    for (const a of allowed) if (!n[a.protheus_code]) n[a.protheus_code] = { quantity: 1, factor: '1' }
-                    return n
-                  })
-                }}
-                onNone={() => setSel2(new Set())}
-                onCfgChange={setCfgField}
-                empty={!g2}
-                noEquip={!equipId}
-              />
-            )}
+            {/* Box 2 — Cód. Dependente */}
+            <DependentBox
+              key={`dep-${g2}`}
+              title="Cód. Dependente"
+              items={acc2}
+              selected={sel2}
+              blockedCodes={blocked2}
+              cfg={cfg2}
+              onToggle={toggle2}
+              onAll={visible => {
+                const allowed = visible.filter(a => !blocked2.has(a.protheus_code))
+                setSel2(new Set(allowed.map(a => a.protheus_code)))
+                setCfg2(prev => {
+                  const n = { ...prev }
+                  for (const a of allowed) if (!n[a.protheus_code]) n[a.protheus_code] = { quantity: 1, factor: '1' }
+                  return n
+                })
+              }}
+              onNone={() => setSel2(new Set())}
+              onCfgChange={setCfgField}
+              empty={!g2}
+              noEquip={!equipId}
+            />
           </div>
 
           {/* Summary */}
@@ -633,65 +590,3 @@ function DependentBox({
   )
 }
 
-// ── AvulsoBox (Cód. Dependente — CÓD. AVULSO: linhas digitadas manualmente) ──
-
-const avulsoFieldClass = "w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors"
-
-function AvulsoBox({
-  rows, onAdd, onRemove, onChange,
-}: {
-  rows: AvulsoRow[]
-  onAdd: () => void
-  onRemove: (id: string) => void
-  onChange: (id: string, field: keyof Omit<AvulsoRow, 'id'>, val: string) => void
-}) {
-  const validCount = rows.filter(r => r.code.trim() !== '').length
-  return (
-    <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[28rem]">
-      <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">
-        <span className="text-xs font-semibold text-outline uppercase tracking-[0.1em]">Cód. Dependente — Avulso</span>
-        <button type="button" onClick={onAdd} className="flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
-          <span className="text-sm leading-none">+</span> linha
-        </button>
-      </div>
-      <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[10px] font-semibold text-outline uppercase tracking-[0.1em]">
-        <div className="flex-1 px-2 py-2">Cód. Dependente</div>
-        <div className="w-16 shrink-0 border-l border-outline-variant/30 px-2 py-2 text-center">Qtd.</div>
-        <div className="w-20 shrink-0 border-l border-outline-variant/30 px-2 py-2 text-center">Custo</div>
-        <div className="w-20 shrink-0 border-l border-outline-variant/30 px-2 py-2 text-center">Fat.Prop.</div>
-        <div className="w-8 shrink-0" />
-      </div>
-      <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
-        {rows.length === 0 ? (
-          <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhuma linha — clique em &quot;+ linha&quot;</div>
-        ) : rows.map(row => (
-          <div key={row.id} className="flex items-center">
-            <div className="flex-1 px-1.5 py-1.5">
-              <input
-                type="text" value={row.code} onChange={e => onChange(row.id, 'code', e.target.value)}
-                placeholder="Ex: 27.02.00123"
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs font-mono text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-            <div className="w-16 shrink-0 px-1.5 py-1.5">
-              <input type="number" min={1} value={row.quantity} onChange={e => onChange(row.id, 'quantity', e.target.value)} className={avulsoFieldClass} />
-            </div>
-            <div className="w-20 shrink-0 px-1.5 py-1.5">
-              <input type="number" step="0.01" value={row.cost} onChange={e => onChange(row.id, 'cost', e.target.value)} className={avulsoFieldClass} />
-            </div>
-            <div className="w-20 shrink-0 px-1.5 py-1.5">
-              <input type="number" step="0.01" placeholder="1" value={row.factor} onChange={e => onChange(row.id, 'factor', e.target.value)} className={avulsoFieldClass} />
-            </div>
-            <div className="w-8 shrink-0 flex items-center justify-center">
-              <button type="button" onClick={() => onRemove(row.id)} title="Remover linha" className="text-outline hover:text-error text-sm px-1">✕</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="px-4 py-2 border-t border-outline-variant/40 text-xs font-mono text-outline flex items-center gap-2">
-        {validCount > 0 ? <span className="text-primary">{validCount} código{validCount !== 1 ? 's' : ''} válido{validCount !== 1 ? 's' : ''}</span> : <span>Nenhum código preenchido</span>}
-        <span className="text-outline/40">·</span><span>{rows.length} linha{rows.length !== 1 ? 's' : ''}</span>
-      </div>
-    </div>
-  )
-}
