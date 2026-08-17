@@ -7,6 +7,7 @@ interface Equip { legacy_id: number; name: string }
 interface Group { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
 interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
+interface StdItem { legacy_equipment_id: number; status: string }
 
 interface Props {
   onClose: () => void
@@ -18,6 +19,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
   const [groups,           setGroups]           = useState<Group[]>([])
   const [allAcc,           setAllAcc]           = useState<Accessory[]>([])
   const [equipAccessories, setEquipAccessories] = useState<EquipAccessory[]>([])
+  const [stdItems,         setStdItems]         = useState<StdItem[]>([])
   const [equipId,    setEquipId]    = useState('')
   const [g1,         setG1]         = useState('')
   const [g2,         setG2]         = useState('')
@@ -32,13 +34,24 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
       fetch('/api/accessory_groups?limit=25000').then(r => r.json()),
       fetch('/api/accessories?limit=25000').then(r => r.json()),
       fetch('/api/relationship_equip_accessory?limit=25000').then(r => r.json()),
-    ]).then(([eq, gr, ac, rel]) => {
+      fetch('/api/standard_equipment_items?limit=25000').then(r => r.json()),
+    ]).then(([eq, gr, ac, rel, si]) => {
       setEquipments(eq.data || [])
       setGroups(gr.data || [])
       setAllAcc(ac.data || [])
       setEquipAccessories(rel.data || [])
+      setStdItems(si.data || [])
     })
   }, [])
+
+  // Mesma regra do dropdown de Equipamento x Acessórios: só entram
+  // equipamentos com pelo menos um item ativo em Cadastro de Equipamentos.
+  const activeEquipIds = useMemo(() =>
+    new Set(stdItems.filter(r => r.status === 'active').map(r => r.legacy_equipment_id))
+  , [stdItems])
+  const activeEquipments = useMemo(() =>
+    equipments.filter(eq => activeEquipIds.has(eq.legacy_id))
+  , [equipments, activeEquipIds])
 
   // Only accessories actually registered (via Equipamento x Acessórios) for
   // the equipment picked above — a group can hold accessories that were
@@ -132,7 +145,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
               className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             >
               <option value="">Selecione o equipamento...</option>
-              {equipments.map(eq => (
+              {activeEquipments.map(eq => (
                 <option key={eq.legacy_id} value={eq.legacy_id}>{eq.name}</option>
               ))}
             </select>

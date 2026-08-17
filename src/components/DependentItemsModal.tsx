@@ -7,7 +7,7 @@ import { useProtheusAuth } from '@/lib/protheusAuthContext'
 interface Equip     { legacy_id: number; name: string }
 interface Group     { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
-interface StdItem   { protheus_code: string; legacy_equipment_id: number }
+interface StdItem   { protheus_code: string; legacy_equipment_id: number; status: string }
 interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
 interface ItemCfg   { quantity: number; factor: string } // factor as string to allow '' → null
 interface AvulsoRow { id: string; code: string; quantity: string; cost: string; factor: string }
@@ -73,6 +73,15 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
       setEquipAccessories(rel.data || [])
     })
   }, [])
+
+  // Mesma regra do dropdown de Equipamento x Acessórios: só entram
+  // equipamentos com pelo menos um item ativo em Cadastro de Equipamentos.
+  const activeEquipIds = useMemo(() =>
+    new Set(stdItems.filter(r => r.status === 'active').map(r => r.legacy_equipment_id))
+  , [stdItems])
+  const activeEquipments = useMemo(() =>
+    equipments.filter(eq => activeEquipIds.has(eq.legacy_id))
+  , [equipments, activeEquipIds])
 
   // Only accessories actually registered (via Equipamento x Acessórios) for
   // the equipment picked above — a group can hold accessories never linked
@@ -226,7 +235,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             >
               <option value="">Selecione o equipamento...</option>
-              {equipments.map(eq => <option key={eq.legacy_id} value={eq.legacy_id}>{eq.name}</option>)}
+              {activeEquipments.map(eq => <option key={eq.legacy_id} value={eq.legacy_id}>{eq.name}</option>)}
             </select>
           </div>
 
