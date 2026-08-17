@@ -120,16 +120,21 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
       return equipCodes.map(code => ({ protheus_code: code, name: equipNames[code] ?? code, legacy_group_id: null }))
     }
     if (!linkedCodes) return []
-    const linked = allAcc.filter(a => String(a.legacy_group_id) === g1 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+    // Union com sel1: um código marcado pela busca (ver handleSearchCode1)
+    // sempre continua visível/marcado na lista, mesmo que não esteja
+    // vinculado a este equipamento em Equipamento x Acessórios.
+    const linked = allAcc.filter(a => String(a.legacy_group_id) === g1
+      && (linkedCodes.has(a.protheus_code.trim().toUpperCase()) || sel1.has(a.protheus_code)))
     if (linked.length > 0) return linked
     return allAcc.filter(a => String(a.legacy_group_id) === g1)
-  }, [allAcc, g1, equipCodes, equipNames, linkedCodes])
+  }, [allAcc, g1, equipCodes, equipNames, linkedCodes, sel1])
   const acc2 = useMemo(() => {
     if (!linkedCodes) return []
-    const linked = allAcc.filter(a => String(a.legacy_group_id) === g2 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
+    const linked = allAcc.filter(a => String(a.legacy_group_id) === g2
+      && (linkedCodes.has(a.protheus_code.trim().toUpperCase()) || sel2.has(a.protheus_code)))
     if (linked.length > 0) return linked
     return allAcc.filter(a => String(a.legacy_group_id) === g2)
-  }, [allAcc, g2, linkedCodes])
+  }, [allAcc, g2, linkedCodes, sel2])
 
   // When the same group is selected on both sides: an item chosen as trigger
   // cannot also be picked as dependent, and vice-versa — blocking only went
@@ -153,6 +158,54 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 
   const setCfgField = (code: string, field: 'quantity' | 'factor', val: string) =>
     setCfg2(prev => ({ ...prev, [code]: { ...prev[code] ?? { quantity: 1, factor: '1' }, [field]: field === 'quantity' ? Math.max(1, Number(val) || 1) : val } }))
+
+  // Busca direta por código Protheus (ambas as caixas): digita o código,
+  // aperta Enter — se existir em Cadastro de Componentes, seleciona o grupo
+  // dele automaticamente (trocando de grupo zera a seleção anterior daquela
+  // caixa, igual à troca manual no <select>) e já deixa o item marcado, sem
+  // precisar escolher o grupo à mão primeiro.
+  const [codeSearch1, setCodeSearch1] = useState('')
+  const [codeSearch2, setCodeSearch2] = useState('')
+  const [searchErr1,  setSearchErr1]  = useState('')
+  const [searchErr2,  setSearchErr2]  = useState('')
+
+  const findByCode = (code: string) =>
+    allAcc.find(a => a.protheus_code.trim().toUpperCase() === code.trim().toUpperCase())
+
+  const handleSearchCode1 = () => {
+    const code = codeSearch1.trim()
+    if (!code) return
+    const found = findByCode(code)
+    if (!found) { setSearchErr1(`"${code}" não encontrado em Cadastro de Componentes`); return }
+    const groupStr = String(found.legacy_group_id)
+    const isSameGroupAsG2 = g2 !== '' && g2 === groupStr
+    if (isSameGroupAsG2 && sel2.has(found.protheus_code)) {
+      setSearchErr1(`"${found.protheus_code}" já está selecionado como dependente (Cód. Dependente)`)
+      return
+    }
+    setSearchErr1('')
+    if (groupStr !== g1) { setG1(groupStr); setSel1(new Set([found.protheus_code])) }
+    else setSel1(prev => new Set(prev).add(found.protheus_code))
+    setCodeSearch1('')
+  }
+
+  const handleSearchCode2 = () => {
+    const code = codeSearch2.trim()
+    if (!code) return
+    const found = findByCode(code)
+    if (!found) { setSearchErr2(`"${code}" não encontrado em Cadastro de Componentes`); return }
+    const groupStr = String(found.legacy_group_id)
+    const isSameGroupAsG1 = g1 !== '' && g1 === groupStr
+    if (isSameGroupAsG1 && sel1.has(found.protheus_code)) {
+      setSearchErr2(`"${found.protheus_code}" já está selecionado como gatilho (Cód. Item)`)
+      return
+    }
+    setSearchErr2('')
+    if (groupStr !== g2) { setG2(groupStr); setSel2(new Set([found.protheus_code])); setCfg2({}) }
+    else setSel2(prev => new Set(prev).add(found.protheus_code))
+    setCfg2(prev => prev[found.protheus_code] ? prev : { ...prev, [found.protheus_code]: { quantity: 1, factor: '1' } })
+    setCodeSearch2('')
+  }
 
   const dependentCount = sel2.size
   const pairs = sel1.size * dependentCount
@@ -196,7 +249,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-surface-container rounded-lg border border-outline-variant shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col animate-fade-in">
+      <div className="bg-surface-container rounded-lg border border-outline-variant shadow-2xl w-full max-w-[86.4rem] h-[90vh] flex flex-col animate-fade-in">
 
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-outline-variant shrink-0">
@@ -246,6 +299,52 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
                 <option value="">Selecione o grupo...</option>
                 {groups.map(g => <option key={g.legacy_id} value={g.legacy_id}>{g.name}</option>)}
               </select>
+            </div>
+          </div>
+
+          {/* Busca direta por código — acha o componente em Cadastro de
+              Componentes, seleciona o grupo dele sozinho e já deixa marcado
+              na lista, sem precisar escolher o grupo antes. */}
+          <div className="grid grid-cols-2 gap-5 -mt-2">
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={codeSearch1}
+                  onChange={e => { setCodeSearch1(e.target.value); setSearchErr1('') }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCode1() } }}
+                  placeholder="Buscar por código Protheus..."
+                  className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchCode1}
+                  className="px-3 py-2 text-xs border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                >
+                  Buscar
+                </button>
+              </div>
+              {searchErr1 && <div className="text-[10px] text-error mt-1">{searchErr1}</div>}
+            </div>
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={codeSearch2}
+                  onChange={e => { setCodeSearch2(e.target.value); setSearchErr2('') }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCode2() } }}
+                  placeholder="Buscar por código Protheus..."
+                  className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchCode2}
+                  className="px-3 py-2 text-xs border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                >
+                  Buscar
+                </button>
+              </div>
+              {searchErr2 && <div className="text-[10px] text-error mt-1">{searchErr2}</div>}
             </div>
           </div>
 
