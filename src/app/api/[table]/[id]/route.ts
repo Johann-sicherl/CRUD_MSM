@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables, isRealColumnField } from '@/lib/schema'
+import { tables, isRealColumnField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { recordUpdateAudit, recordDeleteAudit } from '@/lib/sqlAudit'
+import { protectLocalCostsOnUpdate } from '@/lib/localCostGuard'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -31,11 +32,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   if (schema.hasTimestamps) updateBody.updated_at = new Date().toISOString()
 
+  const hasForceFields = schema.fields.some(f => FORCE_TO_ONE_FIELDS.includes(f.name))
   let beforeRow: Record<string, unknown> | null = null
-  if (schema.auditQueries) {
+  if (schema.auditQueries || hasForceFields) {
     const { data: before } = await supabaseAdmin.from(table).select('*').eq('id', id).maybeSingle()
     beforeRow = before as Record<string, unknown> | null
   }
+
+  // Colunas financeiras (FORCE_TO_ONE_FIELDS): o Supabase nunca recebe o
+  // valor real digitado aqui — vai sempre 1. Só captura como "real" o que
+  // realmente mudou em relação ao que já estava salvo (beforeRow), pra
+  // reabrir/salvar o formulário sem tocar no custo não sobrescrever com 1 o
+  // valor real já guardado localmente.
+  protectLocalCostsOnUpdate(table, schema, updateBody, body, beforeRow)
 
   const { data, error } = await supabaseAdmin.from(table).update(updateBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })

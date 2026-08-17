@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables, getSearchableFields, isRealColumnField } from '@/lib/schema'
 import { recordInsertAudit } from '@/lib/sqlAudit'
+import { protectLocalCostsOnInsert } from '@/lib/localCostGuard'
 
 type RouteParams = { params: { table: string } }
 
@@ -126,6 +127,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const maxVal = maxRow ? (((maxRow as any)[field.name] as number) ?? 0) : 0
     insertBody[field.name] = maxVal + 1
   }
+
+  // Colunas financeiras (FORCE_TO_ONE_FIELDS): o Supabase nunca recebe o
+  // valor real digitado aqui — vai sempre 1, e o valor real (se houver) fica
+  // só no arquivo local. Mesma proteção que o Atualizador Global já tem para
+  // o import em massa via CSV, agora também pra "+ Novo Registro",
+  // "Importar Excel" e os modais de Não Combináveis/Dependentes, que também
+  // passam por este mesmo endpoint.
+  protectLocalCostsOnInsert(table, schema, insertBody, body)
 
   // Double insert for non_combinable_comps: resolve groups from accessories, insert forward + reversed
   if (schema.doubleInsert) {
