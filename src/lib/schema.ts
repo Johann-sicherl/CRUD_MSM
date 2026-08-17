@@ -57,6 +57,7 @@ export interface Field {
   defaultValue?: string | number | boolean | null
   placeholder?: string
   lookupFrom?: LookupConfig
+  lookupFallback?: { table: string; keyField: string; fixedValue: string } // when lookupFrom finds no match for a key, but that key exists in this other table instead, show fixedValue rather than "N/A" (ex.: Cód. Item preenchido a partir do grupo sintético EQUIPAMENTOS, cujo código não existe em accessories)
   fetchOptions?: LookupConfig
   cascadeLookup?: CascadeLookupConfig
   validateExistsIn?: { table: string; field: string; displayField?: string; errorMessage?: string }
@@ -407,7 +408,8 @@ export const tables: Record<string, TableSchema> = {
           filterVia: { table: 'standard_equipment_items', joinField: 'legacy_equipment_id', filterField: 'status', filterValue: 'active' } } },
       { name: 'group_name_item', label: 'Grupo Item', type: 'text', nullable: true, showInList: true, hideInForm: true,
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_code',
-          through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } } },
+          through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } },
+        lookupFallback: { table: 'standard_equipment_items', keyField: 'protheus_code', fixedValue: 'EQUIPAMENTO' } },
       { name: 'protheus_code', label: 'Cód. Item', type: 'text', nullable: false, showInList: true, listFilterType: 'text', noBulkEdit: true,
         cascadeLookup: {
           groupTable: 'accessory_groups', groupKeyField: 'legacy_id', groupDisplayField: 'name',
@@ -416,7 +418,8 @@ export const tables: Record<string, TableSchema> = {
             filterField: 'legacy_equipment_id', filterFromForm: 'legacy_equipment_id' },
         } },
       { name: 'nome_item', label: 'Nome Item', type: 'text', nullable: true, showInList: true, hideInForm: true, listFilterType: 'text',
-        lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' } },
+        lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_code' },
+        lookupFallback: { table: 'standard_equipment_items', keyField: 'protheus_code', fixedValue: 'EQUIPAMENTO' } },
       { name: 'group_name_dep', label: 'Grupo Dependente', type: 'text', nullable: true, showInList: true, hideInForm: true,
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'legacy_group_id', sourceField: 'protheus_item_code',
           through: { table: 'accessory_groups', keyField: 'legacy_id', displayField: 'name' } } },

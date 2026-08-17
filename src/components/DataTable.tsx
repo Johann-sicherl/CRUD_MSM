@@ -236,6 +236,22 @@ export default function DataTable({ tableName, schema }: Props) {
     fieldsWithLookup.forEach(async (field) => {
       const lc = field.lookupFrom!
 
+      // Preenche, na própria map de exibição, as chaves que não existem na
+      // tabela principal do lookupFrom mas existem nesta tabela alternativa —
+      // assim filtro, exportação e célula usam o mesmo valor sem precisar de
+      // nenhuma lógica extra em getDisplayValue.
+      const applyFallback = async (map: Record<string, string>) => {
+        if (!field.lookupFallback) return
+        const fb = field.lookupFallback
+        const fbRes = await fetch(`/api/${fb.table}?limit=25000`)
+        if (!fbRes.ok) return
+        const fbJson = await fbRes.json()
+        for (const row of (fbJson.data || [])) {
+          const key = String(row[fb.keyField])
+          if (!(key in map)) map[key] = fb.fixedValue
+        }
+      }
+
       if (lc.through) {
         const [mainRes, throughRes] = await Promise.all([
           fetch(`/api/${lc.table}?limit=25000`),
@@ -255,6 +271,7 @@ export default function DataTable({ tableName, schema }: Props) {
         for (const [key, mid] of Object.entries(intermediateMap)) {
           if (mid && throughMap[mid]) map[key] = throughMap[mid]
         }
+        await applyFallback(map)
         setLookups(prev => ({ ...prev, [field.name]: map }))
         return
       }
@@ -266,6 +283,7 @@ export default function DataTable({ tableName, schema }: Props) {
       for (const row of (json.data || [])) {
         map[String(row[lc.keyField])] = row[lc.displayField] == null ? '' : String(row[lc.displayField])
       }
+      await applyFallback(map)
       setLookups(prev => ({ ...prev, [field.name]: map }))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
