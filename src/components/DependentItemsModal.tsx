@@ -134,12 +134,19 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
     return allAcc.filter(a => String(a.legacy_group_id) === g2 && linkedCodes.has(a.protheus_code.trim().toUpperCase()))
   }, [allAcc, g2, linkedCodes])
 
-  // When the same group is selected: items chosen as trigger cannot be picked as dependent
+  // When the same group is selected on both sides: an item chosen as trigger
+  // cannot also be picked as dependent, and vice-versa — blocking only went
+  // one way before (box 2 blocked against sel1, but box 1 never blocked
+  // against sel2), so picking Cód. Dependente first didn't cut the same
+  // component out of Cód. Item.
   const sameGroup = g1 !== '' && g1 === g2
+  const blocked1  = sameGroup ? sel2 : new Set<string>()
   const blocked2  = sameGroup ? sel1 : new Set<string>()
 
-  const toggle1 = (code: string) =>
+  const toggle1 = (code: string) => {
+    if (blocked1.has(code)) return
     setSel1(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
+  }
 
   const toggle2 = (code: string) => {
     if (blocked2.has(code)) return
@@ -291,8 +298,9 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               title="Cód. Item — Gatilho"
               items={acc1}
               selected={sel1}
+              blockedCodes={blocked1}
               onToggle={toggle1}
-              onAll={visible => setSel1(new Set(visible.map(a => a.protheus_code)))}
+              onAll={visible => setSel1(new Set(visible.filter(a => !blocked1.has(a.protheus_code)).map(a => a.protheus_code)))}
               onNone={() => setSel1(new Set())}
               empty={!g1}
               noEquip={!equipId}
@@ -371,9 +379,9 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 // ── TriggerBox (Cód. Item — standard, no extra columns) ──────────────────────
 
 function TriggerBox({
-  title, items, selected, onToggle, onAll, onNone, empty, noEquip,
+  title, items, selected, blockedCodes, onToggle, onAll, onNone, empty, noEquip,
 }: {
-  title: string; items: Accessory[]; selected: Set<string>
+  title: string; items: Accessory[]; selected: Set<string>; blockedCodes: Set<string>
   onToggle: (c: string) => void; onAll: (v: Accessory[]) => void; onNone: () => void; empty: boolean; noEquip: boolean
 }) {
   const [codeSearch,   setCodeSearch]   = useState('')
@@ -400,7 +408,8 @@ function TriggerBox({
     items.filter(a => passesCode(a) && passesName(a))
   , [items, codeSearch, codeSelected, nameSearch, nameSelected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const allSel = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
+  const selectableVisible = visible.filter(a => !blockedCodes.has(a.protheus_code))
+  const allSel = selectableVisible.length > 0 && selectableVisible.every(a => selected.has(a.protheus_code))
 
   return (
     <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[28rem]">
@@ -434,15 +443,38 @@ function TriggerBox({
           <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
-            ) : visible.map(a => (
-              <label key={a.protheus_code} className={`flex items-center cursor-pointer hover:bg-surface-container transition-colors ${selected.has(a.protheus_code) ? 'bg-primary/5' : ''}`}>
-                <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/10 py-2">
-                  <input type="checkbox" checked={selected.has(a.protheus_code)} onChange={() => onToggle(a.protheus_code)} className="accent-primary" />
-                </div>
-                <div className="w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono text-primary truncate">{a.protheus_code}</div>
-                <div className="flex-1 px-2 py-2 text-xs text-on-surface-variant truncate">{a.name}</div>
-              </label>
-            ))}
+            ) : visible.map(a => {
+              const blocked = blockedCodes.has(a.protheus_code)
+              return (
+                <label
+                  key={a.protheus_code}
+                  className={`flex items-center transition-colors ${
+                    blocked
+                      ? 'opacity-35 cursor-not-allowed bg-surface-container-highest'
+                      : selected.has(a.protheus_code)
+                        ? 'bg-primary/5 cursor-pointer hover:bg-primary/8'
+                        : 'cursor-pointer hover:bg-surface-container'
+                  }`}
+                >
+                  <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/10 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(a.protheus_code)}
+                      disabled={blocked}
+                      onChange={() => onToggle(a.protheus_code)}
+                      className="accent-primary disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <div className={`w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono truncate ${blocked ? 'text-outline line-through' : 'text-primary'}`}>
+                    {a.protheus_code}
+                  </div>
+                  <div className="flex-1 px-2 py-2 text-xs text-on-surface-variant truncate">
+                    {a.name}
+                    {blocked && <span className="ml-1.5 text-[10px] text-outline font-mono">(selecionado como dependente)</span>}
+                  </div>
+                </label>
+              )
+            })}
           </div>
           <div className="px-4 py-2 border-t border-outline-variant/40 text-xs font-mono text-outline flex items-center gap-2">
             {selected.size > 0 ? <span className="text-primary">{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span> : <span>Nenhum selecionado</span>}
