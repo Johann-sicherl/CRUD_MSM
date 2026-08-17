@@ -92,22 +92,37 @@ function applyFilters(
   )
 }
 
-// Numeric sort key for schema.listSortBy: a real column (e.g. legacy_equipment_id)
+// Sort key for schema.listSortBy: a real column (e.g. legacy_equipment_id)
 // sorts by its own raw value — never the display name a lookupFrom would resolve
 // it to — while a virtual field (no property of its own on the row, e.g. a
 // sort-only lookup like group_legacy_id) resolves through getDisplayValue,
 // which for those fields is configured to return the numeric id itself.
-function getNumericSortValue(
+// pairKeyFrom fields (ex.: pair_key) instead combine two other field values
+// into an order-independent key, so both directions of an unordered pair
+// (A→B and its mirrored B→A row) sort next to each other.
+function getSortValue(
   row: Record<string, unknown>,
   fieldName: string,
   field: Field | undefined,
   lookups: LookupMap,
   allFields: Field[],
-): number {
+): string {
+  if (field?.pairKeyFrom) {
+    const [f1, f2] = field.pairKeyFrom
+    return [String(row[f1] ?? ''), String(row[f2] ?? '')].sort().join('|')
+  }
   const raw = row[fieldName]
-  const value = raw !== undefined ? raw : getDisplayValue(row, fieldName, field, lookups, allFields)
-  const n = Number(value)
-  return Number.isNaN(n) ? 0 : n
+  return String(raw !== undefined ? raw : getDisplayValue(row, fieldName, field, lookups, allFields))
+}
+
+// Protheus codes (ex.: "27.01.00148") aren't pure numbers, so a numeric-only
+// comparator would sort them all as 0 — numeric compare when both sides
+// parse as a real number (ids), locale string compare otherwise (codes,
+// pair keys).
+function compareSortValues(a: string, b: string): number {
+  const an = Number(a), bn = Number(b)
+  if (a !== '' && b !== '' && !Number.isNaN(an) && !Number.isNaN(bn)) return an - bn
+  return a.localeCompare(b, 'pt-BR')
 }
 
 function applyListSortBy(
@@ -120,8 +135,10 @@ function applyListSortBy(
   const sortFields = sortBy.map(name => fields.find(f => f.name === name))
   return [...rows].sort((a, b) => {
     for (let i = 0; i < sortBy.length; i++) {
-      const diff = getNumericSortValue(a, sortBy[i], sortFields[i], lookups, fields)
-        - getNumericSortValue(b, sortBy[i], sortFields[i], lookups, fields)
+      const diff = compareSortValues(
+        getSortValue(a, sortBy[i], sortFields[i], lookups, fields),
+        getSortValue(b, sortBy[i], sortFields[i], lookups, fields),
+      )
       if (diff !== 0) return diff
     }
     return 0

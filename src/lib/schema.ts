@@ -79,6 +79,7 @@ export interface Field {
   requiredWhen?: { field: string; values: (string | number)[] } // form-only: this field becomes required (client-side) when the named field's current value is one of these
   similarTextSuggest?: boolean // text field, "+ Novo Registro" only: as the user types, suggests the closest existing values already in this same column (fuzzy match — catches near-duplicates like singular/plural variants), to keep naming standardized
   batchMultiSelect?: boolean // batchInsert tables only, "+ Novo Registro" (not editing a single queued item): renders this field as a checkbox list (using its fetchOptions) instead of a single dropdown — every value checked here is crossed with whatever else varies (ex.: accessories picked via cascadeLookup) when items are added to the queue, producing one queue item per combination
+  pairKeyFrom?: [string, string] // virtual, sort-only field: sort key is these two other field names' values sorted+joined, so both directions of an unordered pair (ex.: linha A→B e sua espelhada B→A) land next to each other regardless of which one holds which value — use in schema.listSortBy
 }
 
 export interface TableSchema {
@@ -365,6 +366,12 @@ export const tables: Record<string, TableSchema> = {
     compactHeader: true,
     bulkEdit: true,
     auditQueries: true,
+    // Equipamento já ordena pela própria coluna (legacy_equipment_id, via
+    // orderBy acima); pair_key é o tie-break client-side que agrupa as duas
+    // linhas espelhadas de cada par (A→B e B→A — ver doubleInsert) uma logo
+    // após a outra, e protheus_code por último só pra ordem determinística
+    // entre as duas dentro do par.
+    listSortBy: ['legacy_equipment_id', 'pair_key', 'protheus_code'],
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_equipment_id', label: 'Equipamento', type: 'number', nullable: false, showInList: true, formFullWidth: true, listExpand: true, noBulkEdit: true,
@@ -384,6 +391,8 @@ export const tables: Record<string, TableSchema> = {
         listFilterType: 'text',
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'remove_list_code' } },
       { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'active', options: ['active', 'deactive'], formFullWidth: true },
+      { name: 'pair_key', label: 'Par (ordenação)', type: 'text', nullable: true, hideInList: true, hideInForm: true, excludeFromExport: true,
+        pairKeyFrom: ['protheus_code', 'remove_list_code'] },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
@@ -592,7 +601,7 @@ export function getEditableFields(tableName: string): Field[] {
 // (which only has real columns) against the actual table structure, not the
 // app's schema.
 export function isRealColumnField(field: Field): boolean {
-  return !field.lookupFrom?.sourceField && !field.concatFrom && !field.countDuplicatesOf
+  return !field.lookupFrom?.sourceField && !field.concatFrom && !field.countDuplicatesOf && !field.pairKeyFrom
 }
 
 // Regra da aplicação inteira (não específica de nenhuma tabela): todo texto
