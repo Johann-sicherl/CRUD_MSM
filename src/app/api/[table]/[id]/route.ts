@@ -72,6 +72,28 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 
+  // non_combinable_comps grava cada regra como duas linhas espelhadas
+  // (A→B e B→A, ver POST doubleInsert) — sem isto, excluir uma linha pela
+  // tela deixava a linha espelhada viva, reaparecendo na lista como se
+  // nada tivesse sido apagado.
+  if (schema.doubleInsert && data) {
+    const row = data as Record<string, unknown>
+    const { data: mirror } = await supabaseAdmin
+      .from(table)
+      .delete()
+      .eq('legacy_equipment_id', row.legacy_equipment_id as number)
+      .eq('protheus_code', row.remove_list_code as string)
+      .eq('remove_list_code', row.protheus_code as string)
+      .select()
+      .maybeSingle()
+
+    if (schema.auditQueries && mirror) {
+      try {
+        await recordDeleteAudit(supabaseAdmin, table, schema, mirror as Record<string, unknown>)
+      } catch { /* audit log is best-effort — never block the real operation */ }
+    }
+  }
+
   return NextResponse.json({ deleted: true, id })
 }
 
