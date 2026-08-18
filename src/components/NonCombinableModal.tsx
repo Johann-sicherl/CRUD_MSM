@@ -41,11 +41,15 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
   // Fila de inserção — mesma lógica de Equipamento x Acessórios: os pares
   // selecionados caem numa lista abaixo do formulário, e só viram registro
   // de verdade quando "Criar N registros" é clicado.
-  const [queue,         setQueue]         = useState<QueueItem[]>([])
-  const [queueSelected, setQueueSelected] = useState<Set<string>>(new Set())
-  const [editingQid,    setEditingQid]    = useState<string | null>(null)
-  const [creating,      setCreating]      = useState(false)
-  const [queueError,    setQueueError]    = useState('')
+  const [queue,           setQueue]           = useState<QueueItem[]>([])
+  const [queueSelected,   setQueueSelected]   = useState<Set<string>>(new Set())
+  const [editingQid,      setEditingQid]      = useState<string | null>(null)
+  const [creating,        setCreating]        = useState(false)
+  const [queueError,      setQueueError]      = useState('')
+  // Clique no cabeçalho da fila retrai/expande a tabela, pra não ocupar a
+  // tela toda quando tem muitos pares — o resumo (N pares / M registros)
+  // continua visível mesmo retraída.
+  const [queueCollapsed,  setQueueCollapsed]  = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -376,20 +380,28 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
           {/* Batch queue */}
           {queue.length > 0 && (
             <div className="border border-outline-variant rounded-lg overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-surface-container-highest border-b border-outline-variant">
-                <span className="text-[12px] font-mono text-outline uppercase tracking-wider">
+              <button
+                type="button"
+                onClick={() => setQueueCollapsed(c => !c)}
+                title={queueCollapsed ? 'Expandir fila' : 'Retrair fila'}
+                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-surface-container-highest border-b border-outline-variant hover:bg-surface-container-high transition-colors"
+              >
+                <span className="flex items-center gap-2 text-[12px] font-mono text-outline uppercase tracking-wider">
+                  <span className={`inline-block transition-transform ${queueCollapsed ? '-rotate-90' : ''}`}>▾</span>
                   Fila de inserção — {queue.length} par{queue.length !== 1 ? 'es' : ''} ({queue.length * 2} registros)
                 </span>
                 {queueSelected.size > 0 && (
-                  <button
-                    onClick={deleteSelectedQueue}
+                  <span
+                    role="button"
+                    onClick={e => { e.stopPropagation(); deleteSelectedQueue() }}
                     className="px-3 py-1.5 text-[14.4px] border border-error/40 text-error hover:bg-error-container/20 rounded transition-colors"
                   >
                     Excluir {queueSelected.size} selecionado{queueSelected.size !== 1 ? 's' : ''}
-                  </button>
+                  </span>
                 )}
-              </div>
+              </button>
 
+              {!queueCollapsed && (
               <div className="overflow-x-auto max-h-64 overflow-y-auto">
                 <table className="w-full text-[14.4px] border-collapse">
                   <thead>
@@ -427,6 +439,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           )}
         </div>
