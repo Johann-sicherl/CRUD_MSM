@@ -398,12 +398,15 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
         const missing = missingMultiSelectField()
         if (missing) { setError(`Selecione pelo menos um "${missing.label}"`); return }
 
-        // Se a caixa de pendentes (lupa) tem códigos, cada um vira uma
-        // linha-base (cruzada depois com Equipamento etc. via
-        // expandMultiSelect) — senão cai no de sempre: usa o valor atual do
-        // campo, digitado à mão ou deixado do último item editado.
+        // Campo com lupa não tem mais caixa de texto neste fluxo — os
+        // códigos só entram pela caixa de pendentes, então ela precisa ter
+        // pelo menos um item antes de mandar pra fila.
         const cascadeField = editableFields.find(f => f.cascadeLookup)
         const pending = cascadeField ? pendingCascadeValues[cascadeField.name] : undefined
+        if (cascadeField && (!pending || pending.size === 0)) {
+          setError(`Busque e adicione pelo menos um "${cascadeField.label}" pela lupa antes de adicionar à lista`)
+          return
+        }
         const baseList = pending && pending.size > 0
           ? Array.from(pending).map(val => ({ ...form, [cascadeField!.name]: val }))
           : [{ ...form }]
@@ -552,26 +555,26 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   />
                 )
               }
-              // Campo com lupa (cascadeLookup) em "+ Novo Registro": mostra,
-              // ao lado do campo, a caixa com os códigos já pré-selecionados
-              // (ver addCascadeSelectionsToPending) — só viram item da fila
-              // de verdade quando o formulário é enviado.
+              // Campo com lupa (cascadeLookup) em "+ Novo Registro": sem
+              // caixa de texto — os acessórios só entram pela busca em
+              // cascata, acumulando na caixa de pendentes ao lado (ver
+              // addCascadeSelectionsToPending); só viram item da fila de
+              // verdade quando o formulário é enviado.
               if (isBatch && !editingQid && field.cascadeLookup) {
                 const pending = pendingCascadeValues[field.name]
                 return (
                   <div key={field.name} className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
-                      <FieldInput
-                        field={field}
-                        value={form[field.name] ?? ''}
-                        onChange={(v) => handleChange(field.name, shouldUppercaseField(field) ? v.toUpperCase() : v)}
-                        fetchedOptions={fetchedOptions[field.name]}
-                        dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
-                        onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
-                        onCascadeOpen={() => openCascade(field)}
-                        forceRequired={forceRequired}
-                        similarCandidates={field.similarTextSuggest ? similarCandidates[field.name] : undefined}
-                      />
+                      <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
+                        {field.label}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => openCascade(field)}
+                        className="w-full flex items-center justify-center gap-2 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                      >
+                        🔍 Buscar por grupo e acessório
+                      </button>
                     </div>
                     {pending && pending.size > 0 && (
                       <button
