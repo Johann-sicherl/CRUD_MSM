@@ -749,7 +749,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
           onClick={() => setCascade(EMPTY_CASCADE)}
         >
           <div
-            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl animate-fade-in flex flex-col"
+            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-[54.6rem] animate-fade-in flex flex-col"
             style={{ maxHeight: '85vh' }}
             onClick={e => e.stopPropagation()}
           >
