@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Field, TableSchema, shouldUppercaseField } from '@/lib/schema'
 import { bestGhostSuggestion } from '@/lib/textSimilarity'
+import { getAuditKeyFields, keyValueString } from '@/lib/sqlAudit'
 
 interface Props {
   schema: TableSchema
@@ -106,6 +107,10 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   // itens repetidos não duplica nada aqui (é um Set); só vira item da fila
   // de fato quando o usuário confirma com o botão principal do formulário.
   const [pendingCascadeValues, setPendingCascadeValues] = useState<Record<string, Set<string>>>({})
+  // Nome (label) de cada código pendente, por campo — capturado da própria
+  // busca em cascata (cascade.items) no momento em que o código é
+  // adicionado, só pra exibir na janela de revisão (não vai pro formulário).
+  const [pendingCascadeLabels, setPendingCascadeLabels] = useState<Record<string, Record<string, string>>>({})
   // Nome do campo cuja caixa de pendentes está aberta numa janela separada
   // pra revisão/remoção — null quando fechada.
   const [pendingReviewField, setPendingReviewField] = useState<string | null>(null)
@@ -348,15 +353,27 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   const addCascadeSelectionsToPending = () => {
     if (cascade.selected.size === 0) return
     const fieldName = cascade.fieldName
+    const labelByValue = new Map(cascade.items.map(i => [i.value, i.label]))
     setPendingCascadeValues(prev => {
       const s = new Set(prev[fieldName] ?? [])
       cascade.selected.forEach(v => s.add(v))
       return { ...prev, [fieldName]: s }
     })
+    setPendingCascadeLabels(prev => {
+      const m = { ...(prev[fieldName] ?? {}) }
+      cascade.selected.forEach(v => { m[v] = labelByValue.get(v) ?? '' })
+      return { ...prev, [fieldName]: m }
+    })
     setCascade(EMPTY_CASCADE)
   }
 
   const removePendingCascadeValue = (fieldName: string, value: string) => {
+    setPendingCascadeLabels(prev => {
+      if (!prev[fieldName]?.[value]) return prev
+      const m = { ...prev[fieldName] }
+      delete m[value]
+      return { ...prev, [fieldName]: m }
+    })
     setPendingCascadeValues(prev => {
       const s = new Set(prev[fieldName] ?? [])
       s.delete(value)
@@ -411,9 +428,35 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
           ? Array.from(pending).map(val => ({ ...form, [cascadeField!.name]: val }))
           : [{ ...form }]
 
-        const newItems: QueueItem[] = expandMultiSelect(baseList).map(data => ({ qid: crypto.randomUUID(), data }))
+        const candidates = expandMultiSelect(baseList).map(data => ({ qid: crypto.randomUUID(), data }))
+
+        // Nunca deixa entrar na fila uma combinação que já está lá (ex.:
+        // mesmo Equipamento + mesmo Código Protheus Acessório) — sem isto
+        // dava pra reabrir a lupa e marcar de novo algo já adicionado,
+        // duplicando a linha.
+        const keyFields = getAuditKeyFields(schema)
+        const existingKeys = new Set(queue.map(item => keyValueString(keyFields, item.data)))
+        const newItems: QueueItem[] = []
+        let duplicates = 0
+        for (const item of candidates) {
+          const key = keyValueString(keyFields, item.data)
+          if (existingKeys.has(key)) { duplicates++; continue }
+          existingKeys.add(key)
+          newItems.push(item)
+        }
+
+        if (newItems.length === 0) {
+          setError('Todos os itens selecionados já estão na fila de inserção.')
+          return
+        }
         setQueue(prev => [...prev, ...newItems])
-        if (cascadeField) setPendingCascadeValues(prev => ({ ...prev, [cascadeField.name]: new Set() }))
+        if (duplicates > 0) {
+          setError(`${duplicates} item${duplicates !== 1 ? 's' : ''} já estava${duplicates !== 1 ? 'm' : ''} na fila e foi${duplicates !== 1 ? 'ram' : ''} ignorado${duplicates !== 1 ? 's' : ''} — ${newItems.length} adicionado${newItems.length !== 1 ? 's' : ''}.`)
+        }
+        if (cascadeField) {
+          setPendingCascadeValues(prev => ({ ...prev, [cascadeField.name]: new Set() }))
+          setPendingCascadeLabels(prev => ({ ...prev, [cascadeField.name]: {} }))
+        }
       }
       setForm(buildInitial())
       return
@@ -581,13 +624,12 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                         type="button"
                         onClick={() => setPendingReviewField(field.name)}
                         title="Ver / remover códigos selecionados"
-                        className="w-40 shrink-0 mt-6 flex flex-col items-center justify-center gap-0.5 border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded p-2.5 text-primary transition-colors"
+                        className="w-40 shrink-0 mt-6 flex items-center justify-center gap-1.5 border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded px-3 py-2 text-primary transition-colors"
                       >
-                        <span className="text-lg font-bold leading-none">{pending.size}</span>
-                        <span className="text-[11px] font-semibold uppercase tracking-wide leading-tight text-center">
-                          código{pending.size !== 1 ? 's' : ''} selecionado{pending.size !== 1 ? 's' : ''}
+                        <span className="text-[16.8px] font-bold leading-none">{pending.size}</span>
+                        <span className="text-[13px] font-medium leading-none">
+                          selecionado{pending.size !== 1 ? 's' : ''}
                         </span>
-                        <span className="text-[10px] text-primary/70 mt-0.5">clique para ver/editar</span>
                       </button>
                     )}
                   </div>
@@ -924,11 +966,18 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   <div className="flex flex-col divide-y divide-outline-variant/40">
                     {values.map(v => (
                       <div key={v} className="flex items-center justify-between gap-3 py-2">
-                        <span className="font-mono text-[14.4px] text-on-surface">{v}</span>
+                        <div className="min-w-0">
+                          <div className="font-mono text-[14.4px] text-on-surface">{v}</div>
+                          {pendingCascadeLabels[pendingReviewField]?.[v] && (
+                            <div className="text-[12.8px] text-outline truncate">
+                              {pendingCascadeLabels[pendingReviewField][v]}
+                            </div>
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => removePendingCascadeValue(pendingReviewField, v)}
-                          className="text-outline hover:text-error text-[13px] font-medium transition-colors"
+                          className="shrink-0 text-outline hover:text-error text-[13px] font-medium transition-colors"
                         >
                           Remover
                         </button>
