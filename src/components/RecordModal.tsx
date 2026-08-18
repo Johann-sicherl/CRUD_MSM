@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Field, TableSchema, shouldUppercaseField } from '@/lib/schema'
 import { bestGhostSuggestion } from '@/lib/textSimilarity'
 import { getAuditKeyFields, keyValueString } from '@/lib/sqlAudit'
@@ -285,6 +285,23 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   const allFilteredSelected =
     filteredCascadeItems.length > 0 &&
     filteredCascadeItems.every(i => cascade.selected.has(i.value))
+
+  // Uma rodada de scroll do mouse desce só uma linha, em vez do salto de
+  // várias que o navegador faz por padrão — precisa ser um listener nativo
+  // (não onWheel do React, que registra como passivo e ignora
+  // preventDefault), pra não rodar os dois scrolls (nativo + manual) juntos.
+  const cascadeListRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = cascadeListRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rowHeight = (el.firstElementChild as HTMLElement | null)?.offsetHeight || 32
+      el.scrollTop += Math.sign(e.deltaY) * rowHeight
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [cascade.open])
 
   const toggleCascadeItem = (value: string) => {
     setCascade(prev => {
@@ -870,7 +887,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                       </button>
                     )}
                   </div>
-                  <div className="border border-outline-variant rounded overflow-y-auto flex-1">
+                  <div ref={cascadeListRef} className="border border-outline-variant rounded overflow-y-auto flex-1">
                     {!cascade.groupId && !cascade.search ? (
                       <div className="px-3 py-10 text-center text-outline text-[14.4px] font-mono">
                         Selecione um grupo ou busque pelo código / nome

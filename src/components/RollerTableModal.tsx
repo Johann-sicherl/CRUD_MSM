@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import ColumnFilter from './ColumnFilter'
 
 const TYPE_OPTIONS = ['start', 'middle', 'end', 'unique'] as const
@@ -225,6 +225,23 @@ function ComponentBox({
 
   const allSel = visible.length > 0 && visible.every(a => selected.has(a.protheus_code))
 
+  // Uma rodada de scroll do mouse desce só uma linha, em vez do salto de
+  // várias que o navegador faz por padrão — precisa ser um listener nativo
+  // (não onWheel do React, que registra como passivo e ignora
+  // preventDefault), pra não rodar os dois scrolls (nativo + manual) juntos.
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rowHeight = (el.firstElementChild as HTMLElement | null)?.offsetHeight || 32
+      el.scrollTop += Math.sign(e.deltaY) * rowHeight
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
   return (
     <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[32rem]">
 
@@ -266,7 +283,7 @@ function ComponentBox({
       </div>
 
       {/* Items */}
-      <div className="overflow-y-auto min-h-[22rem] max-h-96 divide-y divide-outline-variant/20">
+      <div ref={listRef} className="overflow-y-auto min-h-[22rem] max-h-96 divide-y divide-outline-variant/20">
         {visible.length === 0 ? (
           <div className="px-4 py-8 text-center text-[14.4px] text-outline italic">Nenhum resultado</div>
         ) : (
