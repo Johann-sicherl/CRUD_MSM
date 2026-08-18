@@ -1373,6 +1373,23 @@ function MultiCheckboxField({
     : options
   const allVisibleSelected = visible.length > 0 && visible.every(o => selected.has(o.value))
 
+  // Uma rodada de scroll do mouse desce só uma linha, em vez do salto de
+  // várias que o navegador faz por padrão — precisa ser um listener nativo
+  // (não onWheel do React, que registra como passivo e ignora
+  // preventDefault), pra não rodar os dois scrolls (nativo + manual) juntos.
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rowHeight = (el.firstElementChild as HTMLElement | null)?.offsetHeight || 32
+      el.scrollTop += Math.sign(e.deltaY) * rowHeight
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
   return (
     <div className="sm:col-span-2">
       <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
@@ -1403,7 +1420,7 @@ function MultiCheckboxField({
             {allVisibleSelected ? 'Desmarcar todos' : `Selecionar todos${search ? ' (filtrados)' : ''}`}
           </button>
         )}
-        <div className="max-h-56 overflow-y-auto">
+        <div ref={listRef} className="max-h-56 overflow-y-auto">
           {visible.length === 0 ? (
             <div className="px-3 py-6 text-center text-outline text-[13px] font-mono">Nenhum resultado</div>
           ) : (
