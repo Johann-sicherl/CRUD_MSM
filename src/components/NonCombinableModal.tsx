@@ -6,7 +6,7 @@ import ColumnFilter from './ColumnFilter'
 interface Equip { legacy_id: number; name: string }
 interface Group { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
-interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
+interface EquipAccessory { protheus_code: string; legacy_equipment_id: number; status: string }
 interface StdItem { legacy_equipment_id: number; status: string }
 
 interface QueueItem {
@@ -76,15 +76,16 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
   const accByCode      = useMemo(() => new Map(allAcc.map(a => [a.protheus_code, a])), [allAcc])
 
   // Only accessories actually registered (via Equipamento x Acessórios) for
-  // the equipment picked above — a group can hold accessories that were
-  // never linked to this specific equipment, and those shouldn't be
-  // selectable here. null (instead of an empty Set) distinguishes "no
-  // equipment picked yet" from "picked, but nothing linked".
+  // the equipment picked above, com o vínculo ativo (status = 'active') —
+  // um vínculo desativado não deve deixar o acessório selecionável aqui,
+  // mesmo que o registro ainda exista na tabela. null (instead of an empty
+  // Set) distinguishes "no equipment picked yet" from "picked, but nothing
+  // linked".
   const linkedCodes = useMemo(() => {
     if (!equipId) return null
     return new Set(
       equipAccessories
-        .filter(r => String(r.legacy_equipment_id) === equipId)
+        .filter(r => String(r.legacy_equipment_id) === equipId && r.status === 'active')
         .map(r => r.protheus_code.trim().toUpperCase())
     )
   }, [equipAccessories, equipId])

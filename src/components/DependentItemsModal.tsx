@@ -8,7 +8,7 @@ interface Equip     { legacy_id: number; name: string }
 interface Group     { legacy_id: number; name: string }
 interface Accessory { protheus_code: string; name: string; legacy_group_id: number | null }
 interface StdItem   { protheus_code: string; legacy_equipment_id: number; status: string }
-interface EquipAccessory { protheus_code: string; legacy_equipment_id: number }
+interface EquipAccessory { protheus_code: string; legacy_equipment_id: number; status: string }
 interface ItemCfg   { quantity: number; factor: string } // factor as string to allow '' → null
 
 // Synthetic "group" injected only into Grupo — Cód. Item (never Cód.
@@ -79,7 +79,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
     if (!equipId) return null
     return new Set(
       equipAccessories
-        .filter(r => String(r.legacy_equipment_id) === equipId)
+        .filter(r => String(r.legacy_equipment_id) === equipId && r.status === 'active')
         .map(r => r.protheus_code.trim().toUpperCase())
     )
   }, [equipAccessories, equipId])
