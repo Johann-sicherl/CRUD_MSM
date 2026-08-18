@@ -10,6 +10,11 @@ interface Props {
   tableName: string
   record?: Record<string, unknown> | null
   prefill?: Record<string, string> | null
+  // Perfil Gerente Adm Comercial: quando informado, só os campos deste Set
+  // ficam editáveis (os demais aparecem desabilitados) — usado só em modo
+  // de edição, já que esse perfil nem chega a abrir o formulário de criação
+  // (o botão "+ Novo Registro" já vem escondido pra ele no DataTable).
+  restrictToFields?: Set<string>
   onClose: () => void
   onSaved: () => void
 }
@@ -43,7 +48,7 @@ const EMPTY_CASCADE: CascadeState = {
 
 const EMPTY_SELECTED: Set<string> = new Set()
 
-export default function RecordModal({ schema, tableName, record, prefill, onClose, onSaved }: Props) {
+export default function RecordModal({ schema, tableName, record, prefill, restrictToFields, onClose, onSaved }: Props) {
   const isEdit = !!record
   const isBatch = !!schema.batchInsert && !isEdit
   const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
@@ -598,6 +603,9 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
               const forceRequired = field.requiredWhen
                 ? field.requiredWhen.values.map(String).includes(String(form[field.requiredWhen.field] ?? ''))
                 : false
+              // Gerente Adm Comercial: só campos de controladoria/preço/fiscal
+              // ficam editáveis, o resto vira somente leitura.
+              const fieldDisabled = !!restrictToFields && !restrictToFields.has(field.name)
               // Só vira lista de checkbox em "+ Novo Registro" (isBatch),
               // e só enquanto NÃO se está editando um item específico já
               // colocado na fila — editar um item da fila continua sendo
@@ -667,6 +675,7 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   onCascadeOpen={field.cascadeLookup ? () => openCascade(field) : undefined}
                   forceRequired={forceRequired}
                   similarCandidates={field.similarTextSuggest ? similarCandidates[field.name] : undefined}
+                  disabled={fieldDisabled}
                 />
               )
             })}
@@ -1119,6 +1128,7 @@ function FieldInput({
   onCascadeOpen,
   forceRequired,
   similarCandidates,
+  disabled,
 }: {
   field: Field
   value: string
@@ -1129,6 +1139,11 @@ function FieldInput({
   onCascadeOpen?: () => void
   forceRequired?: boolean
   similarCandidates?: string[]
+  // Perfil Gerente Adm Comercial num campo fora de CONTROLLERSHIP_FIELDS —
+  // desabilita tudo dentro do campo (select, input, botão de lupa/+ etc.)
+  // de uma vez só via <fieldset disabled>, sem precisar tocar em cada
+  // branch de input abaixo.
+  disabled?: boolean
 }) {
   const [addingOpt, setAddingOpt] = useState(false)
   const [newOptInput, setNewOptInput] = useState('')
@@ -1344,8 +1359,11 @@ function FieldInput({
       <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
         {field.label}
         {isRequired && <span className="text-primary ml-1">*</span>}
+        {disabled && <span className="ml-2 text-[12px] text-outline normal-case font-normal">(somente controladoria/preço/fiscal)</span>}
       </label>
-      {input}
+      <fieldset disabled={disabled} className={`border-0 p-0 m-0 min-w-0${disabled ? ' opacity-50' : ''}`}>
+        {input}
+      </fieldset>
     </div>
   )
 }

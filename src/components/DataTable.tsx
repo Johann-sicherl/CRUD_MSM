@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, CONTROLLERSHIP_FIELDS } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
+import { useAppAuth } from '@/lib/appAuthContext'
 import { shouldCompareField, valuesEqual, getRowKey, groupRowsByKey } from '@/lib/csvBaseline'
 
 type LookupMap = Record<string, Record<string, string>>
@@ -179,6 +180,17 @@ export default function DataTable({ tableName, schema }: Props) {
   const { creds: protheusCreds } = useProtheusAuth()
   const [protheusStatusMap, setProtheusStatusMap] = useState<Map<string, ProtheusProductStatus> | null>(null)
   const [protheusChecking, setProtheusChecking] = useState(false)
+
+  // Perfil Gerente Adm Comercial: nunca pode inserir nem excluir, e só pode
+  // editar campos de controladoria/preço/fiscal (ver CONTROLLERSHIP_FIELDS)
+  // — em nenhum outro campo. Engenharia do Produto segue sem restrição
+  // nenhuma, exatamente como sempre foi.
+  const { user: appUser } = useAppAuth()
+  const isGerenteAdm = appUser.role === 'gerente_adm_comercial'
+  const controllershipFieldNames = useMemo(
+    () => new Set(schema.fields.filter(f => CONTROLLERSHIP_FIELDS.includes(f.name)).map(f => f.name)),
+    [schema]
+  )
   // Retrato do último import do Atualizador Global de Tabelas para esta
   // tabela (null = a tabela nunca passou por lá — nesse caso nada é
   // destacado). Usado só para o destaque amarelo de linha/célula.
@@ -569,7 +581,10 @@ export default function DataTable({ tableName, schema }: Props) {
           <span className="text-xs text-outline">Conecte ao Protheus (barra lateral) para ver o status ATIVO/BLOQUEADO</span>
         )
       )}
-      {schema.bulkEdit && selectedIds.size > 0 && (
+      {/* Gerente Adm Comercial nunca exclui, e a edição em massa mexe em
+          qualquer campo (não só controladoria/preço/fiscal) — os dois ficam
+          de fora pra esse perfil. */}
+      {schema.bulkEdit && selectedIds.size > 0 && !isGerenteAdm && (
         <button
           onClick={() => setBulkEditOpen(true)}
           className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-500 transition-colors whitespace-nowrap"
@@ -577,7 +592,7 @@ export default function DataTable({ tableName, schema }: Props) {
           ✎ Alterar {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
         </button>
       )}
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 && !isGerenteAdm && (
         <button
           onClick={() => setBulkDeleteOpen(true)}
           className="flex items-center gap-1.5 px-4 py-2 bg-red-700 text-black rounded text-sm font-semibold hover:bg-red-600 transition-colors whitespace-nowrap"
@@ -594,6 +609,9 @@ export default function DataTable({ tableName, schema }: Props) {
         ↓ Exportar dados
       </button>
 
+      {/* Gerente Adm Comercial nunca insere — nem manual, nem Excel — em
+          nenhuma tabela. */}
+      {!isGerenteAdm && (
       <div className="relative">
       {/* Backdrop to close dropdown on outside click */}
       {newMenuOpen && (
@@ -656,6 +674,7 @@ export default function DataTable({ tableName, schema }: Props) {
         onChange={handleImportFile}
       />
       </div>
+      )}
     </div>
   )
 
@@ -898,12 +917,14 @@ export default function DataTable({ tableName, schema }: Props) {
                           >
                             Editar
                           </button>
-                          <button
-                            onClick={() => setDeleteId(String(row.id))}
-                            className="text-outline hover:text-error text-xs font-medium transition-colors"
-                          >
-                            Excluir
-                          </button>
+                          {!isGerenteAdm && (
+                            <button
+                              onClick={() => setDeleteId(String(row.id))}
+                              className="text-outline hover:text-error text-xs font-medium transition-colors"
+                            >
+                              Excluir
+                            </button>
+                          )}
                         </td>
                       </tr>
                       )
@@ -1044,6 +1065,7 @@ export default function DataTable({ tableName, schema }: Props) {
           schema={schema}
           tableName={tableName}
           record={editRecord}
+          restrictToFields={isGerenteAdm ? controllershipFieldNames : undefined}
           onClose={() => { setModalOpen(false); setEditRecord(null) }}
           onSaved={() => {
             setModalOpen(false)

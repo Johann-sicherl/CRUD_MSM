@@ -117,6 +117,12 @@ export const FORCE_TO_ONE_FIELDS = [
   'warranty_rate',
 ]
 
+// Campos de controladoria/preço/fiscal pra fins de permissão (perfil Gerente
+// Adm Comercial só pode editar estes campos, em nenhuma outra coisa) —
+// FORCE_TO_ONE_FIELDS mais parts_provision_rate, que é do mesmo grupo
+// comercial mas não entra no mecanismo de sigilo (não é forçado a 1).
+export const CONTROLLERSHIP_FIELDS = [...FORCE_TO_ONE_FIELDS, 'parts_provision_rate']
+
 export const DOMAIN_LABELS: Record<string, string> = {
   catalogo: 'Portifólio',
   regras: 'Regras',
