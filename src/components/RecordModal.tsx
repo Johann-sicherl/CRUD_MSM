@@ -106,6 +106,9 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   // itens repetidos não duplica nada aqui (é um Set); só vira item da fila
   // de fato quando o usuário confirma com o botão principal do formulário.
   const [pendingCascadeValues, setPendingCascadeValues] = useState<Record<string, Set<string>>>({})
+  // Nome do campo cuja caixa de pendentes está aberta numa janela separada
+  // pra revisão/remoção — null quando fechada.
+  const [pendingReviewField, setPendingReviewField] = useState<string | null>(null)
 
   useEffect(() => {
     setForm(buildInitial())
@@ -571,26 +574,18 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                       />
                     </div>
                     {pending && pending.size > 0 && (
-                      <div className="w-56 shrink-0 mt-6 border border-primary/30 bg-primary/5 rounded p-2">
-                        <div className="text-[11px] font-semibold text-primary uppercase tracking-wide mb-1.5">
-                          {pending.size} código{pending.size !== 1 ? 's' : ''} selecionado{pending.size !== 1 ? 's' : ''}
-                        </div>
-                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                          {Array.from(pending).map(v => (
-                            <span key={v} className="flex items-center gap-1 bg-surface-container-high border border-outline-variant rounded px-1.5 py-0.5 text-[11px] font-mono text-on-surface">
-                              {v}
-                              <button
-                                type="button"
-                                onClick={() => removePendingCascadeValue(field.name, v)}
-                                title="Remover"
-                                className="text-outline hover:text-error leading-none"
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPendingReviewField(field.name)}
+                        title="Ver / remover códigos selecionados"
+                        className="w-40 shrink-0 mt-6 flex flex-col items-center justify-center gap-0.5 border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded p-2.5 text-primary transition-colors"
+                      >
+                        <span className="text-lg font-bold leading-none">{pending.size}</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide leading-tight text-center">
+                          código{pending.size !== 1 ? 's' : ''} selecionado{pending.size !== 1 ? 's' : ''}
+                        </span>
+                        <span className="text-[10px] text-primary/70 mt-0.5">clique para ver/editar</span>
+                      </button>
                     )}
                   </div>
                 )
@@ -886,6 +881,80 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Janela separada pra revisar/remover códigos da caixa de pendentes
+          — a caixa em si só mostra a contagem, pra não empurrar o resto do
+          formulário quando tem muitos itens selecionados. */}
+      {pendingReviewField && (
+        <div
+          className="fixed inset-0 z-[61] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setPendingReviewField(null)}
+        >
+          <div
+            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-lg animate-fade-in flex flex-col"
+            style={{ maxHeight: '80vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant shrink-0">
+              <span className="text-[16.8px] font-semibold text-on-surface">
+                Códigos selecionados — {editableFields.find(f => f.name === pendingReviewField)?.label}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPendingReviewField(null)}
+                className="text-outline hover:text-on-surface transition-colors text-2xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-2">
+              {(() => {
+                const values = Array.from(pendingCascadeValues[pendingReviewField] ?? []).sort()
+                if (values.length === 0) {
+                  return <div className="text-center text-outline text-[14.4px] py-8">Nenhum código selecionado.</div>
+                }
+                return (
+                  <div className="flex flex-col divide-y divide-outline-variant/40">
+                    {values.map(v => (
+                      <div key={v} className="flex items-center justify-between gap-3 py-2">
+                        <span className="font-mono text-[14.4px] text-on-surface">{v}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePendingCascadeValue(pendingReviewField, v)}
+                          className="text-outline hover:text-error text-[13px] font-medium transition-colors"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-outline-variant shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingCascadeValues(prev => ({ ...prev, [pendingReviewField]: new Set() }))
+                  setPendingReviewField(null)
+                }}
+                className="text-[13px] text-error hover:underline"
+              >
+                Limpar tudo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingReviewField(null)}
+                className="px-4 py-2 bg-primary text-on-primary rounded text-[14.4px] font-semibold hover:shadow-neon transition-shadow"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
