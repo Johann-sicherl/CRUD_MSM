@@ -264,21 +264,21 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-outline-variant shrink-0">
           <div>
-            <div className="text-xs font-mono text-outline uppercase tracking-[0.2em]">NOVO REGISTRO</div>
-            <h2 className="text-xl font-bold text-on-surface mt-0.5">Produtos Dependentes</h2>
+            <div className="text-[12px] font-mono text-outline uppercase tracking-[0.2em]">NOVO REGISTRO</div>
+            <h2 className="text-[19.2px] font-bold text-on-surface mt-0.5">Produtos Dependentes</h2>
           </div>
-          <button onClick={onClose} className="text-outline hover:text-on-surface transition-colors text-xl">✕</button>
+          <button onClick={onClose} className="text-outline hover:text-on-surface transition-colors text-2xl">✕</button>
         </div>
 
         <div className="overflow-y-auto flex-1 px-7 py-6 flex flex-col gap-6">
 
           {/* Equipment */}
           <div>
-            <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">Equipamento</label>
+            <label className="block text-[12px] font-semibold text-outline uppercase tracking-[0.12em] mb-2">Equipamento</label>
             <select
               value={equipId}
               onChange={e => setEquipId(e.target.value)}
-              className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+              className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-[16.8px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             >
               <option value="">Selecione o equipamento...</option>
               {activeEquipments.map(eq => <option key={eq.legacy_id} value={eq.legacy_id}>{eq.name}</option>)}
@@ -288,11 +288,11 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
           {/* Group selectors */}
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">Grupo — Cód. Item</label>
+              <label className="block text-[12px] font-semibold text-outline uppercase tracking-[0.12em] mb-2">Grupo — Cód. Item</label>
               <select
                 value={g1}
                 onChange={e => { setG1(e.target.value); setSel1(new Set()) }}
-                className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-[16.8px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
               >
                 <option value="">Selecione o grupo...</option>
                 <option value={EQUIPMENTS_GROUP_ID}>EQUIPAMENTOS</option>
@@ -300,11 +300,11 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">Grupo — Cód. Dependente</label>
+              <label className="block text-[12px] font-semibold text-outline uppercase tracking-[0.12em] mb-2">Grupo — Cód. Dependente</label>
               <select
                 value={g2}
                 onChange={e => { setG2(e.target.value); setSel2(new Set()); setCfg2({}) }}
-                className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-[16.8px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
               >
                 <option value="">Selecione o grupo...</option>
                 {groups.map(g => <option key={g.legacy_id} value={g.legacy_id}>{g.name}</option>)}
@@ -324,17 +324,17 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
                   onChange={e => { setCodeSearch1(e.target.value); setSearchErr1('') }}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCode1() } }}
                   placeholder="Buscar por código Protheus..."
-                  className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
                 <button
                   type="button"
                   onClick={handleSearchCode1}
-                  className="px-3 py-2 text-xs border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                  className="px-3 py-2 text-[16.8px] border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
                 >
                   Buscar
                 </button>
               </div>
-              {searchErr1 && <div className="text-[10px] text-error mt-1">{searchErr1}</div>}
+              {searchErr1 && <div className="text-[13px] text-error mt-1">{searchErr1}</div>}
             </div>
             <div>
               <div className="flex gap-2">
@@ -344,17 +344,17 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
                   onChange={e => { setCodeSearch2(e.target.value); setSearchErr2('') }}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchCode2() } }}
                   placeholder="Buscar por código Protheus..."
-                  className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] font-mono text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
                 <button
                   type="button"
                   onClick={handleSearchCode2}
-                  className="px-3 py-2 text-xs border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                  className="px-3 py-2 text-[16.8px] border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
                 >
                   Buscar
                 </button>
               </div>
-              {searchErr2 && <div className="text-[10px] text-error mt-1">{searchErr2}</div>}
+              {searchErr2 && <div className="text-[13px] text-error mt-1">{searchErr2}</div>}
             </div>
           </div>
 
@@ -362,7 +362,7 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
               single app-wide connection (see Sidebar); no per-window button here. */}
           {g1 === EQUIPMENTS_GROUP_ID && (
             <div className="flex items-center gap-3 -mt-2">
-              <span className="text-xs text-outline">
+              <span className="text-[14.4px] text-outline">
                 {dbCreds
                   ? (loadingNames ? '⏳ Buscando nomes no Protheus…' : '🔌 Nomes resolvidos por B1_DESC/DESC_ESTRUTURA')
                   : 'Conecte ao Protheus (barra lateral) para ver os nomes reais — por ora, o código é exibido como nome'}
@@ -412,16 +412,16 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 
           {/* Summary */}
           {pairs > 0 && !result && (
-            <div className="flex items-center gap-2 text-sm font-mono bg-primary/5 border border-primary/20 rounded px-4 py-3 text-primary">
+            <div className="flex items-center gap-2 text-[14.4px] font-mono bg-primary/5 border border-primary/20 rounded px-4 py-3 text-primary">
               <span>{sel1.size} × {dependentCount} = {pairs} par{pairs !== 1 ? 'es' : ''}</span>
               <span className="text-outline">→</span>
               <span className="font-bold">{pairs} registros</span>
-              <span className="text-outline/60 text-xs">(unidirecional)</span>
+              <span className="text-outline/60 text-[13px]">(unidirecional)</span>
             </div>
           )}
 
           {result && (
-            <div className={`text-sm font-mono rounded px-4 py-3 border ${
+            <div className={`text-[14.4px] font-mono rounded px-4 py-3 border ${
               result.fail === 0
                 ? 'bg-green-900/20 border-green-800/40 text-green-400'
                 : 'bg-error-container/20 border-error/30 text-error'
@@ -434,14 +434,14 @@ export default function DependentItemsModal({ onClose, onSaved }: Props) {
 
         {/* Footer */}
         <div className="flex justify-end gap-3 px-7 py-5 border-t border-outline-variant shrink-0">
-          <button onClick={onClose} className="px-5 py-2.5 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors">
+          <button onClick={onClose} className="px-5 py-2.5 text-[16.8px] border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors">
             {result ? 'Fechar' : 'Cancelar'}
           </button>
           {!result && (
             <button
               onClick={handleSubmit}
               disabled={!canSubmit || saving}
-              className="px-6 py-2.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-40 transition-all"
+              className="px-6 py-2.5 bg-primary text-on-primary rounded text-[16.8px] font-semibold hover:shadow-neon disabled:opacity-40 transition-all"
             >
               {saving ? 'Inserindo...' : `Inserir${pairs > 0 ? ` ${pairs} registros` : ''}`}
             </button>
@@ -490,20 +490,20 @@ function TriggerBox({
   return (
     <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[28rem]">
       <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">
-        <span className="text-xs font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
-        <div className="flex items-center gap-2 text-xs">
+        <span className="text-[12px] font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
+        <div className="flex items-center gap-2 text-[13px]">
           <button onClick={() => onAll(visible)} className="text-primary hover:underline">todos</button>
           <span className="text-outline/40">|</span>
           <button onClick={onNone} className="text-outline hover:text-primary">nenhum</button>
         </div>
       </div>
       {empty ? (
-        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um grupo acima</div>
+        <div className="px-4 py-12 text-center text-[14.4px] text-outline italic">Selecione um grupo acima</div>
       ) : noEquip ? (
-        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um equipamento acima</div>
+        <div className="px-4 py-12 text-center text-[14.4px] text-outline italic">Selecione um equipamento acima</div>
       ) : (
         <>
-          <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[10px] font-semibold text-outline uppercase tracking-[0.1em]">
+          <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[12px] font-semibold text-outline uppercase tracking-[0.1em]">
             <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/30 px-2">
               <input type="checkbox" checked={allSel} onChange={() => allSel ? onNone() : onAll(visible)} className="accent-primary" />
             </div>
@@ -518,7 +518,7 @@ function TriggerBox({
           </div>
           <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
+              <div className="px-4 py-6 text-center text-[14.4px] text-outline italic">Nenhum resultado</div>
             ) : visible.map(a => {
               const blocked = blockedCodes.has(a.protheus_code)
               return (
@@ -541,18 +541,18 @@ function TriggerBox({
                       className="accent-primary disabled:cursor-not-allowed"
                     />
                   </div>
-                  <div className={`w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono truncate ${blocked ? 'text-outline line-through' : 'text-primary'}`}>
+                  <div className={`w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-[13px] font-mono truncate ${blocked ? 'text-outline line-through' : 'text-primary'}`}>
                     {a.protheus_code}
                   </div>
-                  <div className="flex-1 px-2 py-2 text-xs text-on-surface-variant truncate">
+                  <div className="flex-1 px-2 py-2 text-[13px] text-on-surface-variant truncate">
                     {a.name}
-                    {blocked && <span className="ml-1.5 text-[10px] text-outline font-mono">(selecionado como dependente)</span>}
+                    {blocked && <span className="ml-1.5 text-[12px] text-outline font-mono">(selecionado como dependente)</span>}
                   </div>
                 </label>
               )
             })}
           </div>
-          <div className="px-4 py-2 border-t border-outline-variant/40 text-xs font-mono text-outline flex items-center gap-2">
+          <div className="px-4 py-2 border-t border-outline-variant/40 text-[13px] font-mono text-outline flex items-center gap-2">
             {selected.size > 0 ? <span className="text-primary">{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span> : <span>Nenhum selecionado</span>}
             <span className="text-outline/40">·</span><span>{items.length} no grupo</span>
             {visible.length !== items.length && <><span className="text-outline/40">·</span><span>{visible.length} visíveis</span></>}
@@ -602,21 +602,21 @@ function DependentBox({
   return (
     <div className="flex flex-col border border-outline-variant rounded bg-surface-container-low overflow-hidden min-h-[28rem]">
       <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">
-        <span className="text-xs font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
-        <div className="flex items-center gap-2 text-xs">
+        <span className="text-[12px] font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
+        <div className="flex items-center gap-2 text-[13px]">
           <button onClick={() => onAll(visible)} className="text-primary hover:underline">todos</button>
           <span className="text-outline/40">|</span>
           <button onClick={onNone} className="text-outline hover:text-primary">nenhum</button>
         </div>
       </div>
       {empty ? (
-        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um grupo acima</div>
+        <div className="px-4 py-12 text-center text-[14.4px] text-outline italic">Selecione um grupo acima</div>
       ) : noEquip ? (
-        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um equipamento acima</div>
+        <div className="px-4 py-12 text-center text-[14.4px] text-outline italic">Selecione um equipamento acima</div>
       ) : (
         <>
           {/* Column headers */}
-          <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[10px] font-semibold text-outline uppercase tracking-[0.1em]">
+          <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[12px] font-semibold text-outline uppercase tracking-[0.1em]">
             <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/30 px-2">
               <input type="checkbox" checked={allSel} onChange={() => allSel ? onNone() : onAll(visible)} className="accent-primary" />
             </div>
@@ -630,18 +630,18 @@ function DependentBox({
             </div>
             <div className="w-16 shrink-0 border-r border-outline-variant/30 px-2 py-2 text-center">
               <div>Qtd.</div>
-              <div className="text-[9px] text-outline/50 normal-case tracking-normal font-normal mt-0.5">padrão 1</div>
+              <div className="text-[12px] text-outline/50 normal-case tracking-normal font-normal mt-0.5">padrão 1</div>
             </div>
             <div className="w-20 shrink-0 px-2 py-2 text-center">
               <div>Fat.Prop.</div>
-              <div className="text-[9px] text-outline/50 normal-case tracking-normal font-normal mt-0.5">padrão 1</div>
+              <div className="text-[12px] text-outline/50 normal-case tracking-normal font-normal mt-0.5">padrão 1</div>
             </div>
           </div>
 
           {/* Items */}
           <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
+              <div className="px-4 py-6 text-center text-[14.4px] text-outline italic">Nenhum resultado</div>
             ) : visible.map(a => {
               const isBlocked  = blockedCodes.has(a.protheus_code)
               const isSelected = selected.has(a.protheus_code)
@@ -658,12 +658,12 @@ function DependentBox({
                   <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/10 py-2">
                     <input type="checkbox" checked={isSelected} disabled={isBlocked} onChange={() => onToggle(a.protheus_code)} className="accent-primary cursor-pointer disabled:cursor-not-allowed" />
                   </div>
-                  <div className={`w-36 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono truncate ${isBlocked ? 'text-outline line-through' : 'text-primary cursor-pointer'}`} onClick={() => !isBlocked && onToggle(a.protheus_code)}>
+                  <div className={`w-36 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-[13px] font-mono truncate ${isBlocked ? 'text-outline line-through' : 'text-primary cursor-pointer'}`} onClick={() => !isBlocked && onToggle(a.protheus_code)}>
                     {a.protheus_code}
                   </div>
-                  <div className={`flex-1 border-r border-outline-variant/10 px-2 py-2 text-xs text-on-surface-variant truncate ${isBlocked ? '' : 'cursor-pointer'}`} onClick={() => !isBlocked && onToggle(a.protheus_code)}>
+                  <div className={`flex-1 border-r border-outline-variant/10 px-2 py-2 text-[13px] text-on-surface-variant truncate ${isBlocked ? '' : 'cursor-pointer'}`} onClick={() => !isBlocked && onToggle(a.protheus_code)}>
                     {a.name}
-                    {isBlocked && <span className="ml-1.5 text-[10px] text-outline font-mono">(selecionado como gatilho)</span>}
+                    {isBlocked && <span className="ml-1.5 text-[12px] text-outline font-mono">(selecionado como gatilho)</span>}
                   </div>
                   {/* QTD */}
                   <div className="w-16 shrink-0 border-r border-outline-variant/10 px-1.5 py-1">
@@ -671,7 +671,7 @@ function DependentBox({
                       type="number" min={1} value={settings.quantity} disabled={isBlocked}
                       onChange={e => onCfgChange(a.protheus_code, 'quantity', e.target.value)}
                       onClick={() => { if (!isBlocked && !isSelected) onToggle(a.protheus_code) }}
-                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors disabled:cursor-not-allowed ${isSelected ? 'text-on-surface' : 'text-outline/50'}`}
+                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-[13px] font-mono text-center focus:outline-none focus:border-primary transition-colors disabled:cursor-not-allowed ${isSelected ? 'text-on-surface' : 'text-outline/50'}`}
                     />
                   </div>
                   {/* Fator Prop */}
@@ -680,7 +680,7 @@ function DependentBox({
                       type="number" step="0.01" value={settings.factor} disabled={isBlocked} placeholder="1"
                       onChange={e => onCfgChange(a.protheus_code, 'factor', e.target.value)}
                       onClick={() => { if (!isBlocked && !isSelected) onToggle(a.protheus_code) }}
-                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-xs font-mono text-center focus:outline-none focus:border-primary transition-colors disabled:cursor-not-allowed ${isSelected ? 'text-on-surface' : 'text-outline/50'}`}
+                      className={`w-full bg-surface-container border border-outline-variant rounded px-1.5 py-1 text-[13px] font-mono text-center focus:outline-none focus:border-primary transition-colors disabled:cursor-not-allowed ${isSelected ? 'text-on-surface' : 'text-outline/50'}`}
                     />
                   </div>
                 </div>
@@ -688,7 +688,7 @@ function DependentBox({
             })}
           </div>
 
-          <div className="px-4 py-2 border-t border-outline-variant/40 text-xs font-mono text-outline flex items-center gap-2">
+          <div className="px-4 py-2 border-t border-outline-variant/40 text-[13px] font-mono text-outline flex items-center gap-2">
             {selected.size > 0 ? <span className="text-primary">{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span> : <span>Nenhum selecionado</span>}
             <span className="text-outline/40">·</span><span>{items.length} no grupo</span>
             {visible.length !== items.length && <><span className="text-outline/40">·</span><span>{visible.length} visíveis</span></>}
@@ -698,4 +698,3 @@ function DependentBox({
     </div>
   )
 }
-

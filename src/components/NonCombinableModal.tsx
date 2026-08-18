@@ -126,23 +126,23 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-outline-variant shrink-0">
           <div>
-            <div className="text-xs font-mono text-outline uppercase tracking-[0.2em]">NOVO REGISTRO</div>
-            <h2 className="text-xl font-bold text-on-surface mt-0.5">Produtos Não Combináveis</h2>
+            <div className="text-[12px] font-mono text-outline uppercase tracking-[0.2em]">NOVO REGISTRO</div>
+            <h2 className="text-[19.2px] font-bold text-on-surface mt-0.5">Produtos Não Combináveis</h2>
           </div>
-          <button onClick={onClose} className="text-outline hover:text-on-surface transition-colors text-xl">✕</button>
+          <button onClick={onClose} className="text-outline hover:text-on-surface transition-colors text-2xl">✕</button>
         </div>
 
         <div className="overflow-y-auto flex-1 px-7 py-6 flex flex-col gap-6">
 
           {/* Equipment */}
           <div>
-            <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">
+            <label className="block text-[12px] font-semibold text-outline uppercase tracking-[0.12em] mb-2">
               Equipamento
             </label>
             <select
               value={equipId}
               onChange={e => setEquipId(e.target.value)}
-              className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+              className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-[16.8px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             >
               <option value="">Selecione o equipamento...</option>
               {activeEquipments.map(eq => (
@@ -158,13 +158,13 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
               { label: '2° Grupo', val: g2, set: (v: string) => { setG2(v); setSel2(new Set()) } },
             ] as const).map(({ label, val, set }) => (
               <div key={label}>
-                <label className="block text-xs font-semibold text-outline uppercase tracking-[0.12em] mb-2">
+                <label className="block text-[12px] font-semibold text-outline uppercase tracking-[0.12em] mb-2">
                   {label}
                 </label>
                 <select
                   value={val}
                   onChange={e => set(e.target.value)}
-                  className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2.5 text-[16.8px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 >
                   <option value="">Selecione o grupo...</option>
                   {groups.map(g => (
@@ -205,17 +205,17 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
 
           {/* Summary */}
           {pairs > 0 && !result && (
-            <div className="flex items-center gap-2 text-sm font-mono bg-primary/5 border border-primary/20 rounded px-4 py-3 text-primary">
+            <div className="flex items-center gap-2 text-[14.4px] font-mono bg-primary/5 border border-primary/20 rounded px-4 py-3 text-primary">
               <span>{sel1.size} × {sel2.size} = {pairs} par{pairs !== 1 ? 'es' : ''}</span>
               <span className="text-outline">→</span>
               <span className="font-bold">{pairs * 2} registros</span>
-              <span className="text-outline/60 text-xs">(A≠B e B≠A — bidirecional)</span>
+              <span className="text-outline/60 text-[13px]">(A≠B e B≠A — bidirecional)</span>
             </div>
           )}
 
           {/* Result */}
           {result && (
-            <div className={`text-sm font-mono rounded px-4 py-3 border ${
+            <div className={`text-[14.4px] font-mono rounded px-4 py-3 border ${
               result.fail === 0
                 ? 'bg-green-900/20 border-green-800/40 text-green-400'
                 : 'bg-error-container/20 border-error/30 text-error'
@@ -230,7 +230,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
         <div className="flex justify-end gap-3 px-7 py-5 border-t border-outline-variant shrink-0">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
+            className="px-5 py-2.5 text-[16.8px] border border-outline-variant rounded text-on-surface-variant hover:border-outline transition-colors"
           >
             {result ? 'Fechar' : 'Cancelar'}
           </button>
@@ -238,7 +238,7 @@ export default function NonCombinableModal({ onClose, onSaved }: Props) {
             <button
               onClick={handleSubmit}
               disabled={!canSubmit || saving}
-              className="px-6 py-2.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-40 transition-all"
+              className="px-6 py-2.5 bg-primary text-on-primary rounded text-[16.8px] font-semibold hover:shadow-neon disabled:opacity-40 transition-all"
             >
               {saving ? 'Inserindo...' : `Inserir${pairs > 0 ? ` ${pairs * 2} registros` : ''}`}
             </button>
@@ -296,8 +296,8 @@ function AccBox({
 
       {/* Box title */}
       <div className="px-4 py-2.5 border-b border-outline-variant bg-surface-container-highest flex items-center justify-between">
-        <span className="text-xs font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
-        <div className="flex items-center gap-2 text-xs">
+        <span className="text-[12px] font-semibold text-outline uppercase tracking-[0.1em]">{title}</span>
+        <div className="flex items-center gap-2 text-[13px]">
           <button onClick={() => onAll(visible)} className="text-primary hover:underline">todos</button>
           <span className="text-outline/40">|</span>
           <button onClick={onNone} className="text-outline hover:text-primary">nenhum</button>
@@ -305,13 +305,13 @@ function AccBox({
       </div>
 
       {empty ? (
-        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um grupo acima</div>
+        <div className="px-4 py-12 text-center text-[14.4px] text-outline italic">Selecione um grupo acima</div>
       ) : noEquip ? (
-        <div className="px-4 py-12 text-center text-sm text-outline italic">Selecione um equipamento acima</div>
+        <div className="px-4 py-12 text-center text-[14.4px] text-outline italic">Selecione um equipamento acima</div>
       ) : (
         <>
           {/* Column headers + filters */}
-          <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[10px] font-semibold text-outline uppercase tracking-[0.1em]">
+          <div className="flex items-stretch border-b border-outline-variant bg-surface-container-high text-[12px] font-semibold text-outline uppercase tracking-[0.1em]">
             {/* Checkbox col */}
             <div className="w-9 flex items-center justify-center shrink-0 border-r border-outline-variant/30 px-2">
               <input
@@ -351,7 +351,7 @@ function AccBox({
           {/* Items */}
           <div className="overflow-y-auto min-h-[18rem] max-h-72 divide-y divide-outline-variant/20">
             {visible.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-outline italic">Nenhum resultado</div>
+              <div className="px-4 py-6 text-center text-[14.4px] text-outline italic">Nenhum resultado</div>
             ) : (
               visible.map(a => {
                 const blocked = blockedCodes.has(a.protheus_code)
@@ -375,12 +375,12 @@ function AccBox({
                         className="accent-primary disabled:cursor-not-allowed"
                       />
                     </div>
-                    <div className={`w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-xs font-mono truncate ${blocked ? 'text-outline line-through' : 'text-primary'}`}>
+                    <div className={`w-44 shrink-0 border-r border-outline-variant/10 px-2 py-2 text-[13px] font-mono truncate ${blocked ? 'text-outline line-through' : 'text-primary'}`}>
                       {a.protheus_code}
                     </div>
-                    <div className="flex-1 px-2 py-2 text-xs text-on-surface-variant truncate">
+                    <div className="flex-1 px-2 py-2 text-[13px] text-on-surface-variant truncate">
                       {a.name}
-                      {blocked && <span className="ml-1.5 text-[10px] text-outline font-mono">(selecionado no outro lado)</span>}
+                      {blocked && <span className="ml-1.5 text-[12px] text-outline font-mono">(selecionado no outro lado)</span>}
                     </div>
                   </label>
                 )
@@ -389,7 +389,7 @@ function AccBox({
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-outline-variant/40 text-xs font-mono text-outline flex items-center gap-2">
+          <div className="px-4 py-2 border-t border-outline-variant/40 text-[13px] font-mono text-outline flex items-center gap-2">
             {selected.size > 0
               ? <span className="text-primary">{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span>
               : <span>Nenhum selecionado</span>
