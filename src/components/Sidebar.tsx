@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
+import { useAppAuth } from '@/lib/appAuthContext'
 
 interface Props {
   pinned: boolean
@@ -19,6 +20,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const [hovered, setHovered] = useState(false)
   const expanded = pinned || hovered
   const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
+  const { user: appUser, logout: appLogout } = useAppAuth()
 
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
@@ -248,6 +250,12 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           >
             {protheusCreds ? '✓ Protheus conectado' : '🔌 Conectar ao Protheus'}
           </button>
+          {/* Perfil logado neste app (Engenharia do Produto / Gerente Adm
+              Comercial) — não confundir com a conexão ao Protheus acima. */}
+          <div className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-outline-variant text-[9px] font-mono">
+            <span className="truncate text-outline" title={appUser.label}>👤 {appUser.label}</span>
+            <button onClick={appLogout} className="shrink-0 text-outline hover:text-error transition-colors">Sair</button>
+          </div>
         </div>
       </aside>
     </>
