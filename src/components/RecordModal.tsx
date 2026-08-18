@@ -100,6 +100,12 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   // combinação (N equipamentos × M acessórios).
   const [multiSelected, setMultiSelected] = useState<Record<string, Set<string>>>({})
   const batchMultiFields = editableFields.filter(f => f.batchMultiSelect)
+  // Caixa de códigos pré-selecionados via lupa (cascadeLookup), por nome de
+  // campo — fica visível ao lado do campo enquanto o usuário ainda não
+  // clicou no "+ Adicionar à Lista" principal. Passar pela lupa de novo com
+  // itens repetidos não duplica nada aqui (é um Set); só vira item da fila
+  // de fato quando o usuário confirma com o botão principal do formulário.
+  const [pendingCascadeValues, setPendingCascadeValues] = useState<Record<string, Set<string>>>({})
 
   useEffect(() => {
     setForm(buildInitial())
@@ -333,16 +339,26 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
   const missingMultiSelectField = () =>
     batchMultiFields.find(f => !multiSelected[f.name] || multiSelected[f.name]!.size === 0)
 
-  const addCascadeSelectionsToQueue = () => {
-    const missing = missingMultiSelectField()
-    if (missing) {
-      window.alert(`Selecione pelo menos um "${missing.label}" antes de adicionar à lista.`)
-      return
-    }
-    const base = Array.from(cascade.selected).map(val => ({ ...form, [cascade.fieldName]: val }))
-    const newItems: QueueItem[] = expandMultiSelect(base).map(data => ({ qid: crypto.randomUUID(), data }))
-    setQueue(prev => [...prev, ...newItems])
+  // Manda a seleção da lupa pra caixa de pendentes do campo (não pra fila
+  // ainda) — o usuário pode reabrir a lupa várias vezes, acumulando mais
+  // códigos na mesma caixa, e revisar/remover antes de confirmar.
+  const addCascadeSelectionsToPending = () => {
+    if (cascade.selected.size === 0) return
+    const fieldName = cascade.fieldName
+    setPendingCascadeValues(prev => {
+      const s = new Set(prev[fieldName] ?? [])
+      cascade.selected.forEach(v => s.add(v))
+      return { ...prev, [fieldName]: s }
+    })
     setCascade(EMPTY_CASCADE)
+  }
+
+  const removePendingCascadeValue = (fieldName: string, value: string) => {
+    setPendingCascadeValues(prev => {
+      const s = new Set(prev[fieldName] ?? [])
+      s.delete(value)
+      return { ...prev, [fieldName]: s }
+    })
   }
 
   const parseFormToBody = (formData: Record<string, string>): Record<string, unknown> => {
@@ -378,8 +394,20 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
       } else {
         const missing = missingMultiSelectField()
         if (missing) { setError(`Selecione pelo menos um "${missing.label}"`); return }
-        const newItems: QueueItem[] = expandMultiSelect([{ ...form }]).map(data => ({ qid: crypto.randomUUID(), data }))
+
+        // Se a caixa de pendentes (lupa) tem códigos, cada um vira uma
+        // linha-base (cruzada depois com Equipamento etc. via
+        // expandMultiSelect) — senão cai no de sempre: usa o valor atual do
+        // campo, digitado à mão ou deixado do último item editado.
+        const cascadeField = editableFields.find(f => f.cascadeLookup)
+        const pending = cascadeField ? pendingCascadeValues[cascadeField.name] : undefined
+        const baseList = pending && pending.size > 0
+          ? Array.from(pending).map(val => ({ ...form, [cascadeField!.name]: val }))
+          : [{ ...form }]
+
+        const newItems: QueueItem[] = expandMultiSelect(baseList).map(data => ({ qid: crypto.randomUUID(), data }))
         setQueue(prev => [...prev, ...newItems])
+        if (cascadeField) setPendingCascadeValues(prev => ({ ...prev, [cascadeField.name]: new Set() }))
       }
       setForm(buildInitial())
       return
@@ -519,6 +547,52 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                     onToggle={(v) => toggleMultiSelect(field.name, v)}
                     onToggleAll={(values, checked) => setMultiSelectAll(field.name, values, checked)}
                   />
+                )
+              }
+              // Campo com lupa (cascadeLookup) em "+ Novo Registro": mostra,
+              // ao lado do campo, a caixa com os códigos já pré-selecionados
+              // (ver addCascadeSelectionsToPending) — só viram item da fila
+              // de verdade quando o formulário é enviado.
+              if (isBatch && !editingQid && field.cascadeLookup) {
+                const pending = pendingCascadeValues[field.name]
+                return (
+                  <div key={field.name} className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <FieldInput
+                        field={field}
+                        value={form[field.name] ?? ''}
+                        onChange={(v) => handleChange(field.name, shouldUppercaseField(field) ? v.toUpperCase() : v)}
+                        fetchedOptions={fetchedOptions[field.name]}
+                        dynamicOptionValues={field.dynamicOptions !== undefined ? (fetchedDynamic[field.name] ?? []) : undefined}
+                        onAddOption={field.dynamicOptions ? (v) => addDynamicOption(field.name, field.dynamicOptions!, v) : undefined}
+                        onCascadeOpen={() => openCascade(field)}
+                        forceRequired={forceRequired}
+                        similarCandidates={field.similarTextSuggest ? similarCandidates[field.name] : undefined}
+                      />
+                    </div>
+                    {pending && pending.size > 0 && (
+                      <div className="w-56 shrink-0 mt-6 border border-primary/30 bg-primary/5 rounded p-2">
+                        <div className="text-[11px] font-semibold text-primary uppercase tracking-wide mb-1.5">
+                          {pending.size} código{pending.size !== 1 ? 's' : ''} selecionado{pending.size !== 1 ? 's' : ''}
+                        </div>
+                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                          {Array.from(pending).map(v => (
+                            <span key={v} className="flex items-center gap-1 bg-surface-container-high border border-outline-variant rounded px-1.5 py-0.5 text-[11px] font-mono text-on-surface">
+                              {v}
+                              <button
+                                type="button"
+                                onClick={() => removePendingCascadeValue(field.name, v)}
+                                title="Remover"
+                                className="text-outline hover:text-error leading-none"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )
               }
               return (
@@ -803,10 +877,10 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
                   <div className="shrink-0 pt-2 border-t border-outline-variant">
                     <button
                       type="button"
-                      onClick={addCascadeSelectionsToQueue}
+                      onClick={addCascadeSelectionsToPending}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-on-primary rounded text-[16.8px] font-semibold hover:shadow-neon transition-shadow"
                     >
-                      + Adicionar {cascade.selected.size} item{cascade.selected.size !== 1 ? 's' : ''} à Lista
+                      + Adicionar {cascade.selected.size} item{cascade.selected.size !== 1 ? 's' : ''} à Seleção
                     </button>
                   </div>
                 )}
