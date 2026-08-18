@@ -606,32 +606,35 @@ export default function RecordModal({ schema, tableName, record, prefill, onClos
               if (isBatch && !editingQid && field.cascadeLookup) {
                 const pending = pendingCascadeValues[field.name]
                 return (
-                  <div key={field.name} className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
-                        {field.label}
-                      </label>
+                  <div key={field.name}>
+                    <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
+                      {field.label}
+                    </label>
+                    {/* items-stretch: o botão e o cartão ficam com a mesma
+                        altura e alinhados na mesma linha, sem depender de
+                        margem "chutada" pra compensar o label acima. */}
+                    <div className="flex items-stretch gap-3">
                       <button
                         type="button"
                         onClick={() => openCascade(field)}
-                        className="w-full flex items-center justify-center gap-2 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                        className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-[16.8px] text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
                       >
                         🔍 Buscar por grupo e acessório
                       </button>
+                      {pending && pending.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPendingReviewField(field.name)}
+                          title="Ver / remover códigos selecionados"
+                          className="w-40 shrink-0 flex items-center justify-center gap-1.5 border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded px-3 py-2 text-primary transition-colors"
+                        >
+                          <span className="text-[16.8px] font-bold leading-none">{pending.size}</span>
+                          <span className="text-[13px] font-medium leading-none">
+                            selecionado{pending.size !== 1 ? 's' : ''}
+                          </span>
+                        </button>
+                      )}
                     </div>
-                    {pending && pending.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setPendingReviewField(field.name)}
-                        title="Ver / remover códigos selecionados"
-                        className="w-40 shrink-0 mt-6 flex items-center justify-center gap-1.5 border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded px-3 py-2 text-primary transition-colors"
-                      >
-                        <span className="text-[16.8px] font-bold leading-none">{pending.size}</span>
-                        <span className="text-[13px] font-medium leading-none">
-                          selecionado{pending.size !== 1 ? 's' : ''}
-                        </span>
-                      </button>
-                    )}
                   </div>
                 )
               }
