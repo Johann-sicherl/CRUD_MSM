@@ -247,18 +247,6 @@ export default function DataTable({ tableName, schema }: Props) {
     return () => { cancelled = true }
   }, [tableName, schema])
 
-  const updateLocalCost = useCallback(async (key: string, fieldName: string, value: number | null): Promise<boolean> => {
-    const res = await fetch(`/api/local-costs/${tableName}/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: { [fieldName]: value } }),
-    })
-    if (!res.ok) return false
-    const row = await res.json()
-    setLocalCosts(prev => ({ ...(prev ?? {}), [key]: row }))
-    return true
-  }, [tableName])
-
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
     if (fieldsWithLookup.length === 0) return
@@ -879,15 +867,11 @@ export default function DataTable({ tableName, schema }: Props) {
                           let cell: React.ReactNode
                           if (localCosts !== null && FORCE_TO_ONE_FIELDS.includes(f.name)) {
                             // Coluna financeira: o Supabase sempre tem 1 aqui (sigilo) — mostra
-                            // o valor real capturado localmente no lugar, editável na hora.
+                            // o valor real capturado localmente no lugar, somente leitura. Editar
+                            // só é permitido pelo botão "Editar" (RecordModal), nunca na célula.
                             const rowKey = getRowKey(schema, row)
                             const localValue = localCosts[rowKey]?.values[f.name] ?? null
-                            cell = (
-                              <LocalCostCell
-                                value={localValue}
-                                onSave={(v) => updateLocalCost(rowKey, f.name, v)}
-                              />
-                            )
+                            cell = <LocalCostCell value={localValue} />
                           } else if (f.countDuplicatesOf) {
                             const text = getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps) || '—'
                             cell = <span className={text === '1' ? 'text-green-500 font-semibold' : 'text-error font-semibold'}>{text}</span>
@@ -1106,64 +1090,22 @@ export default function DataTable({ tableName, schema }: Props) {
 }
 
 // Coluna financeira (ex.: Custo (R$)) na própria tela de Cadastro — o
-// Supabase sempre tem 1 aí (sigilo, ver FORCE_TO_ONE_FIELDS); esta célula
-// mostra o valor real capturado do CSV, guardado só localmente, e permite
-// editar clicando nela. Salvar aqui nunca chama a API do Supabase — só
-// /api/local-costs, que grava no arquivo local.
-function LocalCostCell({
-  value,
-  onSave,
-}: {
-  value: number | null
-  onSave: (v: number | null) => Promise<boolean>
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const commit = async () => {
-    setSaving(true)
-    const trimmed = draft.trim()
-    const n = trimmed === '' ? null : Number(trimmed)
-    const ok = await onSave(n !== null && Number.isNaN(n) ? value : n)
-    setSaving(false)
-    if (ok) setEditing(false)
-  }
-
-  if (editing) {
-    return (
-      <span className="inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
-        <input
-          type="number"
-          step="0.0001"
-          autoFocus
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') { e.preventDefault(); commit() }
-            if (e.key === 'Escape') setEditing(false)
-          }}
-          className="w-24 bg-surface-container border border-primary rounded px-1.5 py-0.5 text-xs text-on-surface focus:outline-none"
-        />
-        {saving && <span className="text-outline text-[10px]">…</span>}
-      </span>
-    )
-  }
-
+// Supabase sempre tem 1 aí (sigilo, ver FORCE_TO_ONE_FIELDS); esta célula só
+// mostra o valor real capturado do CSV, guardado só localmente. Somente
+// leitura — editar exige clicar em "Editar" e usar o formulário (RecordModal),
+// nunca direto na célula da lista.
+function LocalCostCell({ value }: { value: number | null }) {
   return (
-    <button
-      type="button"
-      onClick={e => { e.stopPropagation(); setDraft(value === null ? '' : String(value)); setEditing(true) }}
-      title="Valor real, guardado só localmente — o Supabase mantém 1 por sigilo. Clique para editar."
-      className={`text-xs font-mono px-1.5 py-0.5 rounded border transition-colors ${
+    <span
+      title="Valor real, guardado só localmente — o Supabase mantém 1 por sigilo. Edite pelo botão 'Editar'."
+      className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
         value === null
-          ? 'text-outline border-outline-variant/50 hover:border-primary hover:text-primary'
-          : 'text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20'
+          ? 'text-outline border-outline-variant/50'
+          : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
       }`}
     >
-      {value === null ? '+ custo real' : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-    </button>
+      {value === null ? 'N/A' : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+    </span>
   )
 }
 

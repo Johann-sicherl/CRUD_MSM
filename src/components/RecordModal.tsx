@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Field, TableSchema, shouldUppercaseField } from '@/lib/schema'
+import { Field, TableSchema, shouldUppercaseField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { bestGhostSuggestion } from '@/lib/textSimilarity'
 import { getAuditKeyFields, keyValueString } from '@/lib/sqlAudit'
+import { getRowKey } from '@/lib/csvBaseline'
 
 interface Props {
   schema: TableSchema
@@ -124,6 +125,35 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
     setForm(buildInitial())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record])
+
+  // Campos financeiros (FORCE_TO_ONE_FIELDS): o Supabase sempre tem 1 aí
+  // (sigilo) — o formulário de edição não pode mostrar esse "1" como se
+  // fosse o valor real. Busca o valor real guardado localmente e substitui
+  // o que o buildInitial pôs (o "1" vindo de `record`) assim que chega.
+  useEffect(() => {
+    if (!isEdit || !record) return
+    const forceFieldNames = editableFields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name)).map(f => f.name)
+    if (forceFieldNames.length === 0) return
+    let cancelled = false
+    fetch(`/api/local-costs?table=${tableName}`)
+      .then(r => r.ok ? r.json() : {})
+      .then((store: Record<string, { values: Record<string, number | null> }>) => {
+        if (cancelled) return
+        const key = getRowKey(schema, record)
+        const values = store[key]?.values ?? {}
+        setForm(prev => {
+          const next = { ...prev }
+          for (const name of forceFieldNames) {
+            const v = values[name]
+            next[name] = v === null || v === undefined ? '' : String(v)
+          }
+          return next
+        })
+      })
+      .catch(() => { /* melhor esforço — mantém o valor forçado (1) se falhar */ })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableName, record, isEdit])
 
   useEffect(() => {
     const fieldsWithFetch = schema.fields.filter(f => f.fetchOptions)
