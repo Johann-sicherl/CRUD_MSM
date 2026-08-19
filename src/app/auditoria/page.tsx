@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { tables } from '@/lib/schema'
 import { diffChangedFields } from '@/lib/sqlAudit'
 import { useAppAuth } from '@/lib/appAuthContext'
+import type { UserProfile } from '@/lib/userProfileStore'
 
 interface AuditRow {
   id: string
@@ -41,6 +42,18 @@ function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[])
   if (!row.baseline || !row.payload) return false
   const changed = diffChangedFields(row.baseline, row.payload)
   return Object.keys(changed).some(name => editableFields.includes(name))
+}
+
+// Pro admin (Engenharia), na exportação em TXT: "Somente Engenharia" = linhas
+// que nenhum perfil restrito enxergaria (dá pra separar o que é puramente de
+// engenharia do que também é de controladoria/custo/precificação). Une todos
+// os perfis não-admin em vez de fixar em "Gerente Adm Comercial" por nome —
+// hoje é só ela, mas continua certo se outro perfil restrito for criado.
+function isRelevantToAnyRestrictedProfile(row: AuditRow, restrictedProfiles: UserProfile[]): boolean {
+  return restrictedProfiles.some(p =>
+    p.visibleModules.includes(row.table_name) &&
+    isRelevantForRestrictedProfile(row, p.editableFieldsByTable[row.table_name] ?? [])
+  )
 }
 
 const OPERATION_LABELS: Record<AuditRow['operation'], string> = {
@@ -124,6 +137,10 @@ export default function AuditoriaPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
+  // Só usado pelo admin, pra saber o que "Somente Engenharia" precisa excluir
+  // na hora de exportar — buscado uma vez, não muda durante a sessão.
+  const [restrictedProfiles, setRestrictedProfiles] = useState<UserProfile[]>([])
+  const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
@@ -150,6 +167,14 @@ export default function AuditoriaPage() {
   }, [tableFilter, statusFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    if (!appUser.isAdmin) return
+    fetch('/api/user-profiles')
+      .then(r => r.ok ? r.json() : { profiles: [] })
+      .then(json => setRestrictedProfiles(((json.profiles || []) as UserProfile[]).filter(p => !p.isAdmin)))
+      .catch(() => {})
+  }, [appUser.isAdmin])
 
   // Perfil sem acesso total: só enxerga (no filtro e nas linhas) as tabelas
   // que também aparecem pra ele na Sidebar — pro Gerente Adm Comercial isso
@@ -227,18 +252,35 @@ export default function AuditoriaPage() {
     navigator.clipboard.writeText(buildSqlText(visibleRows)).then(() => showToast(`${visibleRows.length} quer${visibleRows.length !== 1 ? 'ies' : 'y'} copiada${visibleRows.length !== 1 ? 's' : ''}`))
   }
 
-  // Um .txt por (tabela, ação) das linhas visíveis agora — todos com o
+  // Um .txt por (tabela, ação) do conjunto de linhas dado — todos com o
   // mesmo instante de exportação no nome, cada um baixado separadamente
   // (o navegador manda pra pasta padrão de Downloads).
-  const handleExportTxtByTableAction = () => {
-    if (visibleRows.length === 0) return
-    const groups = groupRowsForExport(visibleRows)
+  const runTxtExport = (rowsToExport: AuditRow[]) => {
+    const groups = groupRowsForExport(rowsToExport)
+    if (groups.size === 0) { showToast('Nenhuma query pra exportar nesse recorte', true); return }
     const now = new Date()
     for (const groupRows of groups.values()) {
       const filename = buildExportFilename(now, groupRows[0].operation, groupRows[0].table_name, groupRows.length, appUser.name)
       triggerDownload(buildSqlText(groupRows), filename, 'text/plain')
     }
     showToast(`${groups.size} arquivo${groups.size !== 1 ? 's' : ''} .txt exportado${groups.size !== 1 ? 's' : ''}`)
+  }
+
+  // Só o admin (Engenharia) escolhe o recorte — perfil restrito já enxerga
+  // só a própria fatia, então exporta direto, sem pergunta.
+  const handleExportTxtByTableAction = () => {
+    if (visibleRows.length === 0) return
+    if (appUser.isAdmin) { setExportChoiceOpen(true); return }
+    runTxtExport(visibleRows)
+  }
+
+  const handleExportChoice = (onlyEngenharia: boolean) => {
+    setExportChoiceOpen(false)
+    runTxtExport(
+      onlyEngenharia
+        ? visibleRows.filter(r => !isRelevantToAnyRestrictedProfile(r, restrictedProfiles))
+        : visibleRows
+    )
   }
 
   return (
@@ -394,6 +436,46 @@ export default function AuditoriaPage() {
           </table>
         )}
       </div>
+
+      {exportChoiceOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setExportChoiceOpen(false)}
+        >
+          <div
+            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <h3 className="text-base font-semibold text-on-surface">Exportar TXTs — quais queries?</h3>
+            </div>
+            <div className="p-5 flex flex-col gap-3">
+              <p className="text-sm text-on-surface-variant">
+                Escolha se quer só as queries que dizem respeito à Engenharia, ou o conjunto completo.
+              </p>
+              <button
+                onClick={() => handleExportChoice(true)}
+                className="w-full text-left px-4 py-3 bg-surface-container-low border border-outline-variant rounded hover:border-primary transition-colors"
+              >
+                <span className="block text-sm font-semibold text-on-surface">Somente Engenharia</span>
+                <span className="block text-xs text-outline mt-0.5">Exclui o que também é de controladoria/custo/precificação (Gerente Adm Comercial)</span>
+              </button>
+              <button
+                onClick={() => handleExportChoice(false)}
+                className="w-full text-left px-4 py-3 bg-surface-container-low border border-outline-variant rounded hover:border-primary transition-colors"
+              >
+                <span className="block text-sm font-semibold text-on-surface">Completa (Gerente Adm Comercial + Engenharia)</span>
+                <span className="block text-xs text-outline mt-0.5">Todas as queries visíveis agora, sem separar por perfil</span>
+              </button>
+            </div>
+            <div className="px-5 py-3 border-t border-outline-variant flex justify-end">
+              <button onClick={() => setExportChoiceOpen(false)} className="text-sm text-outline hover:text-on-surface transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg text-sm animate-fade-in border ${
