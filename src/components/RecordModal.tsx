@@ -11,10 +11,11 @@ interface Props {
   tableName: string
   record?: Record<string, unknown> | null
   prefill?: Record<string, string> | null
-  // Perfil Gerente Adm Comercial: quando informado, só os campos deste Set
-  // ficam editáveis (os demais aparecem desabilitados) — usado só em modo
-  // de edição, já que esse perfil nem chega a abrir o formulário de criação
-  // (o botão "+ Novo Registro" já vem escondido pra ele no DataTable).
+  // Perfil sem acesso total (ver Configuração de Usuários): quando
+  // informado, só os campos deste Set ficam editáveis (os demais aparecem
+  // desabilitados) — usado só em modo de edição, já que esse tipo de perfil
+  // nem chega a abrir o formulário de criação (o botão "+ Novo Registro" já
+  // vem escondido pra ele no DataTable quando não tem canCreateDelete).
   restrictToFields?: Set<string>
   onClose: () => void
   onSaved: () => void
@@ -633,8 +634,8 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
               const forceRequired = field.requiredWhen
                 ? field.requiredWhen.values.map(String).includes(String(form[field.requiredWhen.field] ?? ''))
                 : false
-              // Gerente Adm Comercial: só campos de controladoria/preço/fiscal
-              // ficam editáveis, o resto vira somente leitura.
+              // Perfil restrito: só os campos liberados em Configuração de
+              // Usuários ficam editáveis, o resto vira somente leitura.
               const fieldDisabled = !!restrictToFields && !restrictToFields.has(field.name)
               // Só vira lista de checkbox em "+ Novo Registro" (isBatch),
               // e só enquanto NÃO se está editando um item específico já
@@ -1169,10 +1170,10 @@ function FieldInput({
   onCascadeOpen?: () => void
   forceRequired?: boolean
   similarCandidates?: string[]
-  // Perfil Gerente Adm Comercial num campo fora de CONTROLLERSHIP_FIELDS —
-  // desabilita tudo dentro do campo (select, input, botão de lupa/+ etc.)
-  // de uma vez só via <fieldset disabled>, sem precisar tocar em cada
-  // branch de input abaixo.
+  // Perfil restrito num campo fora do restrictToFields liberado pra essa
+  // tabela — desabilita tudo dentro do campo (select, input, botão de
+  // lupa/+ etc.) de uma vez só via <fieldset disabled>, sem precisar tocar
+  // em cada branch de input abaixo.
   disabled?: boolean
 }) {
   const [addingOpt, setAddingOpt] = useState(false)

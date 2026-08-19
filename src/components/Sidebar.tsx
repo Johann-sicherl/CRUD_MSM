@@ -4,16 +4,14 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { tables, DOMAIN_LABELS, CONTROLLERSHIP_FIELDS } from '@/lib/schema'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
+import { MODULES, MODULE_GROUPS } from '@/lib/modules'
 
 interface Props {
   pinned: boolean
   onPinChange: (pinned: boolean) => void
 }
-
-const DOMAIN_ORDER = ['catalogo', 'regras']
 
 export default function Sidebar({ pinned, onPinChange }: Props) {
   const pathname = usePathname()
@@ -22,20 +20,13 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
   const { user: appUser, logout: appLogout } = useAppAuth()
 
-  // Perfil Gerente Adm Comercial: dentro de Portifólio e Regras, mostra só
-  // as tabelas que têm algum campo de controladoria/custo/precificação
-  // (CONTROLLERSHIP_FIELDS) — as demais ficam ocultas. Desenvolvedor de
-  // Queries e o resto de Sistema/Parâmetros não passam por esse filtro.
-  const isGerenteAdm = appUser.role === 'gerente_adm_comercial'
-  const hasControllershipFields = (schema: (typeof tables)[string]) =>
-    schema.fields.some(f => CONTROLLERSHIP_FIELDS.includes(f.name))
-
-  const byDomain = DOMAIN_ORDER.map(domain => ({
-    domain,
-    items: Object.entries(tables).filter(([, schema]) =>
-      schema.domain === domain && (!isGerenteAdm || hasControllershipFields(schema))
-    ),
-  }))
+  // Módulos visíveis vêm do perfil (ver Configuração de Usuários) — admin
+  // enxerga tudo (visibleModules já vem com todas as chaves nesse caso).
+  const visible = new Set(appUser.visibleModules)
+  const byGroup = MODULE_GROUPS.map(group => ({
+    group,
+    items: MODULES.filter(m => m.group === group && visible.has(m.key)),
+  })).filter(g => g.items.length > 0)
 
   return (
     <>
@@ -81,160 +72,44 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3">
-          <Link
-            href="/"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="font-medium">Dashboard</span>
-          </Link>
-          <Link
-            href="/explorador-relacoes"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/explorador-relacoes'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Janela de Pesquisa Avançada</span>
-          </Link>
-          <Link
-            href="/atualizador-global"
-            className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-              pathname === '/atualizador-global'
-                ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="truncate">Atualizador Global de Tabelas MSM</span>
-          </Link>
-
-          {byDomain.map(({ domain, items }) => (
-            <div key={domain} className="mt-5">
+          {byGroup.map(({ group, items }) => (
+            <div key={group} className="mt-5 first:mt-0">
               <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-                {DOMAIN_LABELS[domain]}
+                {group}
               </div>
-              {items.map(([tableName, schema]) => {
-                const isActive = pathname === `/${tableName}`
+              {items.map(m => {
+                const isActive = pathname === m.href
                 return (
                   <Link
-                    key={tableName}
-                    href={`/${tableName}`}
+                    key={m.key}
+                    href={m.href}
                     className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
                       isActive
                         ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
                         : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                     }`}
                   >
-                    <span className="truncate">{schema.label}</span>
+                    <span className="truncate">{m.label}</span>
                   </Link>
                 )
               })}
-              {domain === 'catalogo' && (
-                <Link
-                  href="/custos-gerais-vmi"
-                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                    pathname === '/custos-gerais-vmi'
-                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  <span className="truncate">Custos Gerais VMI</span>
-                </Link>
-              )}
             </div>
           ))}
 
-          {/* Sistema — kept inside the same scrollable flow as Regras, right
-              below it, instead of a separate flex sibling (which used to get
-              pushed to the bottom of the sidebar regardless of content length) */}
-          <div className="mt-5">
-            <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-              Sistema
-            </div>
-            <Link
-              href="/auditoria"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/auditoria'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Desenvolvedor de Queries</span>
-            </Link>
-            {!isGerenteAdm && (
-              <>
-                <Link
-                  href="/clonagem-estrutural-avancada"
-                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                    pathname === '/clonagem-estrutural-avancada'
-                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  <span className="truncate">Clonagem Estrut. Avançada</span>
-                </Link>
-                <Link
-                  href="/analisador-estruturas"
-                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                    pathname === '/analisador-estruturas'
-                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  <span className="truncate">Busc. Itens Série Estrut.</span>
-                </Link>
-                <Link
-                  href="/busca-avancada-acessorios"
-                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                    pathname === '/busca-avancada-acessorios'
-                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  <span className="truncate">Busc. Avançada Acessórios</span>
-                </Link>
-                <Link
-                  href="/depurador-solic-comercial"
-                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                    pathname === '/depurador-solic-comercial'
-                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  <span className="truncate">Depurador Solic. Comercial</span>
-                </Link>
-              </>
-            )}
-          </div>
-
-          {!isGerenteAdm && (
+          {appUser.isAdmin && (
             <div className="mt-5">
               <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-                Parâmetros
+                Administração
               </div>
               <Link
-                href="/options"
+                href="/configuracao-usuarios"
                 className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                  pathname === '/options'
+                  pathname === '/configuracao-usuarios'
                     ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
                     : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                 }`}
               >
-                <span className="truncate">Lista Itens de Série</span>
-              </Link>
-              <Link
-                href="/parametros-estrutura"
-                className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                  pathname === '/parametros-estrutura'
-                    ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                }`}
-              >
-                <span className="truncate">Param. Itens de Série</span>
+                <span className="truncate">Configuração de Usuários</span>
               </Link>
             </div>
           )}

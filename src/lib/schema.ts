@@ -123,6 +123,12 @@ export const FORCE_TO_ONE_FIELDS = [
 // comercial mas não entra no mecanismo de sigilo (não é forçado a 1).
 export const CONTROLLERSHIP_FIELDS = [...FORCE_TO_ONE_FIELDS, 'parts_provision_rate']
 
+// Campos elegíveis para restrição por usuário (ver Configuração de Usuários)
+// — os mesmos que RecordModal renderiza como editáveis no formulário.
+export function getFormEditableFields(schema: TableSchema): Field[] {
+  return schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
+}
+
 export const DOMAIN_LABELS: Record<string, string> = {
   catalogo: 'Portifólio',
   regras: 'Regras',
