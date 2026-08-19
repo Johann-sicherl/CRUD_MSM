@@ -16,23 +16,28 @@ interface AuditRow {
   created_at: string
   // Só usados pra decidir, num perfil restrito, se uma alteração (update) diz
   // respeito a algum campo que esse perfil pode editar — ver
-  // touchesEditableFields. Insert/delete não precisam disso (linha inteira
-  // nova/removida, não um campo específico).
+  // isRelevantForRestrictedProfile. Insert não precisa disso (linha inteira
+  // nova, não um campo específico); delete nunca aparece pra esse perfil,
+  // então também não precisa.
   payload?: Record<string, unknown> | null
   baseline?: Record<string, unknown> | null
 }
 
-// Perfil restrito: um "update" só é relevante pra ele se mexeu em algum campo
-// que ele mesmo pode editar (ver Configuração de Usuários) — ex.: mudar o
-// nome de um componente não aparece pro Gerente Adm Comercial, mas mudar o
-// custo padrão aparece, porque cost_std está nos campos liberados pra ele.
-// Insert/delete contam sempre: um componente novo (ou removido) é relevante
-// pra quem acompanha custo/precificação independente de qual campo mudou —
-// não há "campo alterado" nesses dois, é a linha inteira.
-// Falta de payload/baseline (não deveria acontecer) esconde a linha, por
-// cautela — não mostra o que não dá pra confirmar que é relevante.
-function touchesEditableFields(row: AuditRow, editableFields: string[]): boolean {
-  if (row.operation !== 'update') return true
+// Perfil restrito (não-admin), dentro de uma tabela já visível pra ele:
+// - update: só é relevante se mexeu em algum campo que ele mesmo pode editar
+//   (ver Configuração de Usuários) — ex.: mudar o nome de um componente não
+//   aparece pro Gerente Adm Comercial, mas mudar o custo padrão aparece,
+//   porque cost_std está nos campos liberados pra ele.
+// - insert: sempre relevante — um componente novo é relevante pra quem
+//   acompanha custo/precificação, mesmo que ele não tenha permissão de criar
+//   registros. Não há "campo alterado" aqui, é a linha inteira.
+// - delete: NUNCA aparece pra esse perfil, em nenhuma tabela — exclusão de
+//   linha completa fica restrita a quem tem acesso total.
+// Falta de payload/baseline num update (não deveria acontecer) esconde a
+// linha, por cautela — não mostra o que não dá pra confirmar que é relevante.
+function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[]): boolean {
+  if (row.operation === 'delete') return false
+  if (row.operation === 'insert') return true
   if (!row.baseline || !row.payload) return false
   const changed = diffChangedFields(row.baseline, row.payload)
   return Object.keys(changed).some(name => editableFields.includes(name))
@@ -126,13 +131,14 @@ export default function AuditoriaPage() {
   )
 
   // Além da tabela, um perfil restrito só vê updates que mexem em campo que
-  // ele mesmo pode editar (ver touchesEditableFields) — insert/delete contam
-  // sempre, dentro de uma tabela visível.
+  // ele mesmo pode editar, e nunca vê delete — ver
+  // isRelevantForRestrictedProfile. Insert conta sempre, dentro de uma
+  // tabela visível.
   const visibleRows = useMemo(() => {
     if (appUser.isAdmin) return rows
     return rows.filter(r =>
       appUser.visibleModules.includes(r.table_name) &&
-      touchesEditableFields(r, appUser.editableFieldsByTable[r.table_name] ?? [])
+      isRelevantForRestrictedProfile(r, appUser.editableFieldsByTable[r.table_name] ?? [])
     )
   }, [rows, appUser])
 
