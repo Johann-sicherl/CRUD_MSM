@@ -443,7 +443,7 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_item_code' } },
       { name: 'quantity', label: 'Qtd.', type: 'number', nullable: false, defaultValue: 1, showInList: true },
       { name: 'proportional_factor', label: 'Fat. Prop.', type: 'decimal', nullable: true, showInList: true },
-      { name: 'cost_std', label: 'Custo (R$)', type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
+      { name: 'cost_std', label: 'CUSTO ITEM DEPENDENTE', type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],
