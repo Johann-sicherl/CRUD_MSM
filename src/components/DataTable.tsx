@@ -485,7 +485,17 @@ export default function DataTable({ tableName, schema }: Props) {
     ]
     const rowData = filteredRows.map(row => [
       ...(includeProtheusFlag ? [getProtheusStatus(row) ?? 'Não encontrado'] : []),
-      ...exportableFields.map(f => getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps, localCosts, schema)),
+      ...exportableFields.map(f => {
+        // Colunas financeiras (FORCE_TO_ONE_FIELDS): exporta o valor real
+        // (do JSON local) como número de verdade, não texto formatado — só
+        // assim o Excel reconhece a célula como numérica.
+        if (localCosts && FORCE_TO_ONE_FIELDS.includes(f.name)) {
+          const key = getRowKey(schema, row)
+          const v = localCosts[key]?.values[f.name]
+          if (v !== undefined) return v === null ? '' : v
+        }
+        return getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps, localCosts, schema)
+      }),
     ])
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
     exportVisibleData(headers, rowData, `${safeLabel}.xlsx`)

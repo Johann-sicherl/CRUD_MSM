@@ -232,8 +232,8 @@ async function buildAndDownloadStructureWorkbook(
     ['CÓDIGO DA ESTRUTURA', protheusCode],
     ['DENOMINAÇÃO DA ESTRUTURA', descEstrutura || ''],
     ['QUANTIDADE DE CÓDIGOS', flatMap.size],
-    ['CUSTO STANDARD', fmtBRL(custoStandard)],
-    ['CUSTO ÚLTIMO PREÇO DE COMPRA', fmtBRL(custoUltimoPreco)],
+    ['CUSTO STANDARD', custoStandard],
+    ['CUSTO ÚLTIMO PREÇO DE COMPRA', custoUltimoPreco],
     ['POSSUI ALGUM ITEM SEM PREÇO?', semPreco.length > 0 ? 'SIM' : 'NÃO'],
     ['QTD ITENS SEM PREÇO', semPreco.length],
   ])
