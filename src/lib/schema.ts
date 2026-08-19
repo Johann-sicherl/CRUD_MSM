@@ -115,13 +115,8 @@ export const FORCE_TO_ONE_FIELDS = [
   'certification_cost',
   'labor_cost_rate',
   'warranty_rate',
+  'parts_provision_rate',
 ]
-
-// Campos de controladoria/preço/fiscal pra fins de permissão (perfil Gerente
-// Adm Comercial só pode editar estes campos, em nenhuma outra coisa) —
-// FORCE_TO_ONE_FIELDS mais parts_provision_rate, que é do mesmo grupo
-// comercial mas não entra no mecanismo de sigilo (não é forçado a 1).
-export const CONTROLLERSHIP_FIELDS = [...FORCE_TO_ONE_FIELDS, 'parts_provision_rate']
 
 // Campos elegíveis para restrição por usuário (ver Configuração de Usuários)
 // — os mesmos que RecordModal renderiza como editáveis no formulário.

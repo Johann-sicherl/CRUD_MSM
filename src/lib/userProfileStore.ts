@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { tables, CONTROLLERSHIP_FIELDS } from './schema'
+import { tables, FORCE_TO_ONE_FIELDS } from './schema'
 import { ALL_MODULE_KEYS } from './modules'
 
 // Perfis de usuário do app (quem vê o quê, quem edita o quê) — arquivo local,
@@ -50,7 +50,7 @@ function defaultProfiles(): UserProfile[] {
       editableFieldsByTable: Object.fromEntries(
         CONTROLLERSHIP_TABLES.map(t => [
           t,
-          tables[t].fields.filter(f => CONTROLLERSHIP_FIELDS.includes(f.name)).map(f => f.name),
+          tables[t].fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name)).map(f => f.name),
         ])
       ),
     },
