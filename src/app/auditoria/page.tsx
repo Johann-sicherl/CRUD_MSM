@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { tables } from '@/lib/schema'
+import { diffChangedFields } from '@/lib/sqlAudit'
 import { useAppAuth } from '@/lib/appAuthContext'
 
 interface AuditRow {
@@ -13,6 +14,28 @@ interface AuditRow {
   sql_query: string
   status: 'pending' | 'exported' | 'applied'
   created_at: string
+  // Só usados pra decidir, num perfil restrito, se uma alteração (update) diz
+  // respeito a algum campo que esse perfil pode editar — ver
+  // touchesEditableFields. Insert/delete não precisam disso (linha inteira
+  // nova/removida, não um campo específico).
+  payload?: Record<string, unknown> | null
+  baseline?: Record<string, unknown> | null
+}
+
+// Perfil restrito: um "update" só é relevante pra ele se mexeu em algum campo
+// que ele mesmo pode editar (ver Configuração de Usuários) — ex.: mudar o
+// nome de um componente não aparece pro Gerente Adm Comercial, mas mudar o
+// custo padrão aparece, porque cost_std está nos campos liberados pra ele.
+// Insert/delete contam sempre: um componente novo (ou removido) é relevante
+// pra quem acompanha custo/precificação independente de qual campo mudou —
+// não há "campo alterado" nesses dois, é a linha inteira.
+// Falta de payload/baseline (não deveria acontecer) esconde a linha, por
+// cautela — não mostra o que não dá pra confirmar que é relevante.
+function touchesEditableFields(row: AuditRow, editableFields: string[]): boolean {
+  if (row.operation !== 'update') return true
+  if (!row.baseline || !row.payload) return false
+  const changed = diffChangedFields(row.baseline, row.payload)
+  return Object.keys(changed).some(name => editableFields.includes(name))
 }
 
 const OPERATION_LABELS: Record<AuditRow['operation'], string> = {
@@ -102,10 +125,16 @@ export default function AuditoriaPage() {
     [appUser],
   )
 
-  const visibleRows = useMemo(
-    () => appUser.isAdmin ? rows : rows.filter(r => appUser.visibleModules.includes(r.table_name)),
-    [rows, appUser],
-  )
+  // Além da tabela, um perfil restrito só vê updates que mexem em campo que
+  // ele mesmo pode editar (ver touchesEditableFields) — insert/delete contam
+  // sempre, dentro de uma tabela visível.
+  const visibleRows = useMemo(() => {
+    if (appUser.isAdmin) return rows
+    return rows.filter(r =>
+      appUser.visibleModules.includes(r.table_name) &&
+      touchesEditableFields(r, appUser.editableFieldsByTable[r.table_name] ?? [])
+    )
+  }, [rows, appUser])
 
   const selectedRows = visibleRows.filter(r => selectedIds.has(r.id))
 
