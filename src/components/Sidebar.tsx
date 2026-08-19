@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { tables, DOMAIN_LABELS } from '@/lib/schema'
+import { tables, DOMAIN_LABELS, CONTROLLERSHIP_FIELDS } from '@/lib/schema'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
 
@@ -22,9 +22,19 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
   const { user: appUser, logout: appLogout } = useAppAuth()
 
+  // Perfil Gerente Adm Comercial: dentro de Portifólio e Regras, mostra só
+  // as tabelas que têm algum campo de controladoria/custo/precificação
+  // (CONTROLLERSHIP_FIELDS) — as demais ficam ocultas. Desenvolvedor de
+  // Queries e o resto de Sistema/Parâmetros não passam por esse filtro.
+  const isGerenteAdm = appUser.role === 'gerente_adm_comercial'
+  const hasControllershipFields = (schema: (typeof tables)[string]) =>
+    schema.fields.some(f => CONTROLLERSHIP_FIELDS.includes(f.name))
+
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
-    items: Object.entries(tables).filter(([, schema]) => schema.domain === domain),
+    items: Object.entries(tables).filter(([, schema]) =>
+      schema.domain === domain && (!isGerenteAdm || hasControllershipFields(schema))
+    ),
   }))
 
   return (
