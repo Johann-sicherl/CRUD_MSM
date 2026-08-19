@@ -19,7 +19,7 @@ function normaliseDecimal(raw: string): string {
 /** Export the currently-visible grid rows to an XLSX file and save to Downloads. */
 export async function exportVisibleData(
   headers: string[],
-  rows: string[][],
+  rows: (string | number)[][],
   filename: string,
 ) {
   const XLSX = await import('xlsx')

@@ -185,7 +185,11 @@ export default function CustosGeraisVmiPage() {
 
   const handleExportVisible = () => {
     const headers = COLUMNS.map(c => c.label)
-    const rowData = filteredRows.map(row => COLUMNS.map(c => getDisplayValue(row, c.key)))
+    // cost vai como número real (não texto formatado) para o Excel reconhecer
+    // a coluna como numérica — exibição/separador ficam a cargo do próprio Excel.
+    const rowData = filteredRows.map(row => COLUMNS.map(c =>
+      c.key === 'cost' ? (row.cost ?? '') : getDisplayValue(row, c.key)
+    ))
     exportVisibleData(headers, rowData, 'custos_gerais_vmi.xlsx')
   }
 
