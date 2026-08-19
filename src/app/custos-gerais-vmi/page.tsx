@@ -2,17 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Field } from '@/lib/schema'
+import { tables } from '@/lib/schema'
+import { getRowKey } from '@/lib/csvBaseline'
 import { exportVisibleData, parseImportFile } from '@/lib/importExport'
 import ColumnFilter from '@/components/ColumnFilter'
 import CostBulkEditModal from '@/components/CostBulkEditModal'
 import CostImportReviewModal from '@/components/CostImportReviewModal'
 
-// One row per physical record in the underlying tables.
+// One row per physical record in the underlying tables. cost vem do arquivo
+// local (local-data/real-costs.json), nunca do Supabase — lá cost_std é
+// sempre 1, por sigilo (ver src/lib/localCostStore.ts). null = nenhum valor
+// real foi capturado ainda pra esse registro (nunca veio de um CSV/edição).
 interface PhysicalRow {
   id: string
   table: string
   code: string
-  cost: number
+  cost: number | null
 }
 
 // One row per distinct Código Protheus — several PhysicalRow entries (even
@@ -20,7 +25,7 @@ interface PhysicalRow {
 // same code always carries the same standard cost catalog-wide.
 interface CostRow {
   code: string
-  cost: number
+  cost: number | null
 }
 
 type ColumnKey = 'code' | 'cost'
@@ -41,7 +46,8 @@ const VIRTUAL_FIELDS: Field[] = [
   { name: 'cost',   label: 'Custo (R$)',      type: 'decimal', nullable: false },
 ]
 
-function formatCost(cost: number): string {
+function formatCost(cost: number | null): string {
+  if (cost === null) return 'N/A'
   return cost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -81,34 +87,52 @@ export default function CustosGeraisVmiPage() {
     setLoading(true)
     setError('')
     try {
-      const responses = await Promise.all(
-        SOURCES.map(s => fetch(`/api/${s.table}?limit=25000`))
-      )
+      const [responses, localCostResponses] = await Promise.all([
+        Promise.all(SOURCES.map(s => fetch(`/api/${s.table}?limit=25000`))),
+        Promise.all(SOURCES.map(s => fetch(`/api/local-costs?table=${s.table}`))),
+      ])
       if (responses.some(r => !r.ok)) {
         setError('Erro ao carregar dados')
         setLoading(false)
         return
       }
       const jsons = await Promise.all(responses.map(r => r.json()))
+      // local-costs nunca deve derrubar a tela — se falhar, esse source vira
+      // {} e as linhas dele ficam N/A até o arquivo local existir/recarregar.
+      const localCostJsons: Record<string, { values: Record<string, number | null> }>[] =
+        await Promise.all(localCostResponses.map(r => r.ok ? r.json() : {}))
+
       const physical: PhysicalRow[] = jsons.flatMap((json, i) => {
         const src = SOURCES[i]
+        const schema = tables[src.table]
+        const localCosts = localCostJsons[i] ?? {}
         const data: Record<string, unknown>[] = json.data || []
-        return data.map(row => ({
-          id: String(row.id ?? ''),
-          table: src.table,
-          code: String(row[src.codeField] ?? ''),
-          cost: Number(row.cost_std ?? 0),
-        }))
+        return data.map(row => {
+          const key = getRowKey(schema, row)
+          const real = localCosts[key]?.values?.cost_std
+          return {
+            id: String(row.id ?? ''),
+            table: src.table,
+            code: String(row[src.codeField] ?? ''),
+            // cost_std no Supabase é sempre 1 (sigilo) — o valor real só
+            // existe no arquivo local; null = nunca foi capturado ainda.
+            cost: typeof real === 'number' ? real : null,
+          }
+        })
       })
       setAllPhysical(physical)
 
       // SELECT DISTINCT por Código Protheus: o mesmo código carrega o mesmo
       // custo padrão em todo o catálogo, mesmo aparecendo em tabelas diferentes
       // — a grade mostra um único item consolidado por código; o update
-      // atinge todos os registros físicos com esse código.
+      // atinge todos os registros físicos com esse código. Se o mesmo código
+      // tiver custo real capturado numa tabela mas não em outra, prefere o
+      // valor real (evita mostrar N/A quando o dado já existe em algum lugar).
       const distinct = new Map<string, CostRow>()
       for (const p of physical) {
-        if (!distinct.has(p.code)) distinct.set(p.code, { code: p.code, cost: p.cost })
+        const existing = distinct.get(p.code)
+        if (!existing) { distinct.set(p.code, { code: p.code, cost: p.cost }); continue }
+        if (existing.cost === null && p.cost !== null) existing.cost = p.cost
       }
       setRows(Array.from(distinct.values()))
     } catch {

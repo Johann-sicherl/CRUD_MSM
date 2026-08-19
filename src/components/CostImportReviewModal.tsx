@@ -6,7 +6,7 @@ interface SourceRow {
   id: string
   table: string
   code: string
-  cost: number
+  cost: number | null
 }
 
 interface Props {
@@ -40,7 +40,9 @@ export default function CostImportReviewModal({ sourceRows, parsedRows, onClose,
   const rowInfos = useMemo(() => rows.map(row => {
     const matches = sourceRows.filter(r => r.code === row.code)
     const newCost = parseFloat(row.cost)
-    const toUpdate = matches.filter(m => Math.abs(m.cost - newCost) > 0.005)
+    // cost null = nenhum valor real capturado ainda pra esse registro —
+    // qualquer valor no arquivo é uma mudança real, não só "diferente de 0".
+    const toUpdate = matches.filter(m => m.cost === null || Math.abs(m.cost - newCost) > 0.005)
     const duplicate = (duplicateKeys.get(row.code) ?? 0) > 1
     return {
       row,
