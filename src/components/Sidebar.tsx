@@ -211,31 +211,33 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
             )}
           </div>
 
-          <div className="mt-5">
-            <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-              Parâmetros
+          {!isGerenteAdm && (
+            <div className="mt-5">
+              <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
+                Parâmetros
+              </div>
+              <Link
+                href="/options"
+                className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                  pathname === '/options'
+                    ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                }`}
+              >
+                <span className="truncate">Lista Itens de Série</span>
+              </Link>
+              <Link
+                href="/parametros-estrutura"
+                className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                  pathname === '/parametros-estrutura'
+                    ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                }`}
+              >
+                <span className="truncate">Param. Itens de Série</span>
+              </Link>
             </div>
-            <Link
-              href="/options"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/options'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Lista Itens de Série</span>
-            </Link>
-            <Link
-              href="/parametros-estrutura"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/parametros-estrutura'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Param. Itens de Série</span>
-            </Link>
-          </div>
+          )}
         </nav>
 
         {/* Footer */}
