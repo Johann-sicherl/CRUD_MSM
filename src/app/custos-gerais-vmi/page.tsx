@@ -17,6 +17,7 @@ interface PhysicalRow {
   id: string
   table: string
   code: string
+  name: string | null
   cost: number | null
 }
 
@@ -25,10 +26,11 @@ interface PhysicalRow {
 // same code always carries the same standard cost catalog-wide.
 interface CostRow {
   code: string
+  name: string | null
   cost: number | null
 }
 
-type ColumnKey = 'code' | 'cost'
+type ColumnKey = 'code' | 'name' | 'cost'
 
 const SOURCES: { table: string; codeField: string; label: string }[] = [
   { table: 'standard_equipment_items', codeField: 'protheus_code',      label: 'Cadastro de Equipamentos' },
@@ -38,6 +40,7 @@ const SOURCES: { table: string; codeField: string; label: string }[] = [
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'code',   label: 'Código Protheus' },
+  { key: 'name',   label: 'Nome' },
   { key: 'cost',   label: 'Custo (R$)' },
 ]
 
@@ -87,20 +90,39 @@ export default function CustosGeraisVmiPage() {
     setLoading(true)
     setError('')
     try {
-      const [responses, localCostResponses] = await Promise.all([
+      const [responses, localCostResponses, equipmentsRes] = await Promise.all([
         Promise.all(SOURCES.map(s => fetch(`/api/${s.table}?limit=25000`))),
         Promise.all(SOURCES.map(s => fetch(`/api/local-costs?table=${s.table}`))),
+        // Só pra resolver o nome do equipamento (standard_equipment_items não
+        // tem nome próprio, só liga em Grupo de Equipamentos).
+        fetch('/api/equipments?limit=25000'),
       ])
-      if (responses.some(r => !r.ok)) {
+      if (responses.some(r => !r.ok) || !equipmentsRes.ok) {
         setError('Erro ao carregar dados')
         setLoading(false)
         return
       }
       const jsons = await Promise.all(responses.map(r => r.json()))
+      const equipmentsJson = await equipmentsRes.json()
       // local-costs nunca deve derrubar a tela — se falhar, esse source vira
       // {} e as linhas dele ficam N/A até o arquivo local existir/recarregar.
       const localCostJsons: Record<string, { values: Record<string, number | null> }>[] =
         await Promise.all(localCostResponses.map(r => r.ok ? r.json() : {}))
+
+      // Nome por Código Protheus (accessories.name) — cobre as linhas de
+      // Cadastro de Componentes diretamente e, via protheus_item_code, as de
+      // Produtos Dependentes (o código dependente é sempre um acessório).
+      const accessoriesIdx = SOURCES.findIndex(s => s.table === 'accessories')
+      const accessoryNameByCode = new Map<string, string>(
+        ((jsons[accessoriesIdx]?.data || []) as Record<string, unknown>[])
+          .map(r => [String(r.protheus_code ?? ''), String(r.name ?? '')])
+      )
+      // Nome do equipamento por ID legado — usado pelas linhas de Cadastro
+      // de Equipamentos (standard_equipment_items.legacy_equipment_id).
+      const equipmentNameByLegacyId = new Map<string, string>(
+        ((equipmentsJson.data || []) as Record<string, unknown>[])
+          .map(r => [String(r.legacy_id ?? ''), String(r.name ?? '')])
+      )
 
       const physical: PhysicalRow[] = jsons.flatMap((json, i) => {
         const src = SOURCES[i]
@@ -110,10 +132,15 @@ export default function CustosGeraisVmiPage() {
         return data.map(row => {
           const key = getRowKey(schema, row)
           const real = localCosts[key]?.values?.cost_std
+          const code = String(row[src.codeField] ?? '')
+          const name = src.table === 'standard_equipment_items'
+            ? equipmentNameByLegacyId.get(String(row.legacy_equipment_id ?? '')) ?? null
+            : accessoryNameByCode.get(code) ?? null
           return {
             id: String(row.id ?? ''),
             table: src.table,
-            code: String(row[src.codeField] ?? ''),
+            code,
+            name: name || null,
             // cost_std no Supabase é sempre 1 (sigilo) — o valor real só
             // existe no arquivo local; null = nunca foi capturado ainda.
             cost: typeof real === 'number' ? real : null,
@@ -126,12 +153,14 @@ export default function CustosGeraisVmiPage() {
       // custo padrão em todo o catálogo, mesmo aparecendo em tabelas diferentes
       // — a grade mostra um único item consolidado por código; o update
       // atinge todos os registros físicos com esse código. Se o mesmo código
-      // tiver custo real capturado numa tabela mas não em outra, prefere o
-      // valor real (evita mostrar N/A quando o dado já existe em algum lugar).
+      // tiver custo real (ou nome) capturado numa tabela mas não em outra,
+      // prefere o valor presente (evita mostrar N/A quando o dado já existe
+      // em algum lugar).
       const distinct = new Map<string, CostRow>()
       for (const p of physical) {
         const existing = distinct.get(p.code)
-        if (!existing) { distinct.set(p.code, { code: p.code, cost: p.cost }); continue }
+        if (!existing) { distinct.set(p.code, { code: p.code, name: p.name, cost: p.cost }); continue }
+        if (!existing.name && p.name) existing.name = p.name
         if (existing.cost === null && p.cost !== null) existing.cost = p.cost
       }
       setRows(Array.from(distinct.values()))
@@ -341,6 +370,7 @@ export default function CustosGeraisVmiPage() {
                           />
                         </td>
                         <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap font-mono min-w-[150px]">{row.code}</td>
+                        <td className="px-4 py-3 text-on-surface-variant min-w-[200px]">{row.name ?? 'N/A'}</td>
                         <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap min-w-[150px]">{formatCost(row.cost)}</td>
                       </tr>
                     )
