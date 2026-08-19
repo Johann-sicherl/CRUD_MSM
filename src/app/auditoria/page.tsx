@@ -71,8 +71,8 @@ function buildSqlText(rows: AuditRow[]): string {
   return rows.map(r => r.sql_query).join('\n')
 }
 
-function downloadSql(rows: AuditRow[], filename: string) {
-  const blob = new Blob([buildSqlText(rows)], { type: 'application/sql' })
+function triggerDownload(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -81,6 +81,38 @@ function downloadSql(rows: AuditRow[], filename: string) {
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+function downloadSql(rows: AuditRow[], filename: string) {
+  triggerDownload(buildSqlText(rows), filename, 'application/sql')
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+// ANO+MÊS+DIA+HORA+MINUTO (sem separadores) — não é o formato brasileiro de
+// data, mas é o único que ordena certo por nome de arquivo no Windows: como
+// o dígito mais significativo vem primeiro (ano, depois mês, depois dia...),
+// a ordem alfabética do nome sempre bate com a ordem cronológica real,
+// mesmo comparando arquivos de meses/anos diferentes.
+function buildExportFilename(date: Date, operation: AuditRow['operation'], tableName: string, count: number, userName: string): string {
+  const stamp = `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}${pad2(date.getHours())}${pad2(date.getMinutes())}`
+  const userSlug = userName.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]/g, '')
+  return `${stamp}-${operation.toUpperCase()}-${tableName.toUpperCase()}-${count}Q-${userSlug}.txt`
+}
+
+// Um .txt por combinação (tabela, ação) presente nas linhas visíveis agora
+// (já filtradas por tabela/status escolhidos e pelo que o perfil pode ver) —
+// cada arquivo só com as queries daquele par, no mesmo texto puro que "Copiar
+// todas" já usa.
+function groupRowsForExport(rows: AuditRow[]): Map<string, AuditRow[]> {
+  const groups = new Map<string, AuditRow[]>()
+  for (const row of rows) {
+    const key = `${row.table_name}::${row.operation}`
+    const list = groups.get(key)
+    if (list) list.push(row)
+    else groups.set(key, [row])
+  }
+  return groups
 }
 
 export default function AuditoriaPage() {
@@ -195,6 +227,20 @@ export default function AuditoriaPage() {
     navigator.clipboard.writeText(buildSqlText(visibleRows)).then(() => showToast(`${visibleRows.length} quer${visibleRows.length !== 1 ? 'ies' : 'y'} copiada${visibleRows.length !== 1 ? 's' : ''}`))
   }
 
+  // Um .txt por (tabela, ação) das linhas visíveis agora — todos com o
+  // mesmo instante de exportação no nome, cada um baixado separadamente
+  // (o navegador manda pra pasta padrão de Downloads).
+  const handleExportTxtByTableAction = () => {
+    if (visibleRows.length === 0) return
+    const groups = groupRowsForExport(visibleRows)
+    const now = new Date()
+    for (const groupRows of groups.values()) {
+      const filename = buildExportFilename(now, groupRows[0].operation, groupRows[0].table_name, groupRows.length, appUser.name)
+      triggerDownload(buildSqlText(groupRows), filename, 'text/plain')
+    }
+    showToast(`${groups.size} arquivo${groups.size !== 1 ? 's' : ''} .txt exportado${groups.size !== 1 ? 's' : ''}`)
+  }
+
   return (
     <div className="p-8 flex flex-col gap-4">
       <div className="sticky top-9 z-20 bg-background pt-2 -mt-2">
@@ -235,6 +281,14 @@ export default function AuditoriaPage() {
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             >
               ⧉ Copiar todas ({visibleRows.length})
+            </button>
+            <button
+              onClick={handleExportTxtByTableAction}
+              disabled={visibleRows.length === 0}
+              title="Um arquivo .txt por tabela + ação, com as queries daquele grupo"
+              className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ↓ Exportar TXTs por tabela/ação
             </button>
             {selectedIds.size > 0 && (
               <>
