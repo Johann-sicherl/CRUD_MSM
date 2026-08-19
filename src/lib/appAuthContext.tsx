@@ -51,15 +51,20 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
   const [checked, setChecked]   = useState(false)
   const [error, setError]       = useState('')
 
+  const loadProfiles = useCallback(async (): Promise<UserProfile[]> => {
+    const all = await fetchAllProfiles()
+    setProfiles(all)
+    return all
+  }, [])
+
   // sessionStorage (não localStorage): sobrevive a um F5, mas pede login de
   // novo se fechar a aba/navegador — evita ficar logado pra sempre num PC
   // compartilhado, sem exigir logar toda hora que atualiza a página.
   useEffect(() => {
     let cancelled = false
-    fetchAllProfiles()
+    loadProfiles()
       .then(all => {
         if (cancelled) return
-        setProfiles(all)
         const storedId = sessionStorage.getItem(STORAGE_KEY)
         const found = storedId ? all.find(p => p.id === storedId) : undefined
         if (found) setUser(toAppUser(found))
@@ -68,18 +73,28 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
       .catch(() => { if (!cancelled) setError('Não foi possível carregar os perfis de usuário') })
       .finally(() => { if (!cancelled) setChecked(true) })
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const login = (id: string) => {
-    const entry = profiles.find(p => p.id === id)
-    if (!entry) return
-    setUser(toAppUser(entry))
-    sessionStorage.setItem(STORAGE_KEY, id)
+  // Busca os perfis do zero na hora de logar — nunca confia na lista já
+  // carregada na tela de login, que pode estar desatualizada se um admin
+  // mudou módulos/permissões depois que essa aba abriu (ex.: editou na
+  // Configuração de Usuários e, na mesma aba, trocou de perfil sem dar F5).
+  const login = async (id: string) => {
+    try {
+      const all = await loadProfiles()
+      const found = all.find(p => p.id === id)
+      if (!found) return
+      setUser(toAppUser(found))
+      sessionStorage.setItem(STORAGE_KEY, id)
+    } catch { setError('Não foi possível entrar — tente novamente') }
   }
 
   const logout = () => {
     setUser(null)
     sessionStorage.removeItem(STORAGE_KEY)
+    // Deixa a lista de nomes pronta e atualizada pra próxima tela de login.
+    loadProfiles().catch(() => {})
   }
 
   // Recarrega as permissões do perfil atual do servidor — usado depois que
