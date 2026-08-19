@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { tables } from '@/lib/schema'
+import { useAppAuth } from '@/lib/appAuthContext'
 
 interface AuditRow {
   id: string
@@ -55,6 +56,7 @@ function downloadSql(rows: AuditRow[], filename: string) {
 }
 
 export default function AuditoriaPage() {
+  const { user: appUser } = useAppAuth()
   const [rows, setRows] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -89,12 +91,23 @@ export default function AuditoriaPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // Perfil sem acesso total: só enxerga (no filtro e nas linhas) as tabelas
+  // que também aparecem pra ele na Sidebar — pro Gerente Adm Comercial isso
+  // já é exatamente as tabelas de controladoria/custo/precificação, mas a
+  // regra em si é genérica (segue Configuração de Usuários).
   const auditedTables = useMemo(
-    () => Object.entries(tables).filter(([, s]) => s.auditQueries),
-    [],
+    () => Object.entries(tables).filter(([key, s]) =>
+      s.auditQueries && (appUser.isAdmin || appUser.visibleModules.includes(key))
+    ),
+    [appUser],
   )
 
-  const selectedRows = rows.filter(r => selectedIds.has(r.id))
+  const visibleRows = useMemo(
+    () => appUser.isAdmin ? rows : rows.filter(r => appUser.visibleModules.includes(r.table_name)),
+    [rows, appUser],
+  )
+
+  const selectedRows = visibleRows.filter(r => selectedIds.has(r.id))
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -143,8 +156,8 @@ export default function AuditoriaPage() {
   }
 
   const handleCopyAll = () => {
-    if (rows.length === 0) return
-    navigator.clipboard.writeText(buildSqlText(rows)).then(() => showToast(`${rows.length} quer${rows.length !== 1 ? 'ies' : 'y'} copiada${rows.length !== 1 ? 's' : ''}`))
+    if (visibleRows.length === 0) return
+    navigator.clipboard.writeText(buildSqlText(visibleRows)).then(() => showToast(`${visibleRows.length} quer${visibleRows.length !== 1 ? 'ies' : 'y'} copiada${visibleRows.length !== 1 ? 's' : ''}`))
   }
 
   return (
@@ -183,10 +196,10 @@ export default function AuditoriaPage() {
             </select>
             <button
               onClick={handleCopyAll}
-              disabled={rows.length === 0}
+              disabled={visibleRows.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              ⧉ Copiar todas ({rows.length})
+              ⧉ Copiar todas ({visibleRows.length})
             </button>
             {selectedIds.size > 0 && (
               <>
@@ -228,8 +241,8 @@ export default function AuditoriaPage() {
                   <input
                     type="checkbox"
                     className="accent-primary"
-                    checked={rows.length > 0 && rows.every(r => selectedIds.has(r.id))}
-                    onChange={e => setSelectedIds(e.target.checked ? new Set(rows.map(r => r.id)) : new Set())}
+                    checked={visibleRows.length > 0 && visibleRows.every(r => selectedIds.has(r.id))}
+                    onChange={e => setSelectedIds(e.target.checked ? new Set(visibleRows.map(r => r.id)) : new Set())}
                   />
                 </th>
                 <th className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono">Tabela</th>
@@ -241,10 +254,10 @@ export default function AuditoriaPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
-              {rows.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-12 text-center text-outline text-sm">Nenhuma query pendente</td></tr>
               ) : (
-                rows.map(row => (
+                visibleRows.map(row => (
                   <Fragment key={row.id}>
                     <tr className="hover:bg-surface-container-high transition-colors">
                       <td className="px-3 py-3">
