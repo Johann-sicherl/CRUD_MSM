@@ -215,29 +215,6 @@ export default function AtualizadorGlobalPage() {
   // null = pop-up fechado. Array vazio é um resultado válido (comparação
   // rodou e não achou nada) — o pop-up ainda abre nesse caso, sem alertas.
   const [compareAlerts, setCompareAlerts] = useState<CompareAlert[] | null>(null)
-  // Migração única: parts_provision_rate acabou de entrar em
-  // FORCE_TO_ONE_FIELDS — ver /api/admin/migrate-parts-provision-rate.
-  const [migratingPPR, setMigratingPPR] = useState(false)
-  const [migratePPRResult, setMigratePPRResult] = useState<string | null>(null)
-
-  const handleMigratePartsProvisionRate = async () => {
-    setMigratingPPR(true)
-    setMigratePPRResult(null)
-    try {
-      const res = await fetch('/api/admin/migrate-parts-provision-rate', { method: 'POST' })
-      const json = await res.json()
-      if (!res.ok) { setMigratePPRResult(`Erro: ${json.error || 'falha desconhecida'}`); return }
-      setMigratePPRResult(
-        json.migrated === 0
-          ? 'Nada para migrar — todos os registros já foram migrados antes.'
-          : `${json.migrated} de ${json.total} registro(s) migrado(s) — valor real preservado no arquivo local, Supabase gravado como 1.`
-      )
-    } catch {
-      setMigratePPRResult('Erro: falha de rede')
-    } finally {
-      setMigratingPPR(false)
-    }
-  }
 
   const handleFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
@@ -377,25 +354,6 @@ export default function AtualizadorGlobalPage() {
           registros atuais apagados e substituídos pelo conteúdo do respectivo arquivo. Colunas
           financeiras ({FORCE_TO_ONE_FIELDS.join(', ')}) são sempre gravadas como 1.
         </p>
-      </div>
-
-      <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-        <div className="text-sm text-on-surface-variant">
-          <strong className="text-on-surface">Manutenção única</strong> — Prov. Peças (%) (Grupo de Equipamentos)
-          passou a ser uma coluna financeira protegida. Rode isto uma vez para levar os valores reais que já
-          estavam no Supabase para o arquivo local, antes de a coluna virar 1 lá. Rodar de novo não tem efeito
-          (idempotente).
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <button
-            onClick={handleMigratePartsProvisionRate}
-            disabled={migratingPPR}
-            className="px-4 py-2 bg-amber-500 text-black rounded text-sm font-semibold disabled:opacity-50 hover:bg-amber-400 transition-colors whitespace-nowrap"
-          >
-            {migratingPPR ? 'Migrando…' : 'Migrar Prov. Peças (%) agora'}
-          </button>
-          {migratePPRResult && <span className="text-xs text-outline">{migratePPRResult}</span>}
-        </div>
       </div>
 
       <div className="mb-6">
