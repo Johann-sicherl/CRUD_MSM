@@ -214,7 +214,12 @@ export default function DataTable({ tableName, schema }: Props) {
   const pinnedListFields = useMemo(() => visibleListFields.filter(f => f.countDuplicatesOf), [visibleListFields])
   const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
-  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null) }, [tableName])
+  // 'completo' = todos os registros (padrão); 'novos' = só os criados depois
+  // do último import no Atualizador Global (mesmo critério do destaque
+  // amarelo) — afeta a lista, a contagem no rodapé e o "Exportar dados".
+  const [viewMode, setViewMode] = useState<'completo' | 'novos'>('completo')
+
+  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setViewMode('completo') }, [tableName])
 
   useEffect(() => {
     let cancelled = false
@@ -387,12 +392,27 @@ export default function DataTable({ tableName, schema }: Props) {
     return groupRowsByKey(schema, pageData.data).ambiguousKeys
   }, [pageData, schema])
 
-  // Rows that pass ALL active column filters
+  // Mesmo critério do destaque amarelo (linha nova / campo alterado desde o
+  // último import), num só lugar — usado tanto pra pintar a linha/célula
+  // quanto pra filtrar em "Somente Novos".
+  const getBaselineInfo = useCallback((row: Record<string, unknown>) => {
+    const key = getRowKey(schema, row)
+    const keyIsAmbiguous = !!baseline?.ambiguousKeys.has(key) || liveDuplicateKeys.has(key)
+    const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(key)
+    const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
+    return { isNewRow, baselineRow }
+  }, [baseline, liveDuplicateKeys, schema])
+
+  // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
     if (!pageData) return []
-    const rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps, localCosts, schema)
-    return applyListSortBy(rows, schema.listSortBy, listFields, lookups)
-  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts])
+    let rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps, localCosts, schema)
+    rows = applyListSortBy(rows, schema.listSortBy, listFields, lookups)
+    if (viewMode === 'novos' && baseline !== null) {
+      rows = rows.filter(row => getBaselineInfo(row).isNewRow)
+    }
+    return rows
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, viewMode, baseline, getBaselineInfo])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible
@@ -563,6 +583,26 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const actionButtons = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
+      {/* Completo/Somente Novos só faz sentido com um retrato de import pra
+          comparar — some junto com o destaque amarelo quando não há um. */}
+      {baseline !== null && (
+        <div className="flex items-center rounded border border-outline-variant overflow-hidden text-xs font-medium shrink-0">
+          <button
+            onClick={() => setViewMode('completo')}
+            title="Mostrar todos os registros"
+            className={`px-3 py-2 transition-colors ${viewMode === 'completo' ? 'bg-primary/15 text-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+          >
+            Completo
+          </button>
+          <button
+            onClick={() => setViewMode('novos')}
+            title="Mostrar só os registros criados depois do último import no Atualizador Global"
+            className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'novos' ? 'bg-amber-500/15 text-amber-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+          >
+            Somente Novos
+          </button>
+        </div>
+      )}
       {schema.protheusStatusCheckField && (
         protheusStatusMap ? (
           <button
@@ -832,16 +872,10 @@ export default function DataTable({ tableName, schema }: Props) {
                     filteredRows.map((row, i) => {
                       const rowId = String(row.id)
                       const isSelected = selectedIds.has(rowId)
-                      const rowKey = getRowKey(schema, row)
-                      // Chave repetida (no retrato ou no banco ao vivo) — não dá
-                      // pra saber com segurança a qual linha comparar, então essa
-                      // linha fica sem veredito (nem nova, nem alterada).
-                      const keyIsAmbiguous = !!baseline?.ambiguousKeys.has(rowKey) || liveDuplicateKeys.has(rowKey)
-                      const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(rowKey)
                       // Linha criada depois do último import CSV (não existia no
                       // retrato) — destaque na linha inteira. Só faz sentido
                       // quando a tabela já tem baseline (baseline !== null).
-                      const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
+                      const { isNewRow, baselineRow } = getBaselineInfo(row)
                       return (
                       <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : ''}`}>
                         <td className="px-3 py-3 w-8">
