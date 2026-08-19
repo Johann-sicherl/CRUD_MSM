@@ -165,46 +165,50 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
             >
               <span className="truncate">Desenvolvedor de Queries</span>
             </Link>
-            <Link
-              href="/clonagem-estrutural-avancada"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/clonagem-estrutural-avancada'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Clonagem Estrut. Avançada</span>
-            </Link>
-            <Link
-              href="/analisador-estruturas"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/analisador-estruturas'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Busc. Itens Série Estrut.</span>
-            </Link>
-            <Link
-              href="/busca-avancada-acessorios"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/busca-avancada-acessorios'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Busc. Avançada Acessórios</span>
-            </Link>
-            <Link
-              href="/depurador-solic-comercial"
-              className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                pathname === '/depurador-solic-comercial'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="truncate">Depurador Solic. Comercial</span>
-            </Link>
+            {!isGerenteAdm && (
+              <>
+                <Link
+                  href="/clonagem-estrutural-avancada"
+                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    pathname === '/clonagem-estrutural-avancada'
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  }`}
+                >
+                  <span className="truncate">Clonagem Estrut. Avançada</span>
+                </Link>
+                <Link
+                  href="/analisador-estruturas"
+                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    pathname === '/analisador-estruturas'
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  }`}
+                >
+                  <span className="truncate">Busc. Itens Série Estrut.</span>
+                </Link>
+                <Link
+                  href="/busca-avancada-acessorios"
+                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    pathname === '/busca-avancada-acessorios'
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  }`}
+                >
+                  <span className="truncate">Busc. Avançada Acessórios</span>
+                </Link>
+                <Link
+                  href="/depurador-solic-comercial"
+                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    pathname === '/depurador-solic-comercial'
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  }`}
+                >
+                  <span className="truncate">Depurador Solic. Comercial</span>
+                </Link>
+              </>
+            )}
           </div>
 
           <div className="mt-5">
