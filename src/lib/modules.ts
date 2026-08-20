@@ -20,6 +20,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'dashboard',            label: 'Dashboard',                          href: '/',                     group: 'Geral' },
   { key: 'explorador-relacoes',  label: 'Janela de Pesquisa Avançada',        href: '/explorador-relacoes',  group: 'Geral' },
   { key: 'atualizador-global',   label: 'Atualizador Global de Tabelas MSM',  href: '/atualizador-global',   group: 'Geral' },
+  { key: 'importar-custos-locais', label: 'Importador de Custos Locais',      href: '/importar-custos-locais', group: 'Geral' },
 
   ...CATALOGO_TABLES.map(([key, s]) => ({ key, label: s.label, href: `/${key}`, group: DOMAIN_LABELS.catalogo })),
   { key: 'custos-gerais-vmi',    label: 'Custos Gerais VMI',                  href: '/custos-gerais-vmi',    group: DOMAIN_LABELS.catalogo },

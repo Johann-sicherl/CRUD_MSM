@@ -20,12 +20,13 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
   const { user: appUser, logout: appLogout } = useAppAuth()
 
-  // Módulos visíveis vêm do perfil (ver Configuração de Usuários) — admin
-  // enxerga tudo (visibleModules já vem com todas as chaves nesse caso).
+  // Módulos visíveis vêm do perfil (ver Configuração de Usuários). Admin
+  // ignora a lista — visibleModules é só um snapshot gravado na criação do
+  // perfil e não é recalculado quando um módulo novo é adicionado ao app.
   const visible = new Set(appUser.visibleModules)
   const byGroup = MODULE_GROUPS.map(group => ({
     group,
-    items: MODULES.filter(m => m.group === group && visible.has(m.key)),
+    items: MODULES.filter(m => m.group === group && (appUser.isAdmin || visible.has(m.key))),
   })).filter(g => g.items.length > 0)
 
   return (
