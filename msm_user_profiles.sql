@@ -8,17 +8,17 @@
 -- qualquer máquina que rode o app, em vez de preso ao disco de uma
 -- instalação só.
 --
--- password_hash NUNCA guarda a senha em texto puro — é gerada pelo
--- próprio app (scrypt com salt por usuário, Node "crypto" nativo, sem
--- lib externa) antes de qualquer INSERT/UPDATE aqui. Ninguém — nem
--- quem tem acesso direto ao banco — lê a senha de volta a partir do
--- hash.
+-- `password` guarda a senha em TEXTO PURO — pedido explícito de quem
+-- mantém o app, ciente de que isso não é a prática recomendada (o
+-- ideal seria um hash, ver histórico da conversa). RLS abaixo é a
+-- única proteção real: só o backend (service_role) consegue ler essa
+-- coluna, nunca o navegador.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS user_profiles (
   id                        TEXT PRIMARY KEY,
   name                      TEXT NOT NULL UNIQUE,
-  password_hash             TEXT NOT NULL,
+  password                  TEXT NOT NULL,
   is_admin                  BOOLEAN NOT NULL DEFAULT FALSE,
   can_create_delete         BOOLEAN NOT NULL DEFAULT FALSE,
   visible_modules           JSONB NOT NULL DEFAULT '[]',
@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Se a tabela já existia com a coluna antiga password_hash (versão anterior,
+-- com hash), rode esta linha uma vez para renomear sem perder as linhas já
+-- gravadas — depois é só atualizar o valor de cada uma pra senha em texto
+-- puro (UPDATE user_profiles SET password = '...' WHERE id = '...').
+ALTER TABLE user_profiles RENAME COLUMN password_hash TO password;
 
 -- Mesma estratégia de segurança das demais tabelas (ver msm_seguranca.sql):
 -- RLS ativo + zero políticas = acesso NEGADO via anon/authenticated key. Só
@@ -38,6 +44,6 @@ GRANT ALL ON user_profiles TO service_role;
 -- Não insere nenhuma linha aqui de propósito — na primeira vez que o app
 -- ler esta tabela vazia, ele mesmo semeia os perfis (Engenharia do Produto
 -- e Gerente Adm Comercial, com senha provisória "1234" nos dois — troque
--- assim que entrar, em Configuração de Usuários) já com o hash calculado
--- em JS, e reaproveita as configurações do local-data/user-profiles.json
--- se esse arquivo ainda existir na máquina onde rodar pela primeira vez.
+-- assim que entrar, em Configuração de Usuários), reaproveitando as
+-- configurações do local-data/user-profiles.json se esse arquivo ainda
+-- existir na máquina onde rodar pela primeira vez.

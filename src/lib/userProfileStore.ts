@@ -3,13 +3,13 @@ import path from 'path'
 import { supabaseAdmin } from './supabase'
 import { tables, FORCE_TO_ONE_FIELDS } from './schema'
 import { ALL_MODULE_KEYS } from './modules'
-import { hashPassword, verifyPassword } from './passwordHash'
 
 // Perfis de usuário do app (quem loga, com que senha, quem vê/edita o quê) —
 // ficam na tabela user_profiles do Supabase (ver msm_user_profiles.sql), não
 // mais num arquivo local: assim qualquer máquina que rode o app enxerga os
-// mesmos usuários e permissões. Senha nunca trafega nem é lida de volta em
-// texto puro — só o hash (ver passwordHash.ts) fica gravado.
+// mesmos usuários e permissões. A senha fica em texto puro na coluna
+// `password` — pedido explícito, sem hash (ver conversa no app: usuário
+// pediu senha simples em vez de hash, ciente do risco).
 
 const LEGACY_STORE_PATH = path.join(process.cwd(), 'local-data', 'user-profiles.json')
 
@@ -25,7 +25,7 @@ export interface UserProfile {
 interface ProfileRow {
   id: string
   name: string
-  password_hash: string
+  password: string
   is_admin: boolean
   can_create_delete: boolean
   visible_modules: string[]
@@ -48,7 +48,7 @@ function fromRow(row: ProfileRow): UserProfile {
 // controladoria/preço/fiscal que já tinha liberado.
 const CONTROLLERSHIP_TABLES = ['equipments', 'standard_equipment_items', 'accessories', 'dependant_items']
 
-function hardcodedDefaults(): Omit<ProfileRow, 'password_hash'>[] {
+function hardcodedDefaults(): Omit<ProfileRow, 'password'>[] {
   return [
     {
       id: 'engenharia-do-produto',
@@ -84,7 +84,7 @@ function hardcodedDefaults(): Omit<ProfileRow, 'password_hash'>[] {
 // reaproveita os módulos/campos já configurados nele em vez de perder esse
 // ajuste — só falta senha, que nunca existiu ali, então entra "1234" nos
 // dois casos. Sem o arquivo, cai nos padrões de sempre.
-function seedSource(): Omit<ProfileRow, 'password_hash'>[] {
+function seedSource(): Omit<ProfileRow, 'password'>[] {
   try {
     const raw = fs.readFileSync(LEGACY_STORE_PATH, 'utf-8')
     const legacy = JSON.parse(raw) as UserProfile[]
@@ -103,8 +103,7 @@ function seedSource(): Omit<ProfileRow, 'password_hash'>[] {
 }
 
 async function seedDefaultProfiles(): Promise<ProfileRow[]> {
-  const defaultHash = hashPassword('1234')
-  const seed = seedSource().map(p => ({ ...p, password_hash: defaultHash }))
+  const seed = seedSource().map(p => ({ ...p, password: '1234' }))
   const { data, error } = await supabaseAdmin.from('user_profiles').insert(seed).select()
   if (error) throw new Error(error.message)
   return data as ProfileRow[]
@@ -139,7 +138,7 @@ export async function createProfile(name: string, password: string): Promise<Use
   const row = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: trimmed,
-    password_hash: hashPassword(password),
+    password,
     is_admin: false,
     can_create_delete: false,
     visible_modules: ['dashboard'],
@@ -172,7 +171,7 @@ export async function updateProfile(
   if (patch.editableFieldsByTable !== undefined) dbPatch.editable_fields_by_table = patch.editableFieldsByTable
   if (patch.password) {
     if (patch.password.length < 4) throw new Error('Senha deve ter pelo menos 4 caracteres')
-    dbPatch.password_hash = hashPassword(patch.password)
+    dbPatch.password = patch.password
   }
 
   // Nunca deixa a última conta admin virar não-admin — ninguém mais
@@ -208,6 +207,6 @@ export async function verifyLogin(id: string, password: string): Promise<UserPro
   const { data, error } = await supabaseAdmin.from('user_profiles').select('*').eq('id', id).maybeSingle()
   if (error || !data) return null
   const row = data as ProfileRow
-  if (!verifyPassword(password, row.password_hash)) return null
+  if (row.password !== password) return null
   return fromRow(row)
 }

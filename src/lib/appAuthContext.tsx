@@ -7,10 +7,10 @@ import type { UserProfile } from './userProfileStore'
 // pede credenciais do SQL Server do Protheus, é opcional/dispensável e não
 // bloqueia nada). Aqui, nada do app (Sidebar, telas, dados do Supabase) é
 // renderizado até logar — por construção, não tem "fundo" pra vazar atrás da
-// tela de login. Cada perfil tem senha própria, guardada como hash na tabela
-// user_profiles do Supabase (ver src/lib/userProfileStore.ts e
-// src/lib/passwordHash.ts) — a senha em si só passa pela rota
-// /api/user-profiles/login, nunca fica em memória além do formulário.
+// tela de login. Cada perfil tem senha própria, guardada em texto puro na
+// tabela user_profiles do Supabase (ver src/lib/userProfileStore.ts) — a
+// senha só passa pela rota /api/user-profiles/login, nunca fica em memória
+// além do formulário.
 // `import type` acima é apagado na compilação — não puxa 'fs' pro bundle do
 // cliente, só o formato do objeto.
 
