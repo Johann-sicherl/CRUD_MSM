@@ -44,14 +44,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   // realmente mudou em relação ao que já estava salvo (beforeRow), pra
   // reabrir/salvar o formulário sem tocar no custo não sobrescrever com 1 o
   // valor real já guardado localmente.
-  protectLocalCostsOnUpdate(table, schema, updateBody, body, beforeRow)
+  const realCostFieldsChanged = protectLocalCostsOnUpdate(table, schema, updateBody, body, beforeRow)
 
   const { data, error } = await supabaseAdmin.from(table).update(updateBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   if (schema.auditQueries) {
     try {
-      await recordUpdateAudit(supabaseAdmin, table, schema, beforeRow, updateBody)
+      await recordUpdateAudit(supabaseAdmin, table, schema, beforeRow, updateBody, realCostFieldsChanged)
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 

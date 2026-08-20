@@ -187,6 +187,15 @@ export async function recordUpdateAudit(
   schema: TableSchema,
   beforeRow: Record<string, unknown> | null,
   updateBody: Record<string, unknown>,
+  // Campos financeiros (FORCE_TO_ONE_FIELDS) que o caller já confirmou terem
+  // um valor real novo (ver protectLocalCostsOnUpdate) — o Supabase nunca
+  // muda de fato pra esses (fica sempre 1), então o diff abaixo nunca os
+  // veria sozinho; force a entrar em `changed` mesmo assim, senão uma
+  // edição só de custo não gera pendência nenhuma na Auditoria. O valor
+  // aqui é sempre 1 (o que o Supabase realmente tem) — nunca o valor real,
+  // que fica só no arquivo local; ver Auditoria de Queries pra onde o valor
+  // real entra na hora de exportar.
+  forceIncludeFields: string[] = [],
 ): Promise<void> {
   const keyFields = getAuditKeyFields(schema)
   const keyRow = beforeRow ?? updateBody
@@ -208,6 +217,9 @@ export async function recordUpdateAudit(
   const hasStoredBaseline = existing?.operation === 'update' && existing.baseline && Object.keys(existing.baseline).length > 0
   const baseline = hasStoredBaseline ? existing!.baseline! : (beforeRow ?? {})
   const changed = diffChangedFields(baseline, updateBody)
+  for (const name of forceIncludeFields) {
+    if (!(name in changed) && name in updateBody) changed[name] = updateBody[name]
+  }
 
   if (Object.keys(changed).length === 0) {
     if (existing) await admin.from('audit_log').delete().eq('id', existing.id)

@@ -1,10 +1,12 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { tables } from '@/lib/schema'
-import { diffChangedFields } from '@/lib/sqlAudit'
+import { tables, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { diffChangedFields, buildInsertSQL, sqlLiteral } from '@/lib/sqlAudit'
 import { useAppAuth } from '@/lib/appAuthContext'
 import type { UserProfile } from '@/lib/userProfileStore'
+
+type LocalCostsStore = Record<string, Record<string, { values: Record<string, number | null> }>>
 
 interface AuditRow {
   id: string
@@ -126,6 +128,52 @@ function groupRowsForExport(rows: AuditRow[]): Map<string, AuditRow[]> {
     else groups.set(key, [row])
   }
   return groups
+}
+
+async function fetchLocalCostsStore(): Promise<LocalCostsStore> {
+  const res = await fetch('/api/local-costs')
+  if (!res.ok) return {}
+  return res.json()
+}
+
+// O Supabase nunca tem o valor real de um campo financeiro (fica sempre 1,
+// por sigilo — ver FORCE_TO_ONE_FIELDS) — então o sql_query já gravado no
+// audit_log também só tem "1" nesses campos. Na hora de exportar o TXT (só
+// na hora de exportar — o que fica em Supabase continua com 1), troca pelo
+// valor real guardado no arquivo local, pra quem for rodar a query no banco
+// oficial receber o custo de verdade.
+function substituteRealCostValues(row: AuditRow, store: LocalCostsStore): string {
+  if (row.operation === 'delete') return row.sql_query
+  const schema = tables[row.table_name]
+  const realValues = store[row.table_name]?.[row.record_key_value]?.values
+  if (!schema || !realValues) return row.sql_query
+
+  if (row.operation === 'insert') {
+    // payload de um insert é a linha inteira — reconstrói a query com os
+    // mesmos campos, só trocando o valor dos financeiros que tiverem real
+    // capturado (os demais continuam vindo do payload, sem mudança).
+    if (!row.payload) return row.sql_query
+    const patched = { ...row.payload }
+    let touched = false
+    for (const name of FORCE_TO_ONE_FIELDS) {
+      if (name in patched && realValues[name] !== undefined) { patched[name] = realValues[name]; touched = true }
+    }
+    return touched ? buildInsertSQL(row.table_name, schema, patched) : row.sql_query
+  }
+
+  // update: só troca o que já apareceu como "campo = 1" na query gravada —
+  // é exatamente o conjunto de campos financeiros que entrou nesse UPDATE
+  // (campo que não mudou nem chega a aparecer na query, então o replace não
+  // acha nada pra ele e não faz nada).
+  let sql = row.sql_query
+  for (const name of FORCE_TO_ONE_FIELDS) {
+    const real = realValues[name]
+    if (real === undefined) continue
+    const field = schema.fields.find(f => f.name === name)
+    if (!field) continue
+    sql = sql.replace(new RegExp(`\\b${name}(\\s*=\\s*)1\\b`), `${name}$1${sqlLiteral(field, real)}`)
+  }
+  return sql
 }
 
 export default function AuditoriaPage() {
@@ -254,14 +302,19 @@ export default function AuditoriaPage() {
 
   // Um .txt por (tabela, ação) do conjunto de linhas dado — todos com o
   // mesmo instante de exportação no nome, cada um baixado separadamente
-  // (o navegador manda pra pasta padrão de Downloads).
-  const runTxtExport = (rowsToExport: AuditRow[]) => {
+  // (o navegador manda pra pasta padrão de Downloads). Os campos
+  // financeiros (sempre "1" na query gravada, por sigilo) entram com o
+  // valor real do arquivo local só aqui, na hora de exportar — nunca no
+  // Supabase, que continua com 1.
+  const runTxtExport = async (rowsToExport: AuditRow[]) => {
     const groups = groupRowsForExport(rowsToExport)
     if (groups.size === 0) { showToast('Nenhuma query pra exportar nesse recorte', true); return }
+    const localCosts = await fetchLocalCostsStore()
     const now = new Date()
     for (const groupRows of groups.values()) {
+      const withRealCosts = groupRows.map(r => ({ ...r, sql_query: substituteRealCostValues(r, localCosts) }))
       const filename = buildExportFilename(now, groupRows[0].operation, groupRows[0].table_name, groupRows.length, appUser.name)
-      triggerDownload(buildSqlText(groupRows), filename, 'text/plain')
+      triggerDownload(buildSqlText(withRealCosts), filename, 'text/plain')
     }
     showToast(`${groups.size} arquivo${groups.size !== 1 ? 's' : ''} .txt exportado${groups.size !== 1 ? 's' : ''}`)
   }

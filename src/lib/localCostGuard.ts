@@ -1,7 +1,7 @@
 import { FORCE_TO_ONE_FIELDS, getRealColumnFields, type TableSchema } from './schema'
 import { isBlankCell, toCellValue } from './globalUpdateConvert'
 import { getRowKey } from './csvBaseline'
-import { updateCostRow } from './localCostStore'
+import { readCostStore, updateCostRow } from './localCostStore'
 
 // Fecha, para os caminhos de escrita registro-a-registro (POST /api/[table]
 // e PUT /api/[table]/[id] — usados por "+ Novo Registro", "Importar Excel",
@@ -43,38 +43,49 @@ export function protectLocalCostsOnInsert(
   }
 }
 
-/** PUT — edição: só trata como "valor real novo" o campo que o cliente
- *  realmente mudou em relação ao que já estava no Supabase (beforeRow) —
- *  sem essa checagem, reabrir o formulário de edição sem tocar no custo
- *  reenviaria o "1" que já está lá e sobrescreveria com 1 o valor real
- *  guardado localmente. Muta `writeBody` in-place forçando 1 em todos os
- *  campos financeiros presentes na edição. */
+/** PUT — edição: só trata como "valor real novo" o campo cujo valor
+ *  enviado difere do que já estava guardado como real no arquivo local —
+ *  NUNCA compara contra o que está no Supabase (beforeRow), que pra estes
+ *  campos é sempre 1 e portanto quase sempre "diferente" do valor real,
+ *  mesmo quando ninguém tocou nesse campo (ex.: RecordModal resubmete o
+ *  valor real pré-preenchido mesmo que o usuário só tenha mudado o nome).
+ *  Comparar contra o valor real anterior evita capturar/sinalizar uma
+ *  "mudança" que não existiu. Muta `writeBody` in-place forçando 1 em
+ *  todos os campos financeiros presentes na edição.
+ *  Devolve os nomes dos campos cujo valor real de fato mudou — o Supabase
+ *  nunca reflete essa mudança (fica sempre 1), então quem chama usa essa
+ *  lista pra registrar a edição na Auditoria de Queries mesmo assim (ver
+ *  recordUpdateAudit/forceIncludeFields), senão uma edição de campo
+ *  financeiro não gera pendência nenhuma lá. */
 export function protectLocalCostsOnUpdate(
   table: string,
   schema: TableSchema,
   writeBody: Record<string, unknown>,
   rawBody: Record<string, unknown>,
   beforeRow: Record<string, unknown> | null,
-): void {
+): string[] {
   const forceFields = getRealColumnFields(schema).filter(f => FORCE_TO_ONE_FIELDS.includes(f.name) && f.name in writeBody)
-  if (forceFields.length === 0) return
+  if (forceFields.length === 0) return []
   try {
     const fullRow = { ...(beforeRow ?? {}), ...writeBody }
     const key = getRowKey(schema, fullRow)
+    const existingRealValues = readCostStore()[table]?.[key]?.values ?? {}
     const values: Record<string, number | null> = {}
     let hasAny = false
     for (const field of forceFields) {
       const raw = rawBody[field.name]
       const newVal = isBlankCell(raw) ? null : toCellValue(field, raw)
-      const prevVal = beforeRow ? beforeRow[field.name] : undefined
-      if (typeof newVal === 'number' && Number(prevVal) !== newVal) {
+      const prevRealVal = existingRealValues[field.name] // undefined = nunca capturado antes
+      if (typeof newVal === 'number' && prevRealVal !== newVal) {
         values[field.name] = newVal
         hasAny = true
       }
       writeBody[field.name] = 1
     }
     if (hasAny) updateCostRow(table, key, values)
+    return Object.keys(values)
   } catch (e) {
     console.error(`[local-costs] falha ao proteger custos reais de "${table}" (update)`, e)
+    return []
   }
 }
