@@ -145,15 +145,41 @@ function LoginScreen({
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Só aparece depois de uma senha errada — autoatendimento pra quem
+  // esqueceu, sem precisar de um admin pra mexer em nada.
+  const [showReset, setShowReset] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetMsg, setResetMsg] = useState('')
+
+  const clearFeedback = () => { setError(''); setShowReset(false); setResetMsg('') }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selected || !password || submitting) return
     setSubmitting(true)
     setError('')
+    setResetMsg('')
     const err = await onLogin(selected, password)
     setSubmitting(false)
-    if (err) setError(err)
+    if (err) { setError(err); setShowReset(true) }
+  }
+
+  const handleReset = async () => {
+    if (!selected || resetting) return
+    if (!window.confirm('Isso apaga a senha atual desse perfil. Na próxima tentativa, a senha que você digitar vira a nova senha dele. Continuar?')) return
+    setResetting(true)
+    try {
+      const res = await fetch(`/api/user-profiles/${selected}/reset-password`, { method: 'POST' })
+      if (!res.ok) { setError('Não foi possível restaurar a senha — tente de novo'); return }
+      setShowReset(false)
+      setError('')
+      setPassword('')
+      setResetMsg('Senha apagada. Digite a nova senha e clique em Entrar — ela vira a senha desse perfil.')
+    } catch {
+      setError('Falha de rede — tente de novo')
+    } finally {
+      setResetting(false)
+    }
   }
 
   return (
@@ -164,14 +190,14 @@ function LoginScreen({
         </div>
         <form className="p-5 flex flex-col gap-3" onSubmit={handleSubmit}>
           <p className="text-sm text-on-surface-variant">
-            Selecione seu perfil e informe a senha para acessar o painel.
+            Selecione seu perfil e informe a senha. Perfil sem senha ainda: a que você digitar agora vira a senha dele.
           </p>
           <label className="text-xs font-semibold text-on-surface-variant">
             Perfil
             <select
               autoFocus
               value={selected}
-              onChange={e => { setSelected(e.target.value); setError('') }}
+              onChange={e => { setSelected(e.target.value); clearFeedback() }}
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
             >
               <option value="">Selecione...</option>
@@ -185,13 +211,24 @@ function LoginScreen({
             <input
               type="password"
               value={password}
-              onChange={e => { setPassword(e.target.value); setError('') }}
+              onChange={e => { setPassword(e.target.value); clearFeedback() }}
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
             />
           </label>
           {(error || loadError) && <p className="text-xs text-error">{error || loadError}</p>}
+          {resetMsg && <p className="text-xs text-primary">{resetMsg}</p>}
           {!loadError && profiles.length === 0 && <p className="text-xs text-outline">Carregando perfis...</p>}
-          <div className="flex items-center justify-end mt-2">
+          <div className="flex items-center justify-between mt-2">
+            {showReset ? (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={resetting}
+                className="text-xs text-error hover:underline disabled:opacity-50"
+              >
+                {resetting ? 'Restaurando...' : 'Restaurar senha'}
+              </button>
+            ) : <span />}
             <button
               type="submit"
               disabled={!selected || !password || submitting}

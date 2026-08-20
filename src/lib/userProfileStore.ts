@@ -102,8 +102,10 @@ function seedSource(): Omit<ProfileRow, 'password'>[] {
   return hardcodedDefaults()
 }
 
+// Sem senha nenhuma no início — cada perfil define a própria senha no
+// primeiro login (ver verifyLogin), em vez de vir com "1234" pra todo mundo.
 async function seedDefaultProfiles(): Promise<ProfileRow[]> {
-  const seed = seedSource().map(p => ({ ...p, password: '1234' }))
+  const seed = seedSource().map(p => ({ ...p, password: '' }))
   const { data, error } = await supabaseAdmin.from('user_profiles').insert(seed).select()
   if (error) throw new Error(error.message)
   return data as ProfileRow[]
@@ -203,10 +205,38 @@ export async function deleteProfile(id: string): Promise<void> {
 // Verifica usuário + senha no login — nunca devolve nada em caso de senha
 // errada ou perfil inexistente (mesma mensagem genérica pros dois casos, pra
 // não dar dica de quais nomes existem via tentativa e erro).
+// Campo `password` vazio no banco = ninguém definiu senha ainda pra esse
+// perfil (recém-criado, ou depois de "Restaurar senha") — a primeira senha
+// que for digitada vira a senha dele a partir de agora (grava na hora e já
+// deixa entrar), em vez de negar o login por não ter nada pra comparar.
 export async function verifyLogin(id: string, password: string): Promise<UserProfile | null> {
   const { data, error } = await supabaseAdmin.from('user_profiles').select('*').eq('id', id).maybeSingle()
   if (error || !data) return null
   const row = data as ProfileRow
+
+  if (row.password === '') {
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('user_profiles')
+      .update({ password, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (updErr) return null
+    return fromRow(updated as ProfileRow)
+  }
+
   if (row.password !== password) return null
   return fromRow(row)
+}
+
+// "Restaurar senha" — apaga a senha atual (volta pro estado "vazio"), pra a
+// próxima tentativa de login desse perfil virar a nova senha (ver
+// verifyLogin acima). Ação de autoatendimento, disparada da própria tela de
+// login depois de uma senha errada — não exige estar logado.
+export async function resetPassword(id: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('user_profiles')
+    .update({ password: '', updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }

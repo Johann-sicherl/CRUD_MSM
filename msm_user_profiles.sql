@@ -43,7 +43,15 @@ GRANT ALL ON user_profiles TO service_role;
 
 -- Não insere nenhuma linha aqui de propósito — na primeira vez que o app
 -- ler esta tabela vazia, ele mesmo semeia os perfis (Engenharia do Produto
--- e Gerente Adm Comercial, com senha provisória "1234" nos dois — troque
--- assim que entrar, em Configuração de Usuários), reaproveitando as
--- configurações do local-data/user-profiles.json se esse arquivo ainda
--- existir na máquina onde rodar pela primeira vez.
+-- e Gerente Adm Comercial) com `password = ''` (SEM senha nenhuma),
+-- reaproveitando as configurações do local-data/user-profiles.json se esse
+-- arquivo ainda existir na máquina onde rodar pela primeira vez.
+--
+-- Perfil com password = '' = ainda não tem senha definida: a primeira senha
+-- que alguém digitar pra ele no login vira a senha dele a partir daí (ver
+-- verifyLogin em src/lib/userProfileStore.ts). "Restaurar senha" (botão na
+-- tela de login, depois de errar) volta a senha pra '' de novo.
+--
+-- Se você já tinha rodado a versão anterior (com senha "1234"/"17052024" já
+-- definida) e quer testar esse fluxo de primeira senha do zero, rode:
+--   UPDATE user_profiles SET password = '';
