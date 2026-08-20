@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 // Salva as alterações feitas na Configuração de Usuários (nome, admin,
-// pode-criar-excluir, módulos visíveis, colunas editáveis por tabela).
+// pode-criar-excluir, módulos visíveis, colunas editáveis por tabela, e
+// opcionalmente uma senha nova — campo em branco no formulário = não muda).
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const body = await request.json()
   const patch: Record<string, unknown> = {}
@@ -22,9 +23,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     patch.editableFieldsByTable = clean
   }
+  if (typeof body?.password === 'string' && body.password.trim()) patch.password = body.password.trim()
 
   try {
-    const profile = updateProfile(params.id, patch)
+    const profile = await updateProfile(params.id, patch)
     return NextResponse.json(profile)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao salvar usuário'
@@ -34,7 +36,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    deleteProfile(params.id)
+    await deleteProfile(params.id)
     return NextResponse.json({ ok: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao excluir usuário'

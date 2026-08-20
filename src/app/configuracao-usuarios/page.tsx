@@ -21,6 +21,10 @@ export default function ConfiguracaoUsuariosPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<UserProfile | null>(null)
   const [newName, setNewName] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  // Campo "Nova senha" do editor — nunca vem preenchido do servidor (a senha
+  // não trafega de volta em nenhuma hipótese), em branco = não altera.
+  const [passwordDraft, setPasswordDraft] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
@@ -53,6 +57,7 @@ export default function ConfiguracaoUsuariosPage() {
     const p = profiles.find(p => p.id === id)
     setSelectedId(id)
     setDraft(p ? { ...p, visibleModules: [...p.visibleModules], editableFieldsByTable: { ...p.editableFieldsByTable } } : null)
+    setPasswordDraft('')
     setError('')
   }
 
@@ -76,15 +81,16 @@ export default function ConfiguracaoUsuariosPage() {
 
   const handleCreate = async () => {
     const name = newName.trim()
-    if (!name) return
+    if (!name || newPassword.length < 4) return
     const res = await fetch('/api/user-profiles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password: newPassword }),
     })
     const json = await res.json()
     if (!res.ok) { showToast(json.error || 'Erro ao criar usuário', true); return }
     setNewName('')
+    setNewPassword('')
     await fetchProfiles(json.id)
     showToast(`Usuário "${name}" criado`)
   }
@@ -100,16 +106,18 @@ export default function ConfiguracaoUsuariosPage() {
 
   const handleSave = async () => {
     if (!draft) return
+    if (passwordDraft && passwordDraft.length < 4) { setError('Senha deve ter pelo menos 4 caracteres'); return }
     setSaving(true)
     setError('')
     const res = await fetch(`/api/user-profiles/${draft.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draft),
+      body: JSON.stringify(passwordDraft ? { ...draft, password: passwordDraft } : draft),
     })
     const json = await res.json()
     setSaving(false)
     if (!res.ok) { setError(json.error || 'Erro ao salvar'); return }
+    setPasswordDraft('')
     await fetchProfiles(draft.id)
     if (draft.id === user.id) await refresh()
     showToast('Alterações salvas')
@@ -133,7 +141,7 @@ export default function ConfiguracaoUsuariosPage() {
         </div>
         <h1 className="text-2xl font-bold text-on-surface">Configuração de Usuários</h1>
         <p className="text-on-surface-variant text-sm mt-1">
-          Selecione um usuário para ver e editar quais módulos ele enxerga e quais colunas pode editar no formulário. Sem senha — o login é só a escolha do perfil.
+          Selecione um usuário para ver e editar a senha, quais módulos ele enxerga e quais colunas pode editar no formulário.
         </p>
       </div>
 
@@ -162,22 +170,32 @@ export default function ConfiguracaoUsuariosPage() {
                 </button>
               ))}
             </div>
-            <div className="p-3 border-t border-outline-variant flex gap-2">
+            <div className="p-3 border-t border-outline-variant flex flex-col gap-2">
               <input
                 type="text"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCreate() } }}
                 placeholder="Nome do novo usuário"
-                className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                className="w-full bg-surface-container-low border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
               />
-              <button
-                onClick={handleCreate}
-                disabled={!newName.trim()}
-                className="shrink-0 px-3 py-1.5 bg-primary text-on-primary rounded text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-neon transition-shadow"
-              >
-                + Adicionar
-              </button>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCreate() } }}
+                  placeholder="Senha (mín. 4 caracteres)"
+                  className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                />
+                <button
+                  onClick={handleCreate}
+                  disabled={!newName.trim() || newPassword.length < 4}
+                  className="shrink-0 px-3 py-1.5 bg-primary text-on-primary rounded text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-neon transition-shadow"
+                >
+                  + Adicionar
+                </button>
+              </div>
             </div>
           </div>
 
@@ -197,6 +215,17 @@ export default function ConfiguracaoUsuariosPage() {
                 >
                   Excluir usuário
                 </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">Nova senha</label>
+                <input
+                  type="password"
+                  value={passwordDraft}
+                  onChange={e => setPasswordDraft(e.target.value)}
+                  placeholder="Deixe em branco para manter a senha atual"
+                  className="w-full max-w-xs bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                />
               </div>
 
               <label className="flex items-start gap-2 text-sm text-on-surface cursor-pointer">

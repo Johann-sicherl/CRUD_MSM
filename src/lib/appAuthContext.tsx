@@ -7,10 +7,10 @@ import type { UserProfile } from './userProfileStore'
 // pede credenciais do SQL Server do Protheus, é opcional/dispensável e não
 // bloqueia nada). Aqui, nada do app (Sidebar, telas, dados do Supabase) é
 // renderizado até logar — por construção, não tem "fundo" pra vazar atrás da
-// tela de login. Sem senha nenhuma — é só identificação de perfil, cujas
-// permissões (módulos visíveis, campos editáveis) são configuradas pela
-// tela de Configuração de Usuários (acessível a quem é isAdmin) e ficam
-// guardadas no servidor (ver src/lib/userProfileStore.ts), não no bundle.
+// tela de login. Cada perfil tem senha própria, guardada como hash na tabela
+// user_profiles do Supabase (ver src/lib/userProfileStore.ts e
+// src/lib/passwordHash.ts) — a senha em si só passa pela rota
+// /api/user-profiles/login, nunca fica em memória além do formulário.
 // `import type` acima é apagado na compilação — não puxa 'fs' pro bundle do
 // cliente, só o formato do objeto.
 
@@ -49,7 +49,7 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]         = useState<AppUser | null>(null)
   const [profiles, setProfiles] = useState<UserProfile[]>([])
   const [checked, setChecked]   = useState(false)
-  const [error, setError]       = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const loadProfiles = useCallback(async (): Promise<UserProfile[]> => {
     const all = await fetchAllProfiles()
@@ -59,7 +59,9 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
 
   // sessionStorage (não localStorage): sobrevive a um F5, mas pede login de
   // novo se fechar a aba/navegador — evita ficar logado pra sempre num PC
-  // compartilhado, sem exigir logar toda hora que atualiza a página.
+  // compartilhado, sem exigir logar toda hora que atualiza a página. Só
+  // guarda o id (nunca a senha) — restaurar a sessão não pede senha de novo,
+  // igual a qualquer app que "lembra" o login enquanto a aba está aberta.
   useEffect(() => {
     let cancelled = false
     loadProfiles()
@@ -70,24 +72,29 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
         if (found) setUser(toAppUser(found))
         else if (storedId) sessionStorage.removeItem(STORAGE_KEY) // perfil excluído — volta pro login
       })
-      .catch(() => { if (!cancelled) setError('Não foi possível carregar os perfis de usuário') })
+      .catch(() => { if (!cancelled) setLoadError('Não foi possível carregar os perfis de usuário') })
       .finally(() => { if (!cancelled) setChecked(true) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Busca os perfis do zero na hora de logar — nunca confia na lista já
-  // carregada na tela de login, que pode estar desatualizada se um admin
-  // mudou módulos/permissões depois que essa aba abriu (ex.: editou na
-  // Configuração de Usuários e, na mesma aba, trocou de perfil sem dar F5).
-  const login = async (id: string) => {
+  // Confere usuário + senha no servidor (só ele vê o hash) — nunca decide
+  // login com dado já em memória no navegador.
+  const login = async (id: string, password: string): Promise<string | null> => {
     try {
-      const all = await loadProfiles()
-      const found = all.find(p => p.id === id)
-      if (!found) return
-      setUser(toAppUser(found))
+      const res = await fetch('/api/user-profiles/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, password }),
+      })
+      const json = await res.json()
+      if (!res.ok) return json.error || 'Perfil ou senha inválidos'
+      setUser(toAppUser(json as UserProfile))
       sessionStorage.setItem(STORAGE_KEY, id)
-    } catch { setError('Não foi possível entrar — tente novamente') }
+      return null
+    } catch {
+      return 'Falha de rede — tente novamente'
+    }
   }
 
   const logout = () => {
@@ -116,7 +123,7 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
   // restaurar uma sessão já existente.
   if (!checked) return null
 
-  if (!user) return <LoginScreen profiles={profiles} error={error} onLogin={login} />
+  if (!user) return <LoginScreen profiles={profiles} loadError={loadError} onLogin={login} />
 
   return (
     <AppAuthContext.Provider value={{ user, logout, refresh }}>
@@ -125,12 +132,28 @@ export function AppAuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-function LoginScreen({ profiles, error, onLogin }: { profiles: UserProfile[]; error: string; onLogin: (id: string) => void }) {
+function LoginScreen({
+  profiles,
+  loadError,
+  onLogin,
+}: {
+  profiles: UserProfile[]
+  loadError: string
+  onLogin: (id: string, password: string) => Promise<string | null>
+}) {
   const [selected, setSelected] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (selected) onLogin(selected)
+    if (!selected || !password || submitting) return
+    setSubmitting(true)
+    setError('')
+    const err = await onLogin(selected, password)
+    setSubmitting(false)
+    if (err) setError(err)
   }
 
   return (
@@ -141,14 +164,14 @@ function LoginScreen({ profiles, error, onLogin }: { profiles: UserProfile[]; er
         </div>
         <form className="p-5 flex flex-col gap-3" onSubmit={handleSubmit}>
           <p className="text-sm text-on-surface-variant">
-            Selecione seu perfil para acessar o painel.
+            Selecione seu perfil e informe a senha para acessar o painel.
           </p>
           <label className="text-xs font-semibold text-on-surface-variant">
             Perfil
             <select
               autoFocus
               value={selected}
-              onChange={e => setSelected(e.target.value)}
+              onChange={e => { setSelected(e.target.value); setError('') }}
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
             >
               <option value="">Selecione...</option>
@@ -157,15 +180,24 @@ function LoginScreen({ profiles, error, onLogin }: { profiles: UserProfile[]; er
               ))}
             </select>
           </label>
-          {error && <p className="text-xs text-error">{error}</p>}
-          {!error && profiles.length === 0 && <p className="text-xs text-outline">Carregando perfis...</p>}
+          <label className="text-xs font-semibold text-on-surface-variant">
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError('') }}
+              className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            />
+          </label>
+          {(error || loadError) && <p className="text-xs text-error">{error || loadError}</p>}
+          {!loadError && profiles.length === 0 && <p className="text-xs text-outline">Carregando perfis...</p>}
           <div className="flex items-center justify-end mt-2">
             <button
               type="submit"
-              disabled={!selected}
+              disabled={!selected || !password || submitting}
               className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
             >
-              Entrar
+              {submitting ? 'Entrando...' : 'Entrar'}
             </button>
           </div>
         </form>
