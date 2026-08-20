@@ -161,17 +161,20 @@ function substituteRealCostValues(row: AuditRow, store: LocalCostsStore): string
     return touched ? buildInsertSQL(row.table_name, schema, patched) : row.sql_query
   }
 
-  // update: só troca o que já apareceu como "campo = 1" na query gravada —
-  // é exatamente o conjunto de campos financeiros que entrou nesse UPDATE
-  // (campo que não mudou nem chega a aparecer na query, então o replace não
-  // acha nada pra ele e não faz nada).
+  // update: troca o valor de cada campo financeiro que aparecer na query
+  // gravada, qualquer que ele seja — não assume que é "1" (hoje sempre é,
+  // por causa do FORCE_TO_ONE_FIELDS, mas o replace não depende disso: casa
+  // "campo = <número ou NULL>" e troca só a parte do valor, mantendo nome do
+  // campo e operador). Campo que não mudou nem chega a aparecer na query, e
+  // o replace não acha nada pra ele e não faz nada.
   let sql = row.sql_query
   for (const name of FORCE_TO_ONE_FIELDS) {
     const real = realValues[name]
     if (real === undefined) continue
     const field = schema.fields.find(f => f.name === name)
     if (!field) continue
-    sql = sql.replace(new RegExp(`\\b${name}(\\s*=\\s*)1\\b`), `${name}$1${sqlLiteral(field, real)}`)
+    const pattern = new RegExp(`\\b${name}(\\s*=\\s*)(?:-?\\d+(?:\\.\\d+)?|NULL)\\b`, 'g')
+    sql = sql.replace(pattern, (_match, eq: string) => `${name}${eq}${sqlLiteral(field, real)}`)
   }
   return sql
 }
