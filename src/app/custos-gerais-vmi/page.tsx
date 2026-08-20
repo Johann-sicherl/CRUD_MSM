@@ -81,6 +81,9 @@ export default function CustosGeraisVmiPage() {
   const [filterSearch, setFilterSearch] = useState<Record<string, string>>({})
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  // "Editar" de uma linha só — mesmo modal do "Alterar selecionados", só que
+  // sem precisar marcar checkbox. null = fechado.
+  const [editingRow, setEditingRow] = useState<CostRow | null>(null)
   const [importRows, setImportRows] = useState<Record<string, string>[] | null>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
@@ -342,12 +345,13 @@ export default function CustosGeraisVmiPage() {
                       </div>
                     </th>
                   ))}
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono align-top">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/30">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={COLUMNS.length + 1} className="px-4 py-12 text-center text-outline text-sm">
+                    <td colSpan={COLUMNS.length + 2} className="px-4 py-12 text-center text-outline text-sm">
                       Nenhum registro encontrado
                     </td>
                   </tr>
@@ -372,6 +376,14 @@ export default function CustosGeraisVmiPage() {
                         <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap font-mono min-w-[150px]">{row.code}</td>
                         <td className="px-4 py-3 text-on-surface-variant min-w-[200px]">{row.name ?? 'N/A'}</td>
                         <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap min-w-[150px]">{formatCost(row.cost)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <button
+                            onClick={() => setEditingRow(row)}
+                            className="text-primary hover:underline text-xs font-medium"
+                          >
+                            Editar
+                          </button>
+                        </td>
                       </tr>
                     )
                   })
@@ -389,16 +401,17 @@ export default function CustosGeraisVmiPage() {
         )}
       </div>
 
-      {bulkEditOpen && (
+      {(bulkEditOpen || editingRow) && (
         <CostBulkEditModal
-          rows={selectedRows.flatMap(r =>
+          rows={(editingRow ? [editingRow] : selectedRows).flatMap(r =>
             allPhysical
               .filter(p => p.code === r.code)
               .map(p => ({ id: p.id, table: p.table }))
           )}
-          onClose={() => setBulkEditOpen(false)}
+          onClose={() => { setBulkEditOpen(false); setEditingRow(null) }}
           onSaved={(ok, fail) => {
             setBulkEditOpen(false)
+            setEditingRow(null)
             setSelectedIds(new Set())
             fetchData()
             showToast(
