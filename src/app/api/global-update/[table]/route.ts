@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   let localCosts: number | null = null
   let localCostsError: string | undefined
   try {
-    const realCosts = extractRealCosts(schema, rows)
+    const realCosts = extractRealCosts(table, schema, rows)
     if (realCosts) {
       replaceTableCosts(table, realCosts)
       localCosts = Object.keys(realCosts).length

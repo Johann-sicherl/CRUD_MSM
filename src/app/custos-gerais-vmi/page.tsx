@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Field } from '@/lib/schema'
 import { tables } from '@/lib/schema'
-import { getRowKey } from '@/lib/csvBaseline'
+import { getCostItemKey } from '@/lib/csvBaseline'
 import { exportVisibleData, parseImportFile } from '@/lib/importExport'
 import ColumnFilter from '@/components/ColumnFilter'
 import CostBulkEditModal from '@/components/CostBulkEditModal'
@@ -133,7 +133,7 @@ export default function CustosGeraisVmiPage() {
         const localCosts = localCostJsons[i] ?? {}
         const data: Record<string, unknown>[] = json.data || []
         return data.map(row => {
-          const key = getRowKey(schema, row)
+          const key = getCostItemKey(src.table, schema, row)
           const real = localCosts[key]?.values?.cost_std
           const code = String(row[src.codeField] ?? '')
           const name = src.table === 'standard_equipment_items'

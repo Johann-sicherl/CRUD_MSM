@@ -1,5 +1,5 @@
 import { FORCE_TO_ONE_FIELDS, getRealColumnFields, type TableSchema } from './schema'
-import { getRowKey, getRowLabel } from './csvBaseline'
+import { getCostItemKey, getRowLabel } from './csvBaseline'
 import { toCellValue, isBlankCell } from './globalUpdateConvert'
 
 // Puro/isomórfico (sem 'fs') — extrai, de um CSV recém-anexado no
@@ -17,6 +17,7 @@ export interface ExtractedCostRow {
 // null = esta tabela não tem nenhuma coluna financeira (FORCE_TO_ONE_FIELDS)
 // — nada a capturar, nada a gravar localmente por causa dela.
 export function extractRealCosts(
+  tableName: string,
   schema: TableSchema,
   rows: Record<string, unknown>[],
 ): Record<string, ExtractedCostRow> | null {
@@ -28,8 +29,8 @@ export function extractRealCosts(
   for (const row of rows) {
     // Mesma conversão de tipo usada pela substituição real (convertCsvRows em
     // globalUpdateConvert.ts) — precisamos dos valores já tipados (número,
-    // não texto do CSV) tanto para a chave de negócio (getRowKey precisa dos
-    // outros campos já corretos) quanto para os valores financeiros em si.
+    // não texto do CSV) tanto para a chave de negócio (getCostItemKey precisa
+    // dos outros campos já corretos) quanto para os valores financeiros em si.
     const rawByLowerName = new Map(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]))
     const converted: Record<string, unknown> = {}
     for (const [lowerKey, rawVal] of rawByLowerName) {
@@ -54,7 +55,8 @@ export function extractRealCosts(
     }
     if (!hasAny) continue // linha sem nenhum valor financeiro real no CSV — nada a guardar
 
-    const key = getRowKey(schema, converted)
+    const key = getCostItemKey(tableName, schema, converted)
+    if (!key) continue // sem o código do item, não dá pra consolidar (linha malformada)
     out[key] = { label: getRowLabel(schema, converted), values }
   }
   return out

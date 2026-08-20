@@ -83,6 +83,46 @@ export function getRowLabel(schema: TableSchema, row: Record<string, unknown>): 
   return parts.join(', ') || String(row.id ?? '')
 }
 
+// accessories, standard_equipment_items e dependant_items apontam todas pro
+// mesmo catálogo de código Protheus (dependant_items.protheus_item_code é
+// sempre o código de um item que já existe numa das outras duas) — o custo
+// real de um código é um valor ÚNICO do item físico, não deveria variar
+// dependendo de qual tabela o está referenciando. Por isso o arquivo local de
+// custos (ver localCostStore.ts) guarda essas três tabelas juntas, num único
+// bucket "items" chaveado só pelo código — nunca um valor por tabela.
+// equipments fica de fora: os campos financeiros de lá (IPI, margem,
+// comissões etc.) são parâmetros do equipamento inteiro, chaveados por
+// legacy_id (um ID numérico, não um código de item) — conceito diferente,
+// sem nada em comum pra consolidar, e misturar arriscaria colisão entre um
+// legacy_id e um protheus_code parecido.
+export const SHARED_ITEM_COST_TABLES = new Set(['accessories', 'standard_equipment_items', 'dependant_items'])
+
+// Em dependant_items a chave de auditoria (getRowKey) é composta — inclui o
+// equipamento e o item "pai" — porque identifica UMA linha específica da
+// tabela. Mas o custo (rótulo "CUSTO ITEM DEPENDENTE") pertence ao item
+// DEPENDENTE em si (protheus_item_code), o mesmo item que aparece em
+// accessories/standard_equipment_items — é essa chave, não a de auditoria,
+// que serve pra consolidar o custo entre as tabelas.
+const COST_ITEM_CODE_FIELD: Record<string, string> = {
+  dependant_items: 'protheus_item_code',
+}
+
+// Nome do bucket usado no arquivo local de custos para esta tabela — 'items'
+// para as três tabelas compartilhadas acima, ou o próprio nome da tabela
+// (comportamento de sempre) para qualquer outra, incluindo equipments.
+export function costBucketFor(tableName: string): string {
+  return SHARED_ITEM_COST_TABLES.has(tableName) ? 'items' : tableName
+}
+
+// Chave usada para gravar/consultar o custo real de UMA linha no arquivo
+// local — normalmente igual a getRowKey, exceto em dependant_items (ver
+// COST_ITEM_CODE_FIELD acima).
+export function getCostItemKey(tableName: string, schema: TableSchema, row: Record<string, unknown>): string {
+  const overrideField = COST_ITEM_CODE_FIELD[tableName]
+  if (overrideField) return String(row[overrideField] ?? '')
+  return getRowKey(schema, row)
+}
+
 export interface KeyedRows {
   byKey: Map<string, Record<string, unknown>>
   // Chaves que aparecem em MAIS DE UMA linha do conjunto — algumas tabelas

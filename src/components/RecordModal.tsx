@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Field, TableSchema, shouldUppercaseField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { bestGhostSuggestion } from '@/lib/textSimilarity'
 import { getAuditKeyFields, keyValueString } from '@/lib/sqlAudit'
-import { getRowKey } from '@/lib/csvBaseline'
+import { getCostItemKey } from '@/lib/csvBaseline'
 
 interface Props {
   schema: TableSchema
@@ -140,7 +140,7 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
       .then(r => r.ok ? r.json() : {})
       .then((store: Record<string, { values: Record<string, number | null> }>) => {
         if (cancelled) return
-        const key = getRowKey(schema, record)
+        const key = getCostItemKey(tableName, schema, record)
         const values = store[key]?.values ?? {}
         setForm(prev => {
           const next = { ...prev }

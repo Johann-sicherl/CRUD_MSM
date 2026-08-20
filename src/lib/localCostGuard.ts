@@ -1,6 +1,6 @@
 import { FORCE_TO_ONE_FIELDS, getRealColumnFields, type TableSchema } from './schema'
 import { isBlankCell, toCellValue } from './globalUpdateConvert'
-import { getRowKey } from './csvBaseline'
+import { costBucketFor, getCostItemKey } from './csvBaseline'
 import { readCostStore, updateCostRow } from './localCostStore'
 
 // Fecha, para os caminhos de escrita registro-a-registro (POST /api/[table]
@@ -26,7 +26,7 @@ export function protectLocalCostsOnInsert(
   const forceFields = getRealColumnFields(schema).filter(f => FORCE_TO_ONE_FIELDS.includes(f.name))
   if (forceFields.length === 0) return
   try {
-    const key = getRowKey(schema, writeBody)
+    const key = getCostItemKey(table, schema, writeBody)
     const values: Record<string, number | null> = {}
     let hasAny = false
     for (const field of forceFields) {
@@ -37,7 +37,7 @@ export function protectLocalCostsOnInsert(
       }
       writeBody[field.name] = 1
     }
-    if (hasAny) updateCostRow(table, key, values)
+    if (hasAny && key) updateCostRow(table, key, values)
   } catch (e) {
     console.error(`[local-costs] falha ao proteger custos reais de "${table}" (insert)`, e)
   }
@@ -68,8 +68,8 @@ export function protectLocalCostsOnUpdate(
   if (forceFields.length === 0) return []
   try {
     const fullRow = { ...(beforeRow ?? {}), ...writeBody }
-    const key = getRowKey(schema, fullRow)
-    const existingRealValues = readCostStore()[table]?.[key]?.values ?? {}
+    const key = getCostItemKey(table, schema, fullRow)
+    const existingRealValues = readCostStore()[costBucketFor(table)]?.[key]?.values ?? {}
     const values: Record<string, number | null> = {}
     let hasAny = false
     for (const field of forceFields) {
@@ -82,7 +82,7 @@ export function protectLocalCostsOnUpdate(
       }
       writeBody[field.name] = 1
     }
-    if (hasAny) updateCostRow(table, key, values)
+    if (hasAny && key) updateCostRow(table, key, values)
     return Object.keys(values)
   } catch (e) {
     console.error(`[local-costs] falha ao proteger custos reais de "${table}" (update)`, e)

@@ -22,7 +22,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const rows: Record<string, unknown>[] = Array.isArray(body.rows) ? body.rows : []
   if (rows.length === 0) return NextResponse.json({ error: 'Nenhuma linha para importar' }, { status: 400 })
 
-  const realCosts = extractRealCosts(schema, rows)
+  const realCosts = extractRealCosts(table, schema, rows)
   if (!realCosts) {
     return NextResponse.json({ error: 'Esta tabela não tem nenhuma coluna financeira — nada a importar aqui' }, { status: 400 })
   }

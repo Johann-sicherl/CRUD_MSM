@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { tables, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { diffChangedFields, buildInsertSQL, sqlLiteral } from '@/lib/sqlAudit'
+import { costBucketFor, getCostItemKey } from '@/lib/csvBaseline'
 import { useAppAuth } from '@/lib/appAuthContext'
 import type { UserProfile } from '@/lib/userProfileStore'
 
@@ -145,8 +146,15 @@ async function fetchLocalCostsStore(): Promise<LocalCostsStore> {
 function substituteRealCostValues(row: AuditRow, store: LocalCostsStore): string {
   if (row.operation === 'delete') return row.sql_query
   const schema = tables[row.table_name]
-  const realValues = store[row.table_name]?.[row.record_key_value]?.values
-  if (!schema || !realValues) return row.sql_query
+  if (!schema) return row.sql_query
+  // baseline (linha antes da edição) + payload (campos submetidos) juntos
+  // sempre têm o código do item (protheus_code/protheus_item_code, campos
+  // noBulkEdit — nunca mudam) — precisamos dele pra achar a chave certa no
+  // bucket compartilhado "items" (ver getCostItemKey/costBucketFor).
+  const keyRow = { ...(row.baseline ?? {}), ...(row.payload ?? {}) }
+  const costKey = getCostItemKey(row.table_name, schema, keyRow)
+  const realValues = store[costBucketFor(row.table_name)]?.[costKey]?.values
+  if (!realValues) return row.sql_query
 
   if (row.operation === 'insert') {
     // payload de um insert é a linha inteira — reconstrói a query com os

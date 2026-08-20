@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import type { ExtractedCostRow } from './localCostExtract'
+import { costBucketFor, SHARED_ITEM_COST_TABLES } from './csvBaseline'
 
 // Guarda os valores financeiros REAIS (capturados do CSV antes de virarem 1
 // no Supabase — ver localCostExtract.ts) num arquivo JSON LOCAL, na mesma
@@ -35,21 +36,26 @@ function writeCostStore(store: RealCostStore): void {
   fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf-8')
 }
 
-// Chamado pela rota de import (Atualizador Global) logo depois de uma
-// substituição bem-sucedida — troca TODA a tabela de custos daquela tabela
-// pelo que acabou de vir do CSV nesse import, do mesmo jeito que
-// global_table_replace apaga e recarrega a tabela real inteira (evita
-// deixar valor "fantasma" de um item que saiu do CSV numa reimportação).
-// Edições manuais feitas entre um import e outro (ver updateCostRow) são
-// substituídas também — o CSV é sempre a fonte da verdade num reimport.
+// Chamado pela rota de import (Atualizador Global e Importador de Custos
+// Locais) logo depois de uma substituição bem-sucedida. Para uma tabela com
+// bucket próprio (equipments, ou qualquer tabela nova fora do grupo
+// compartilhado) troca TODO o bucket pelo que acabou de vir do CSV — do
+// mesmo jeito que global_table_replace apaga e recarrega a tabela real
+// inteira (evita valor "fantasma" de um item que saiu do CSV). Já para
+// accessories/standard_equipment_items/dependant_items — que dividem o
+// bucket "items" (ver costBucketFor em csvBaseline.ts) — um replace total
+// apagaria os códigos capturados pelas OUTRAS duas tabelas, então aqui é
+// upsert: só grava/atualiza os códigos que vieram nesta importação,
+// preservando o resto do bucket compartilhado.
 export function replaceTableCosts(tableName: string, rows: Record<string, ExtractedCostRow>): void {
   const store = readCostStore()
   const now = new Date().toISOString()
-  const table: RealCostTable = {}
+  const bucket = costBucketFor(tableName)
+  const table: RealCostTable = SHARED_ITEM_COST_TABLES.has(tableName) ? { ...(store[bucket] ?? {}) } : {}
   for (const [key, row] of Object.entries(rows)) {
     table[key] = { label: row.label, values: row.values, updatedAt: now }
   }
-  store[tableName] = table
+  store[bucket] = table
   writeCostStore(store)
 }
 
@@ -57,14 +63,15 @@ export function replaceTableCosts(tableName: string, rows: Record<string, Extrac
 // chama o Supabase. Preserva os demais campos já guardados dessa linha.
 export function updateCostRow(tableName: string, key: string, values: Record<string, number | null>): RealCostRow {
   const store = readCostStore()
-  if (!store[tableName]) store[tableName] = {}
-  const existing = store[tableName][key]
+  const bucket = costBucketFor(tableName)
+  if (!store[bucket]) store[bucket] = {}
+  const existing = store[bucket][key]
   const row: RealCostRow = {
     label: existing?.label ?? key,
     values: { ...(existing?.values ?? {}), ...values },
     updatedAt: new Date().toISOString(),
   }
-  store[tableName][key] = row
+  store[bucket][key] = row
   writeCostStore(store)
   return row
 }

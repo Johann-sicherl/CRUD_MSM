@@ -6,7 +6,7 @@ import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importEx
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
-import { shouldCompareField, valuesEqual, getRowKey, groupRowsByKey } from '@/lib/csvBaseline'
+import { shouldCompareField, valuesEqual, getRowKey, getCostItemKey, groupRowsByKey } from '@/lib/csvBaseline'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -43,9 +43,10 @@ function getDisplayValue(
   // passam a considerar o valor real guardado localmente, não o "1" bruto.
   localCosts?: Record<string, { values: Record<string, number | null> }> | null,
   schema?: TableSchema,
+  tableName?: string,
 ): string {
-  if (field && localCosts && schema && FORCE_TO_ONE_FIELDS.includes(field.name)) {
-    const key = getRowKey(schema, row)
+  if (field && localCosts && schema && tableName && FORCE_TO_ONE_FIELDS.includes(field.name)) {
+    const key = getCostItemKey(tableName, schema, row)
     const v = localCosts[key]?.values[field.name]
     if (v !== undefined) return v === null ? 'N/A' : String(v)
   }
@@ -81,13 +82,14 @@ function applyFilters(
   duplicateCountMaps: Record<string, Map<string, number>> = {},
   localCosts?: Record<string, { values: Record<string, number | null> }> | null,
   schema?: TableSchema,
+  tableName?: string,
 ): Record<string, unknown>[] {
   const active = Object.entries(filters).filter(([, v]) => v.length > 0)
   if (!active.length) return rows
   return rows.filter(row =>
     active.every(([name, vals]) => {
       const field = fields.find(f => f.name === name)
-      const display = getDisplayValue(row, name, field, lookups, fields, duplicateCountMaps, localCosts, schema)
+      const display = getDisplayValue(row, name, field, lookups, fields, duplicateCountMaps, localCosts, schema, tableName)
       return vals.includes(display)
     })
   )
@@ -406,13 +408,13 @@ export default function DataTable({ tableName, schema }: Props) {
   // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
     if (!pageData) return []
-    let rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps, localCosts, schema)
+    let rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps, localCosts, schema, tableName)
     rows = applyListSortBy(rows, schema.listSortBy, listFields, lookups)
     if (viewMode === 'novos' && baseline !== null) {
       rows = rows.filter(row => getBaselineInfo(row).isNewRow)
     }
     return rows
-  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, viewMode, baseline, getBaselineInfo])
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, tableName, viewMode, baseline, getBaselineInfo])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible
@@ -423,10 +425,10 @@ export default function DataTable({ tableName, schema }: Props) {
       const otherFilters = Object.fromEntries(
         Object.entries(colFilters).filter(([name]) => name !== field.name)
       )
-      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups, duplicateCountMaps, localCosts, schema)
+      const candidateRows = applyFilters(pageData.data, otherFilters, listFields, lookups, duplicateCountMaps, localCosts, schema, tableName)
       const seen = new Set<string>()
       for (const row of candidateRows) {
-        const val = getDisplayValue(row, field.name, field, lookups, listFields, duplicateCountMaps, localCosts, schema)
+        const val = getDisplayValue(row, field.name, field, lookups, listFields, duplicateCountMaps, localCosts, schema, tableName)
         if (val !== '' && val !== 'null' && val !== 'undefined') seen.add(val)
       }
       // N/A first, rest alphabetical
@@ -437,7 +439,7 @@ export default function DataTable({ tableName, schema }: Props) {
       })
     }
     return result
-  }, [pageData, colFilters, lookups, listFields, schema, duplicateCountMaps, localCosts])
+  }, [pageData, colFilters, lookups, listFields, schema, duplicateCountMaps, localCosts, tableName])
 
   const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
 
@@ -510,11 +512,11 @@ export default function DataTable({ tableName, schema }: Props) {
         // (do JSON local) como número de verdade, não texto formatado — só
         // assim o Excel reconhece a célula como numérica.
         if (localCosts && FORCE_TO_ONE_FIELDS.includes(f.name)) {
-          const key = getRowKey(schema, row)
+          const key = getCostItemKey(tableName, schema, row)
           const v = localCosts[key]?.values[f.name]
           if (v !== undefined) return v === null ? '' : v
         }
-        return getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps, localCosts, schema)
+        return getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps, localCosts, schema, tableName)
       }),
     ])
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
@@ -912,7 +914,7 @@ export default function DataTable({ tableName, schema }: Props) {
                             // Coluna financeira: o Supabase sempre tem 1 aqui (sigilo) — mostra
                             // o valor real capturado localmente no lugar, somente leitura. Editar
                             // só é permitido pelo botão "Editar" (RecordModal), nunca na célula.
-                            const rowKey = getRowKey(schema, row)
+                            const rowKey = getCostItemKey(tableName, schema, row)
                             const localValue = localCosts[rowKey]?.values[f.name] ?? null
                             cell = <LocalCostCell value={localValue} />
                           } else if (f.countDuplicatesOf) {
