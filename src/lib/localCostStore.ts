@@ -75,3 +75,20 @@ export function updateCostRow(tableName: string, key: string, values: Record<str
   writeCostStore(store)
   return row
 }
+
+// Chamado quando o registro correspondente é excluído (DELETE) — sem isto o
+// custo real capturado fica órfão no arquivo local pra sempre, sem nenhuma
+// linha viva que o referencie. Para as tabelas do bucket compartilhado
+// "items" (accessories/standard_equipment_items/dependant_items), remove o
+// código inteiro mesmo que ele ainda apareça em OUTRA dessas tabelas — mesmo
+// trade-off da exclusão em si (não há como saber com segurança se algum
+// outro registro ainda depende desse código sem consultar o Supabase, e o
+// pior caso é só precisar recapturar o valor depois).
+export function deleteCostRow(tableName: string, key: string): void {
+  if (!key) return
+  const store = readCostStore()
+  const bucket = costBucketFor(tableName)
+  if (!store[bucket] || !(key in store[bucket])) return
+  delete store[bucket][key]
+  writeCostStore(store)
+}

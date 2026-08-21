@@ -1,7 +1,7 @@
 import { FORCE_TO_ONE_FIELDS, getRealColumnFields, type TableSchema } from './schema'
 import { isBlankCell, toCellValue } from './globalUpdateConvert'
 import { costBucketFor, getCostItemKey } from './csvBaseline'
-import { readCostStore, updateCostRow } from './localCostStore'
+import { readCostStore, updateCostRow, deleteCostRow } from './localCostStore'
 
 // Fecha, para os caminhos de escrita registro-a-registro (POST /api/[table]
 // e PUT /api/[table]/[id] — usados por "+ Novo Registro", "Importar Excel",
@@ -120,5 +120,25 @@ export function protectLocalCostsOnUpdate(
   } catch (e) {
     console.error(`[local-costs] falha ao proteger custos reais de "${table}" (update)`, e)
     return []
+  }
+}
+
+/** DELETE — remove do arquivo local a captura de custo real associada à
+ *  linha excluída. Sem isto, o custo real capturado no import/edição fica
+ *  órfão no arquivo local pra sempre — nenhuma linha viva o referencia, mas
+ *  nunca é limpo (ex.: excluir um Grupo de Equipamentos deixava o IPI/margem/
+ *  comissões etc. capturados dele parados no real-costs.json). */
+export function protectLocalCostsOnDelete(
+  table: string,
+  schema: TableSchema,
+  deletedRow: Record<string, unknown>,
+): void {
+  const forceFields = getRealColumnFields(schema).filter(f => FORCE_TO_ONE_FIELDS.includes(f.name))
+  if (forceFields.length === 0) return
+  try {
+    const key = getCostItemKey(table, schema, deletedRow)
+    deleteCostRow(table, key)
+  } catch (e) {
+    console.error(`[local-costs] falha ao limpar custo real local de "${table}" (delete)`, e)
   }
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables, isRealColumnField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { recordUpdateAudit, recordDeleteAudit } from '@/lib/sqlAudit'
-import { protectLocalCostsOnUpdate } from '@/lib/localCostGuard'
+import { protectLocalCostsOnUpdate, protectLocalCostsOnDelete } from '@/lib/localCostGuard'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -72,6 +72,11 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 
+  // Sem isto, o custo real (ou IPI/margem/comissões etc.) capturado
+  // localmente pro registro excluído ficava órfão no arquivo local pra
+  // sempre. Melhor esforço, como as outras proteções de local-costs.
+  if (data) protectLocalCostsOnDelete(table, schema, data as Record<string, unknown>)
+
   // non_combinable_comps grava cada regra como duas linhas espelhadas
   // (A→B e B→A, ver POST doubleInsert) — sem isto, excluir uma linha pela
   // tela deixava a linha espelhada viva, reaparecendo na lista como se
@@ -92,6 +97,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
         await recordDeleteAudit(supabaseAdmin, table, schema, mirror as Record<string, unknown>)
       } catch { /* audit log is best-effort — never block the real operation */ }
     }
+    if (mirror) protectLocalCostsOnDelete(table, schema, mirror as Record<string, unknown>)
   }
 
   return NextResponse.json({ deleted: true, id })
