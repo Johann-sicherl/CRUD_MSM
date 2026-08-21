@@ -394,27 +394,47 @@ export default function DataTable({ tableName, schema }: Props) {
     return groupRowsByKey(schema, pageData.data).ambiguousKeys
   }, [pageData, schema])
 
+  // Colunas de controladoria/fiscal/precificação existentes nesta tabela —
+  // usadas só pela definição de "novo" de um perfil restrito, logo abaixo.
+  const zeroForceFields = useMemo(
+    () => schema.fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name)),
+    [schema],
+  )
+  // Perfil restrito (ex.: Gerente Adm Comercial/Controladoria): "Somente
+  // Novos" não tem nada a ver com o último import CSV do Atualizador Global
+  // (módulo que ela nem enxerga) — significa "ainda pendente de custo real",
+  // ou seja, algum campo de controladoria/fiscal/precificação = 0 no
+  // Supabase (ver localCostGuard.ts: 0 não é mais forçado a 1, é a própria
+  // chave de filtro). Perfil admin mantém o critério de sempre (linha nova
+  // desde o último import).
+  const isRestrictedControladoriaView = !appUser.isAdmin && zeroForceFields.length > 0
+
   // Mesmo critério do destaque amarelo (linha nova / campo alterado desde o
-  // último import), num só lugar — usado tanto pra pintar a linha/célula
-  // quanto pra filtrar em "Somente Novos".
+  // último import, OU pendente de custo real pro perfil restrito), num só
+  // lugar — usado tanto pra pintar a linha/célula quanto pra filtrar em
+  // "Somente Novos".
   const getBaselineInfo = useCallback((row: Record<string, unknown>) => {
+    if (isRestrictedControladoriaView) {
+      const isNewRow = zeroForceFields.some(f => Number(row[f.name]) === 0)
+      return { isNewRow, baselineRow: undefined as Record<string, unknown> | undefined }
+    }
     const key = getRowKey(schema, row)
     const keyIsAmbiguous = !!baseline?.ambiguousKeys.has(key) || liveDuplicateKeys.has(key)
     const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(key)
     const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
     return { isNewRow, baselineRow }
-  }, [baseline, liveDuplicateKeys, schema])
+  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields])
 
   // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
     if (!pageData) return []
     let rows = applyFilters(pageData.data, colFilters, listFields, lookups, duplicateCountMaps, localCosts, schema, tableName)
     rows = applyListSortBy(rows, schema.listSortBy, listFields, lookups)
-    if (viewMode === 'novos' && baseline !== null) {
+    if (viewMode === 'novos' && (isRestrictedControladoriaView || baseline !== null)) {
       rows = rows.filter(row => getBaselineInfo(row).isNewRow)
     }
     return rows
-  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, tableName, viewMode, baseline, getBaselineInfo])
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, tableName, viewMode, baseline, isRestrictedControladoriaView, getBaselineInfo])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible
@@ -585,9 +605,12 @@ export default function DataTable({ tableName, schema }: Props) {
 
   const actionButtons = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
-      {/* Completo/Somente Novos só faz sentido com um retrato de import pra
-          comparar — some junto com o destaque amarelo quando não há um. */}
-      {baseline !== null && (
+      {/* Completo/Somente Novos: perfil restrito com colunas de controladoria/
+          fiscal/precificação vê o filtro sempre (pendente de custo real não
+          depende de import CSV nenhum); perfil admin só quando há um retrato
+          de import pra comparar — some junto com o destaque amarelo quando
+          não há um. */}
+      {(isRestrictedControladoriaView || baseline !== null) && (
         <div className="flex items-center rounded border border-outline-variant overflow-hidden text-xs font-medium shrink-0">
           <button
             onClick={() => setViewMode('completo')}
@@ -598,7 +621,9 @@ export default function DataTable({ tableName, schema }: Props) {
           </button>
           <button
             onClick={() => setViewMode('novos')}
-            title="Mostrar só os registros criados depois do último import no Atualizador Global"
+            title={isRestrictedControladoriaView
+              ? 'Mostrar só os registros com algum campo de controladoria/fiscal/precificação ainda em 0 (pendente)'
+              : 'Mostrar só os registros criados depois do último import no Atualizador Global'}
             className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'novos' ? 'bg-amber-500/15 text-amber-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
           >
             Somente Novos
@@ -776,13 +801,19 @@ export default function DataTable({ tableName, schema }: Props) {
         )}
       </div>
 
-      {baseline !== null && (
+      {isRestrictedControladoriaView && (
+        <div className="flex items-center gap-1.5 text-[11px] text-outline">
+          <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
+          registro em amarelo = tem algum campo de controladoria/fiscal/precificação ainda em 0 (pendente)
+        </div>
+      )}
+      {!isRestrictedControladoriaView && baseline !== null && (
         <div className="flex items-center gap-1.5 text-[11px] text-outline">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
           registro/campo em amarelo = criado ou alterado depois do último import no Atualizador Global de Tabelas
         </div>
       )}
-      {baselineError && (
+      {!isRestrictedControladoriaView && baselineError && (
         <div className="flex items-center gap-1.5 text-[11px] text-error" title={baselineError}>
           ⚠ não foi possível carregar o comparativo de import desta tabela ({baselineError}) — destaque amarelo desligado por ora
         </div>
