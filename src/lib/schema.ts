@@ -444,7 +444,14 @@ export const tables: Record<string, TableSchema> = {
         lookupFrom: { table: 'accessories', keyField: 'protheus_code', displayField: 'name', sourceField: 'protheus_item_code' } },
       { name: 'quantity', label: 'Qtd.', type: 'number', nullable: false, defaultValue: 1, showInList: true },
       { name: 'proportional_factor', label: 'Fat. Prop.', type: 'decimal', nullable: true, showInList: true },
-      { name: 'cost_std', label: 'CUSTO ITEM DEPENDENTE', type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
+      // Escondido da lista e do formulário: o custo real de protheus_item_code
+      // já vem consolidado de accessories/standard_equipment_items — mesmo
+      // código, mesmo valor real no bucket compartilhado "items" do arquivo
+      // local (ver getCostItemKey em csvBaseline.ts) — não faz sentido cadastrar
+      // ou mostrar um segundo valor aqui. Continua existindo como coluna real
+      // (sempre 0/1, nunca editado por este formulário) só por causa do NOT
+      // NULL; quem quiser ver/editar o custo consolidado usa Custos Gerais VMI.
+      { name: 'cost_std', label: 'CUSTO ITEM DEPENDENTE', type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true, hideInList: true, hideInForm: true },
       { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],

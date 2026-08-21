@@ -396,8 +396,13 @@ export default function DataTable({ tableName, schema }: Props) {
 
   // Colunas de controladoria/fiscal/precificação existentes nesta tabela —
   // usadas só pela definição de "novo" de um perfil restrito, logo abaixo.
+  // hideInList de propósito: um campo escondido da lista (ex.: cost_std em
+  // dependant_items, que não é mais editado por ali — o custo real do código
+  // já vem consolidado de accessories/standard_equipment_items) fica sempre
+  // em 0 dali pra frente sem que isso signifique "pendente" de verdade —
+  // não é um sinal confiável, então não entra nesse cálculo.
   const zeroForceFields = useMemo(
-    () => schema.fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name)),
+    () => schema.fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name) && !f.hideInList),
     [schema],
   )
   // Perfil restrito (ex.: Gerente Adm Comercial/Controladoria): "Somente
