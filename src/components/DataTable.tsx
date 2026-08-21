@@ -910,13 +910,18 @@ export default function DataTable({ tableName, schema }: Props) {
                           }
                           const f = entry as Field
                           let cell: React.ReactNode
-                          if (localCosts !== null && FORCE_TO_ONE_FIELDS.includes(f.name)) {
-                            // Coluna financeira: o Supabase sempre tem 1 aqui (sigilo) — mostra
-                            // o valor real capturado localmente no lugar, somente leitura. Editar
-                            // só é permitido pelo botão "Editar" (RecordModal), nunca na célula.
-                            const rowKey = getCostItemKey(tableName, schema, row)
-                            const localValue = localCosts[rowKey]?.values[f.name] ?? null
-                            cell = <LocalCostCell value={localValue} />
+                          const localCostValue = localCosts !== null && FORCE_TO_ONE_FIELDS.includes(f.name)
+                            ? localCosts[getCostItemKey(tableName, schema, row)]?.values[f.name]
+                            : undefined
+                          if (localCostValue !== undefined) {
+                            // Coluna financeira com valor real capturado localmente (Supabase
+                            // tem 1, por sigilo) — mostra o valor real no lugar, somente
+                            // leitura. Editar só é permitido pelo botão "Editar" (RecordModal),
+                            // nunca na célula. Sem captura local, cai no valor bruto do
+                            // Supabase mais abaixo — hoje sempre 0 (cadastro ainda sem custo
+                            // real definido, a "chave" de filtro pra Controladoria/Fiscal/
+                            // Precificação — ver localCostGuard.ts), não é segredo.
+                            cell = <LocalCostCell value={localCostValue} />
                           } else if (f.countDuplicatesOf) {
                             const text = getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps) || '—'
                             cell = <span className={text === '1' ? 'text-green-500 font-semibold' : 'text-error font-semibold'}>{text}</span>

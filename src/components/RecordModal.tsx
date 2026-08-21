@@ -127,10 +127,17 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record])
 
-  // Campos financeiros (FORCE_TO_ONE_FIELDS): o Supabase sempre tem 1 aí
-  // (sigilo) — o formulário de edição não pode mostrar esse "1" como se
+  // Campos financeiros (FORCE_TO_ONE_FIELDS): quando o Supabase tem 1 aí
+  // (sigilo), o formulário de edição não pode mostrar esse "1" como se
   // fosse o valor real. Busca o valor real guardado localmente e substitui
-  // o que o buildInitial pôs (o "1" vindo de `record`) assim que chega.
+  // o que o buildInitial pôs (o valor vindo de `record`) assim que chega —
+  // mas só quando existe de fato uma captura pra esse campo. Sem captura
+  // local (undefined), mantém o valor bruto do Supabase como está: hoje isso
+  // é sempre 0 (campo ainda sem custo real definido — a "chave" que
+  // Controladoria/Fiscal/Precificação usa pra filtrar cadastros novos, ver
+  // localCostGuard.ts), então mostrar 0 é honesto — só um "1" sem captura
+  // seria enganoso, e esse caso só existe em registro legado ainda não
+  // migrado pra essa regra.
   useEffect(() => {
     if (!isEdit || !record) return
     const forceFieldNames = editableFields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name)).map(f => f.name)
@@ -146,12 +153,13 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
           const next = { ...prev }
           for (const name of forceFieldNames) {
             const v = values[name]
-            next[name] = v === null || v === undefined ? '' : String(v)
+            if (v === undefined) continue // sem captura local — mantém o valor bruto do Supabase
+            next[name] = v === null ? '' : String(v)
           }
           return next
         })
       })
-      .catch(() => { /* melhor esforço — mantém o valor forçado (1) se falhar */ })
+      .catch(() => { /* melhor esforço — mantém o valor bruto do Supabase se falhar */ })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableName, record, isEdit])
