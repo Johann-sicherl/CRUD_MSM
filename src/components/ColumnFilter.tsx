@@ -114,23 +114,38 @@ export default function ColumnFilter({
   const allFilteredSelected =
     filtered.length > 0 && filtered.every(o => selectedValues.includes(o))
 
-  const toggleAllFiltered = () => {
-    if (allFilteredSelected) {
-      filtered.forEach(o => { if (selectedValues.includes(o)) onToggleValue(o) })
-    } else {
-      filtered.forEach(o => { if (!selectedValues.includes(o)) onToggleValue(o) })
-    }
+  // Zera a seleção atual e marca só o que bate com o texto digitado agora —
+  // o comportamento padrão (addToFilter desmarcado) do Enter na caixa de
+  // busca, do "Selecionar todos" e de marcar uma opção nova direto na lista.
+  const replaceWithFiltered = () => {
+    onClearValues()
+    filtered.forEach(o => onToggleValue(o))
   }
 
   const selectAllFiltered = () => {
     filtered.forEach(o => { if (!selectedValues.includes(o)) onToggleValue(o) })
   }
 
-  // Zera a seleção atual e marca só o que bate com o texto digitado agora —
-  // o comportamento padrão (addToFilter desmarcado) do Enter na caixa de busca.
-  const replaceWithFiltered = () => {
-    onClearValues()
-    filtered.forEach(o => onToggleValue(o))
+  const toggleAllFiltered = () => {
+    if (allFilteredSelected) {
+      filtered.forEach(o => { if (selectedValues.includes(o)) onToggleValue(o) })
+    } else if (addToFilter) {
+      selectAllFiltered()
+    } else {
+      replaceWithFiltered()
+    }
+  }
+
+  // Marcar uma opção da lista: com "Adicionar ao filtro" marcado, soma à
+  // seleção já existente (comportamento de sempre). Desmarcado (estilo
+  // Excel, padrão), marcar uma opção NOVA substitui a seleção atual em vez
+  // de somar — mesmo critério do Enter na busca, pra não ficar acumulando
+  // uma seleção antiga sem querer ao escolher outro item depois de digitar
+  // um texto novo. Desmarcar uma opção já selecionada sempre só a remove,
+  // com ou sem a caixa marcada.
+  const selectOption = (opt: string) => {
+    if (!addToFilter && !selectedValues.includes(opt)) onClearValues()
+    onToggleValue(opt)
   }
 
   // Rendered into document.body via portal — fully escapes overflow/stacking context
@@ -140,8 +155,9 @@ export default function ColumnFilter({
       style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
       className="bg-surface-container-highest border border-outline-variant rounded shadow-xl max-h-52 overflow-y-auto"
     >
-      {/* Estilo Excel: controla se apertar Enter na busca soma ao filtro
-          atual ou substitui por só o que foi digitado agora (padrão). */}
+      {/* Estilo Excel: controla se marcar algo novo (Enter na busca,
+          "Selecionar todos" ou uma opção da lista) soma ao filtro atual ou
+          substitui por só o que foi marcado agora (padrão, desmarcado). */}
       <label className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[10px] hover:bg-surface-container-high border-b border-outline-variant/40 cursor-pointer select-none bg-surface-container-high/50">
         <input
           type="checkbox"
@@ -195,7 +211,7 @@ export default function ColumnFilter({
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={() => onToggleValue(opt)}
+                onChange={() => selectOption(opt)}
                 className="accent-primary"
               />
               <span className={`font-mono truncate ${checked ? 'text-primary font-semibold' : 'text-on-surface-variant'}`}>
