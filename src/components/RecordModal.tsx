@@ -54,6 +54,12 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
   const isEdit = !!record
   const isBatch = !!schema.batchInsert && !isEdit
   const editableFields = schema.fields.filter(f => !f.isPk && !f.isReadonly && !f.hideInForm)
+  // Em modo fila (isBatch): prefill (ex.: código+nome vindos de Busc.
+  // Avançada Acessórios) só vale pro primeiro item — depois de "+ Adicionar
+  // à Lista", o formulário tem que voltar em branco pro próximo item, não
+  // reaparecer com o mesmo código/nome de novo. Marcado true dentro de
+  // handleSubmit, na primeira vez que um item é mandado pra fila.
+  const prefillAppliedRef = useRef(false)
 
   const buildInitial = () => {
     const init: Record<string, string> = {}
@@ -73,7 +79,7 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
         }
       } else {
         // Prefill from imported data takes priority over defaults
-        if (prefill && prefill[f.name] !== undefined) {
+        if (prefill && !prefillAppliedRef.current && prefill[f.name] !== undefined) {
           init[f.name] = prefill[f.name]
         } else if (f.defaultValue !== undefined) {
           init[f.name] = String(f.defaultValue)
@@ -519,6 +525,7 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
           setPendingCascadeLabels(prev => ({ ...prev, [cascadeField.name]: {} }))
         }
       }
+      prefillAppliedRef.current = true
       setForm(buildInitial())
       return
     }
