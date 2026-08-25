@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
 import ColumnFilter from '@/components/ColumnFilter'
+import RecordModal from '@/components/RecordModal'
+import { tables } from '@/lib/schema'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 
 const STORAGE_KEY = 'busca-avancada-acessorios-state'
@@ -95,6 +97,34 @@ function Badge({ tone, children }: { tone: 'error' | 'success' | 'outline' | 'am
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
       {children}
     </span>
+  )
+}
+
+// Selo "Cadastrado/Não cadastrado no MSM" + botão "+ Cadastrar" pra linhas
+// ainda não cadastradas — abre a mesma janela "Novo — Cadastro de
+// Componentes" (com a fila de inserção em lote) já preenchida com o código
+// e a denominação do Protheus encontrados aqui, igual ao "+ Adicionar ao
+// banco" de Busc. Itens Série Estrut., só que pra accessories.
+function RegistrationBadge({
+  registered, codigo, denominacao, onAdd,
+}: {
+  registered: boolean
+  codigo: string
+  denominacao: string
+  onAdd: (codigo: string, denominacao: string) => void
+}) {
+  if (registered) return <Badge tone="success">Cadastrado no MSM</Badge>
+  return (
+    <div className="flex items-center gap-1.5">
+      <Badge tone="error">Não cadastrado no MSM</Badge>
+      <button
+        onClick={e => { e.stopPropagation(); onAdd(codigo, denominacao) }}
+        title="Abre o cadastro de um novo item em Cadastro de Componentes já preenchido com código e denominação"
+        className="px-2 py-0.5 text-[11px] font-semibold text-primary border border-primary/40 rounded hover:bg-primary/10 transition-colors whitespace-nowrap"
+      >
+        + Cadastrar
+      </button>
+    </div>
   )
 }
 
@@ -215,6 +245,12 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
   const [registeredCodes, setRegisteredCodes] = useState<Set<string>>(new Set())
+  // "+ Cadastrar" (linha a linha, item ainda não cadastrado): abre a mesma
+  // janela "Novo — Cadastro de Componentes" (com a fila de inserção em lote
+  // já disponível lá), prefiltrada com o código e a denominação do Protheus
+  // encontrados aqui — mesma ideia do "+ Adicionar ao banco" de Busc. Itens
+  // Série Estrut., só que pra accessories em vez de standard_equipment_items.
+  const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [expandedHeaders, setExpandedHeaders] = useState<Set<string>>(new Set())
   const [equipFilter, setEquipFilter] = useState('')
@@ -275,34 +311,45 @@ export default function BuscaAvancadaAcessoriosPage() {
   }, [])
 
   // Registration check against the internal DB: a código counts as
-  // "cadastrado no MSM" if it exists in EITHER standard_equipment_items OR
+  // "cadastrado no MSM" if it exists em EITHER standard_equipment_items OR
   // accessories — an item found here could turn out to already be
   // registered as either an accessory or, less commonly, as an equipment.
-  useEffect(() => {
-    (async () => {
-      try {
-        const [itemsRes, accRes] = await Promise.all([
-          fetch('/api/standard_equipment_items?limit=25000'),
-          fetch('/api/accessories?limit=25000'),
-        ])
-        const [itemsJson, accJson] = await Promise.all([itemsRes.json(), accRes.json()])
-        const codes = new Set<string>()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const r of (itemsJson.data || [])) {
-          const code = String(r.protheus_code || '').trim().toUpperCase()
-          if (code) codes.add(code)
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const r of (accJson.data || [])) {
-          const code = String(r.protheus_code || '').trim().toUpperCase()
-          if (code) codes.add(code)
-        }
-        setRegisteredCodes(codes)
-      } catch {
-        // Registration badges just show "Não cadastrado" for everything if this fails.
+  // Extraído em função nomeada pra poder rodar de novo depois de cadastrar
+  // um componente novo pelo botão "+ Cadastrar" (ver addModalPrefill),
+  // sem precisar recarregar a página inteira.
+  const loadRegisteredCodes = async () => {
+    try {
+      const [itemsRes, accRes] = await Promise.all([
+        fetch('/api/standard_equipment_items?limit=25000'),
+        fetch('/api/accessories?limit=25000'),
+      ])
+      const [itemsJson, accJson] = await Promise.all([itemsRes.json(), accRes.json()])
+      const codes = new Set<string>()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (itemsJson.data || [])) {
+        const code = String(r.protheus_code || '').trim().toUpperCase()
+        if (code) codes.add(code)
       }
-    })()
-  }, [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (accJson.data || [])) {
+        const code = String(r.protheus_code || '').trim().toUpperCase()
+        if (code) codes.add(code)
+      }
+      setRegisteredCodes(codes)
+    } catch {
+      // Registration badges just show "Não cadastrado" for everything if this fails.
+    }
+  }
+
+  useEffect(() => { loadRegisteredCodes() }, [])
+
+  // "+ Cadastrar" numa linha ainda não cadastrada — código Protheus
+  // predetermina protheus_code; a denominação vai pra description (o Nome
+  // de exibição continua livre pro usuário decidir, seguindo a convenção
+  // interna, em vez de herdar o texto cru do Protheus).
+  const openAddModal = (codigo: string, denominacao: string) => {
+    setAddModalPrefill({ protheus_code: codigo, description: denominacao })
+  }
 
   const runScan = async () => {
     if (!dbCreds) { openProtheusPrompt(); return }
@@ -630,6 +677,16 @@ export default function BuscaAvancadaAcessoriosPage() {
           initialDescSearch={advancedDescSearch}
         />
       )}
+      {addModalPrefill && (
+        <RecordModal
+          schema={tables.accessories}
+          tableName="accessories"
+          record={null}
+          prefill={addModalPrefill}
+          onClose={() => setAddModalPrefill(null)}
+          onSaved={() => { setAddModalPrefill(null); loadRegisteredCodes() }}
+        />
+      )}
 
       <div className="mb-6 flex items-end gap-3 flex-wrap">
         <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
@@ -800,9 +857,12 @@ export default function BuscaAvancadaAcessoriosPage() {
                               {item.isUps && <span className="ml-1.5"><Badge tone="amber">UPS</Badge></span>}
                             </td>
                             <td className="px-3 py-2">
-                              {item.registered
-                                ? <Badge tone="success">Cadastrado no MSM</Badge>
-                                : <Badge tone="error">Não cadastrado no MSM</Badge>}
+                              <RegistrationBadge
+                                registered={item.registered}
+                                codigo={item.codigo}
+                                denominacao={item.denominacao}
+                                onAdd={openAddModal}
+                              />
                             </td>
                           </tr>
                           )
@@ -862,9 +922,12 @@ export default function BuscaAvancadaAcessoriosPage() {
                                     <span className="text-[10px] text-outline font-mono whitespace-nowrap">Qtd Total: {n2.qtdTotal}</span>
                                     <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n2.categoria}</span>
                                     {n2.isUps && <Badge tone="amber">UPS</Badge>}
-                                    {n2.registered
-                                      ? <Badge tone="success">Cadastrado no MSM</Badge>
-                                      : <Badge tone="error">Não cadastrado no MSM</Badge>}
+                                    <RegistrationBadge
+                                      registered={n2.registered}
+                                      codigo={n2.codigo}
+                                      denominacao={n2.denominacao}
+                                      onAdd={openAddModal}
+                                    />
                                   </div>
                                   {n2.children.length > 0 && (
                                     <div className="ml-6 mt-1 flex flex-col gap-1">
@@ -877,9 +940,12 @@ export default function BuscaAvancadaAcessoriosPage() {
                                           <span className="text-[10px] text-outline font-mono whitespace-nowrap">Qtd Total: {n3.qtdTotal}</span>
                                           <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n3.categoria}</span>
                                           {n3.isUps && <Badge tone="amber">UPS</Badge>}
-                                          {n3.registered
-                                            ? <Badge tone="success">Cadastrado no MSM</Badge>
-                                            : <Badge tone="error">Não cadastrado no MSM</Badge>}
+                                          <RegistrationBadge
+                                            registered={n3.registered}
+                                            codigo={n3.codigo}
+                                            denominacao={n3.denominacao}
+                                            onAdd={openAddModal}
+                                          />
                                         </div>
                                         )
                                       })}
