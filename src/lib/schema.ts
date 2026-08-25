@@ -258,6 +258,15 @@ export const tables: Record<string, TableSchema> = {
     domain: 'catalogo',
     hasTimestamps: true,
     orderBy: 'legacy_group_id',
+    // Mesma metodologia de "+ Novo Registro" de Equipamento x Acessórios:
+    // preenche o formulário, "+ Adicionar à Lista", repete pra cada
+    // componente novo, revisa a fila e sobe tudo de uma vez — sem
+    // cascadeLookup/batchMultiSelect nenhum aqui (não tem nada pra cruzar),
+    // então RecordModal simplesmente enfileira o formulário preenchido
+    // inteiro a cada clique. Cada item da fila ainda passa pelo mesmo POST
+    // /api/accessories de sempre, um de cada vez — mesma validação, mesmo
+    // guard de custo real (protectLocalCostsOnInsert) do cadastro um a um.
+    batchInsert: true,
     columnFilters: true,
     compactColumns: true,
     importExport: true,
