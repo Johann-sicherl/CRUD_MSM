@@ -1130,10 +1130,7 @@ function QueueRow({
         }
         return (
           <td key={f.name} className="px-3 py-2 text-on-surface-variant whitespace-nowrap">
-            {display
-              ? <span className="block max-w-[200px] truncate" title={display}>{display}</span>
-              : <span className="text-outline/40">—</span>
-            }
+            {display || <span className="text-outline/40">—</span>}
           </td>
         )
       })}
