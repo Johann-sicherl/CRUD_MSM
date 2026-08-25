@@ -343,12 +343,10 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   useEffect(() => { loadRegisteredCodes() }, [])
 
-  // "+ Cadastrar" numa linha ainda não cadastrada — código Protheus
-  // predetermina protheus_code; a denominação vai pra description (o Nome
-  // de exibição continua livre pro usuário decidir, seguindo a convenção
-  // interna, em vez de herdar o texto cru do Protheus).
+  // "+ Cadastrar" numa linha ainda não cadastrada — prefila protheus_code
+  // com o código e name com a denominação encontrados aqui.
   const openAddModal = (codigo: string, denominacao: string) => {
-    setAddModalPrefill({ protheus_code: codigo, description: denominacao })
+    setAddModalPrefill({ protheus_code: codigo, name: denominacao })
   }
 
   const runScan = async () => {
