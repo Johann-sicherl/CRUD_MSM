@@ -118,6 +118,17 @@ export const FORCE_TO_ONE_FIELDS = [
   'parts_provision_rate',
 ]
 
+// Colunas de controladoria/fiscal/precificação desta tabela que ainda são um
+// sinal confiável de "pendente" — mesmo critério usado pelo filtro "Somente
+// Novos" de perfil restrito (DataTable.tsx) e pelo cartão de pendências do
+// Dashboard: um campo escondido da lista (ex.: cost_std de dependant_items,
+// que não é mais editado por ali — o custo real do código já vem
+// consolidado de accessories/standard_equipment_items) fica sempre em 0 sem
+// que isso signifique nada, então não conta.
+export function getControllershipPendingFields(schema: TableSchema): Field[] {
+  return schema.fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name) && !f.hideInList)
+}
+
 // Campos elegíveis para restrição por usuário (ver Configuração de Usuários)
 // — os mesmos que RecordModal renderiza como editáveis no formulário.
 export function getFormEditableFields(schema: TableSchema): Field[] {

@@ -3,13 +3,24 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
+import { useAppAuth } from '@/lib/appAuthContext'
+import PendingControladoriaModal from '@/components/PendingControladoriaModal'
+import type { PendingControladoriaTable } from '@/app/api/dashboard/pending-controladoria/route'
 
 const DOMAIN_ORDER = ['catalogo', 'regras', 'plataforma']
 
 export default function Dashboard() {
+  const { user: appUser } = useAppAuth()
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
+
+  // Cartão "Pendências de Controladoria/Fiscal/Precificação" — só faz
+  // sentido pra quem não é admin (Gerente Adm Comercial): quantos registros,
+  // em todas as tabelas com campo de custo/IPI/margem/comissão etc., ainda
+  // estão em 0 (a "chave" de pendência — ver localCostGuard.ts).
+  const [pendingTables, setPendingTables] = useState<PendingControladoriaTable[] | null>(null)
+  const [pendingModalOpen, setPendingModalOpen] = useState(false)
 
   useEffect(() => {
     fetch('/api/tables')
@@ -21,6 +32,18 @@ export default function Dashboard() {
       })
       .catch(() => { setLoading(false); setDbError(true) })
   }, [])
+
+  useEffect(() => {
+    if (appUser.isAdmin) return
+    let cancelled = false
+    fetch('/api/dashboard/pending-controladoria')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (!cancelled && json) setPendingTables(json.tables) })
+      .catch(() => { if (!cancelled) setPendingTables([]) })
+    return () => { cancelled = true }
+  }, [appUser.isAdmin])
+
+  const pendingTotal = (pendingTables ?? []).filter(t => t.count > 0).reduce((sum, t) => sum + t.count, 0)
 
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
@@ -72,6 +95,21 @@ export default function Dashboard() {
             </div>
           )
         })}
+
+        {!appUser.isAdmin && (
+          <button
+            onClick={() => setPendingModalOpen(true)}
+            disabled={pendingTables === null}
+            title="Ver, tabela por tabela, os registros ainda sem custo/percentual real definido"
+            className="bg-surface-container border border-amber-500/30 rounded-lg p-5 text-left hover:border-amber-500/60 hover:shadow-neon transition-all disabled:cursor-wait"
+          >
+            <div className="text-xs font-mono text-amber-400 uppercase tracking-[0.1em] mb-2">Pendências Controladoria</div>
+            <div className="text-3xl font-bold text-amber-400 font-mono">
+              {pendingTables === null ? <span className="animate-pulse">…</span> : pendingTotal.toLocaleString('pt-BR')}
+            </div>
+            <div className="text-sm text-outline mt-1">clique para ver por tabela</div>
+          </button>
+        )}
       </div>
 
       {/* Table groups */}
@@ -113,6 +151,10 @@ export default function Dashboard() {
           </div>
         </div>
       ))}
+
+      {pendingModalOpen && pendingTables && (
+        <PendingControladoriaModal tables={pendingTables} onClose={() => setPendingModalOpen(false)} />
+      )}
     </div>
   )
 }

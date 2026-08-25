@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, getControllershipPendingFields } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
@@ -20,6 +20,10 @@ import BulkEditModal from './BulkEditModal'
 interface Props {
   tableName: string
   schema: TableSchema
+  // Vem de ?view=novos na URL (ver [table]/page.tsx) — usado pelo cartão de
+  // pendências de controladoria do Dashboard pra abrir a tabela já filtrada
+  // em "Somente Novos", sem precisar o usuário clicar de novo.
+  initialViewMode?: 'completo' | 'novos'
 }
 
 interface PageData {
@@ -148,7 +152,7 @@ function applyListSortBy(
   })
 }
 
-export default function DataTable({ tableName, schema }: Props) {
+export default function DataTable({ tableName, schema, initialViewMode }: Props) {
   const [pageData, setPageData] = useState<PageData | null>(null)
   const [page] = useState(1)
   const [search, setSearch] = useState('')
@@ -217,11 +221,21 @@ export default function DataTable({ tableName, schema }: Props) {
   const restListFields = useMemo(() => visibleListFields.filter(f => !f.countDuplicatesOf), [visibleListFields])
 
   // 'completo' = todos os registros (padrão); 'novos' = só os criados depois
-  // do último import no Atualizador Global (mesmo critério do destaque
-  // amarelo) — afeta a lista, a contagem no rodapé e o "Exportar dados".
-  const [viewMode, setViewMode] = useState<'completo' | 'novos'>('completo')
-
-  useEffect(() => { setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setViewMode('completo') }, [tableName])
+  // do último import no Atualizador Global, ou pendentes de custo real pro
+  // perfil restrito (mesmo critério do destaque amarelo) — afeta a lista, a
+  // contagem no rodapé e o "Exportar dados". Começa em initialViewMode
+  // quando a página carrega com ?view=novos (ver [table]/page.tsx), vindo do
+  // cartão de pendências do Dashboard.
+  const [viewMode, setViewMode] = useState<'completo' | 'novos'>(initialViewMode ?? 'completo')
+  // A navegação entre tabelas via Sidebar reaproveita esta mesma instância de
+  // DataTable (só troca tableName/schema, sem remount) — o reset abaixo trata
+  // isso. Mas não pode rodar na primeira montagem, senão sobrescreveria
+  // initialViewMode antes da tela aparecer.
+  const isFirstMount = useRef(true)
+  useEffect(() => {
+    if (isFirstMount.current) { isFirstMount.current = false; return }
+    setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setViewMode('completo')
+  }, [tableName])
 
   useEffect(() => {
     let cancelled = false
@@ -396,15 +410,9 @@ export default function DataTable({ tableName, schema }: Props) {
 
   // Colunas de controladoria/fiscal/precificação existentes nesta tabela —
   // usadas só pela definição de "novo" de um perfil restrito, logo abaixo.
-  // hideInList de propósito: um campo escondido da lista (ex.: cost_std em
-  // dependant_items, que não é mais editado por ali — o custo real do código
-  // já vem consolidado de accessories/standard_equipment_items) fica sempre
-  // em 0 dali pra frente sem que isso signifique "pendente" de verdade —
-  // não é um sinal confiável, então não entra nesse cálculo.
-  const zeroForceFields = useMemo(
-    () => schema.fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name) && !f.hideInList),
-    [schema],
-  )
+  // Mesmo critério do cartão de pendências do Dashboard (ver
+  // getControllershipPendingFields em schema.ts).
+  const zeroForceFields = useMemo(() => getControllershipPendingFields(schema), [schema])
   // Perfil restrito (ex.: Gerente Adm Comercial/Controladoria): "Somente
   // Novos" não tem nada a ver com o último import CSV do Atualizador Global
   // (módulo que ela nem enxerga) — significa "ainda pendente de custo real",
