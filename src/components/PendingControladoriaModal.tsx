@@ -12,9 +12,9 @@ export default function PendingControladoriaModal({ tables, onClose }: Props) {
   const pending = tables.filter(t => t.count > 0)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto" onClick={onClose}>
       <div
-        className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-lg my-8 animate-fade-in"
+        className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-lg animate-fade-in"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">

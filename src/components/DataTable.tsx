@@ -227,14 +227,20 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // quando a página carrega com ?view=novos (ver [table]/page.tsx), vindo do
   // cartão de pendências do Dashboard.
   const [viewMode, setViewMode] = useState<'completo' | 'novos'>(initialViewMode ?? 'completo')
-  // A navegação entre tabelas via Sidebar reaproveita esta mesma instância de
-  // DataTable (só troca tableName/schema, sem remount) — o reset abaixo trata
-  // isso. Mas não pode rodar na primeira montagem, senão sobrescreveria
-  // initialViewMode antes da tela aparecer.
-  const isFirstMount = useRef(true)
+
   useEffect(() => {
-    if (isFirstMount.current) { isFirstMount.current = false; return }
-    setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setViewMode('completo')
+    // Não confia só no initialViewMode vindo do server (searchParams) — numa
+    // navegação client-side (Link do pop-up de pendências) pra uma rota já
+    // visitada sem ?view=, o router do Next.js pode reaproveitar a página já
+    // cacheada e nunca repassar o param novo. Lendo a URL de verdade do
+    // navegador aqui garante que "Ir para janela" sempre abra em "Somente
+    // Novos", mesmo quando isso acontece. Roda em toda troca de tabela
+    // (inclusive a primeira montagem), e também reseta os outros filtros —
+    // a mesma instância de DataTable é reaproveitada ao trocar de tabela
+    // pela Sidebar (só tableName/schema mudam, sem remount).
+    const wantNovos = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'novos'
+    setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null)
+    setViewMode(wantNovos ? 'novos' : 'completo')
   }, [tableName])
 
   useEffect(() => {
