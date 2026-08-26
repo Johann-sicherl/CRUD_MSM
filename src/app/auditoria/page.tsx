@@ -200,6 +200,12 @@ export default function AuditoriaPage() {
   // na hora de exportar — buscado uma vez, não muda durante a sessão.
   const [restrictedProfiles, setRestrictedProfiles] = useState<UserProfile[]>([])
   const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
+  // Custos reais desta máquina (real-costs.json local) — usado pra trocar o
+  // "1" gravado no sql_query pelo valor de verdade em TODA exibição/cópia/
+  // exportação da tela, não só no botão de TXT (ver substituteRealCostValues
+  // e visibleRows abaixo). Recarregado toda vez que a auditoria recarrega,
+  // pra sempre refletir o custo mais recente já imputado nesta máquina.
+  const [localCosts, setLocalCosts] = useState<LocalCostsStore>({})
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
@@ -212,7 +218,10 @@ export default function AuditoriaPage() {
     const params = new URLSearchParams()
     if (tableFilter) params.set('table', tableFilter)
     if (statusFilter) params.set('status', statusFilter)
-    const res = await fetch(`/api/audit-log?${params}`)
+    const [res, localCostsStore] = await Promise.all([
+      fetch(`/api/audit-log?${params}`),
+      fetchLocalCostsStore(),
+    ])
     if (!res.ok) {
       const err = await res.json().catch(() => null)
       setError(err?.error || 'Erro ao carregar auditoria')
@@ -221,6 +230,7 @@ export default function AuditoriaPage() {
     }
     const json = await res.json()
     setRows(json.data || [])
+    setLocalCosts(localCostsStore)
     setSelectedIds(new Set())
     setLoading(false)
   }, [tableFilter, statusFilter])
@@ -251,12 +261,17 @@ export default function AuditoriaPage() {
   // isRelevantForRestrictedProfile. Insert conta sempre, dentro de uma
   // tabela visível.
   const visibleRows = useMemo(() => {
-    if (appUser.isAdmin) return rows
-    return rows.filter(r =>
+    // Substitui aqui, uma vez, pra tela/Copiar/Copiar todas/Exportar
+    // selecionadas/Exportar TXTs todos mostrarem o mesmo custo real — antes
+    // só o Exportar TXTs fazia essa troca, então imputar um custo e olhar a
+    // query (ou usar qualquer outro botão) continuava mostrando "1".
+    const withRealCosts = rows.map(r => ({ ...r, sql_query: substituteRealCostValues(r, localCosts) }))
+    if (appUser.isAdmin) return withRealCosts
+    return withRealCosts.filter(r =>
       appUser.visibleModules.includes(r.table_name) &&
       isRelevantForRestrictedProfile(r, appUser.editableFieldsByTable[r.table_name] ?? [])
     )
-  }, [rows, appUser])
+  }, [rows, localCosts, appUser])
 
   const selectedRows = visibleRows.filter(r => selectedIds.has(r.id))
 
@@ -313,19 +328,16 @@ export default function AuditoriaPage() {
 
   // Um .txt por (tabela, ação) do conjunto de linhas dado — todos com o
   // mesmo instante de exportação no nome, cada um baixado separadamente
-  // (o navegador manda pra pasta padrão de Downloads). Os campos
-  // financeiros (sempre "1" na query gravada, por sigilo) entram com o
-  // valor real do arquivo local só aqui, na hora de exportar — nunca no
+  // (o navegador manda pra pasta padrão de Downloads). rowsToExport já vem
+  // de visibleRows, que já tem o valor real substituído — nunca no
   // Supabase, que continua com 1.
-  const runTxtExport = async (rowsToExport: AuditRow[]) => {
+  const runTxtExport = (rowsToExport: AuditRow[]) => {
     const groups = groupRowsForExport(rowsToExport)
     if (groups.size === 0) { showToast('Nenhuma query pra exportar nesse recorte', true); return }
-    const localCosts = await fetchLocalCostsStore()
     const now = new Date()
     for (const groupRows of groups.values()) {
-      const withRealCosts = groupRows.map(r => ({ ...r, sql_query: substituteRealCostValues(r, localCosts) }))
       const filename = buildExportFilename(now, groupRows[0].operation, groupRows[0].table_name, groupRows.length, appUser.name)
-      triggerDownload(buildSqlText(withRealCosts), filename, 'text/plain')
+      triggerDownload(buildSqlText(groupRows), filename, 'text/plain')
     }
     showToast(`${groups.size} arquivo${groups.size !== 1 ? 's' : ''} .txt exportado${groups.size !== 1 ? 's' : ''}`)
   }
