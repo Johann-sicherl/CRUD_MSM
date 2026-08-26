@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Field, TableSchema, shouldUppercaseField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { Field, TableSchema, shouldUppercaseField, FORCE_TO_ONE_FIELDS, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { bestGhostSuggestion } from '@/lib/textSimilarity'
 import { getAuditKeyFields, keyValueString } from '@/lib/sqlAudit'
 import { getCostItemKey } from '@/lib/csvBaseline'
@@ -169,6 +169,30 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableName, record, isEdit])
+
+  // Checkbox "Pendente de custo alvo (Comercial)" (campo virtual, sem
+  // coluna própria — ver TARGET_COST_PENDING_FIELD em schema.ts): o valor
+  // não vem de `record` (não existe na tabela real), então buildInitial
+  // sempre deixa em branco em modo edição. Busca em pending_target_cost se
+  // este protheus_code está lá (qualquer status) e ajusta o form assim que
+  // chega — sem captura, assume não marcado.
+  useEffect(() => {
+    if (!isEdit || !record) return
+    const pendingField = editableFields.find(f => f.name === TARGET_COST_PENDING_FIELD)
+    if (!pendingField) return
+    let cancelled = false
+    fetch('/api/pending-target-cost')
+      .then(r => r.ok ? r.json() : {})
+      .then((byCode: Record<string, { status: string }>) => {
+        if (cancelled) return
+        const code = String(record.protheus_code ?? '').trim().toUpperCase()
+        const flagged = !!byCode[code]
+        setForm(prev => ({ ...prev, [TARGET_COST_PENDING_FIELD]: flagged ? 'true' : 'false' }))
+      })
+      .catch(() => { /* melhor esforço — mantém em branco se falhar */ })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record, isEdit])
 
   useEffect(() => {
     const fieldsWithFetch = schema.fields.filter(f => f.fetchOptions)

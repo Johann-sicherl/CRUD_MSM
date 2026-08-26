@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { tables, isRealColumnField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 import { recordUpdateAudit, recordDeleteAudit } from '@/lib/sqlAudit'
 import { protectLocalCostsOnUpdate, protectLocalCostsOnDelete } from '@/lib/localCostGuard'
+import { syncPendingTargetCostOnWrite, clearPendingTargetCostOnDelete } from '@/lib/pendingTargetCostGuard'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -55,6 +56,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 
+  try {
+    const protheusCode = String(updateBody.protheus_code ?? beforeRow?.protheus_code ?? '')
+    await syncPendingTargetCostOnWrite(supabaseAdmin, schema, body, protheusCode)
+  } catch { /* best-effort — never block the real operation */ }
+
   return NextResponse.json(data)
 }
 
@@ -76,6 +82,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   // localmente pro registro excluído ficava órfão no arquivo local pra
   // sempre. Melhor esforço, como as outras proteções de local-costs.
   if (data) protectLocalCostsOnDelete(table, schema, data as Record<string, unknown>)
+  if (data) clearPendingTargetCostOnDelete(supabaseAdmin, schema, data as Record<string, unknown>)
 
   // non_combinable_comps grava cada regra como duas linhas espelhadas
   // (A→B e B→A, ver POST doubleInsert) — sem isto, excluir uma linha pela

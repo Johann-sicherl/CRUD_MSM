@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables } from '@/lib/schema'
+import { tables, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { convertCsvRows } from '@/lib/globalUpdateConvert'
 import { extractRealCosts } from '@/lib/localCostExtract'
 import { replaceTableCosts } from '@/lib/localCostStore'
@@ -61,6 +61,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const message = e instanceof Error ? e.message : 'erro desconhecido'
     console.error(`[local-costs] falha ao gravar custos reais locais de "${table}"`, e)
     localCostsError = message
+  }
+
+  // O código só sai da fila de aprovação de custo alvo quando aparece de
+  // verdade numa reimportação do CSV oficial (virou item confirmado no
+  // Protheus) — nunca só por já existir na tabela (isso já era verdade
+  // desde que o Admin cadastrou o item manualmente). Melhor esforço: a
+  // substituição real já aconteceu, uma falha aqui não pode derrubar a
+  // resposta de sucesso do import.
+  if (schema.fields.some(f => f.name === TARGET_COST_PENDING_FIELD)) {
+    try {
+      const codes = Array.from(new Set(
+        insertRows.map(r => String(r.protheus_code ?? '').trim().toUpperCase()).filter(Boolean)
+      ))
+      if (codes.length > 0) {
+        await supabaseAdmin.from('pending_target_cost').delete().in('protheus_code', codes)
+      }
+    } catch (e) {
+      console.error(`[pending-target-cost] falha ao limpar códigos confirmados de "${table}"`, e)
+    }
   }
 
   return NextResponse.json({ inserted: data ?? insertRows.length, localCosts, localCostsError })

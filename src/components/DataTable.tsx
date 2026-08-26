@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, getControllershipPendingFields } from '@/lib/schema'
+import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, getControllershipPendingFields, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
@@ -197,6 +197,13 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     () => appUser.isAdmin ? undefined : new Set(appUser.editableFieldsByTable[tableName] ?? []),
     [appUser, tableName]
   )
+  // accessories/standard_equipment_items: "Somente Novos" pro perfil restrito
+  // não olha mais cost_std = 0 (o Admin agora sempre preenche um custo
+  // sugerido) — usa a fila pending_target_cost em vez disso (ver
+  // TARGET_COST_PENDING_FIELD em schema.ts). Outras tabelas com campo de
+  // controladoria (ex.: equipments — IPI, margem, comissões) continuam no
+  // critério antigo "= 0", sem nenhuma mudança.
+  const usesTargetCostPending = schema.fields.some(f => f.name === TARGET_COST_PENDING_FIELD)
   // Retrato do último import do Atualizador Global de Tabelas para esta
   // tabela (null = a tabela nunca passou por lá — nesse caso nada é
   // destacado). Usado só para o destaque amarelo de linha/célula.
@@ -210,6 +217,11 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // updatedAt}. null = ainda carregando (ou tabela sem coluna financeira,
   // caso em que a busca nem dispara e fica null pra sempre).
   const [localCosts, setLocalCosts] = useState<Record<string, { label: string; values: Record<string, number | null>; updatedAt: string }> | null>(null)
+  // Fila de aprovação de custo alvo (accessories/standard_equipment_items,
+  // perfil restrito) — protheus_code -> status ('novo' | 'em_alteracao').
+  // null = ainda carregando (ou tabela sem esse campo/perfil admin, caso em
+  // que a busca nem dispara e fica null pra sempre).
+  const [pendingTargetCost, setPendingTargetCost] = useState<Record<string, { status: string }> | null>(null)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
   // Columns actually rendered — excludes hideInList fields (e.g. Resumo, kept
@@ -226,7 +238,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // contagem no rodapé e o "Exportar dados". Começa em initialViewMode
   // quando a página carrega com ?view=novos (ver [table]/page.tsx), vindo do
   // cartão de pendências do Dashboard.
-  const [viewMode, setViewMode] = useState<'completo' | 'novos'>(initialViewMode ?? 'completo')
+  const [viewMode, setViewMode] = useState<'completo' | 'novos' | 'em_alteracao'>(initialViewMode ?? 'completo')
 
   useEffect(() => {
     // Não confia só no initialViewMode vindo do server (searchParams) — numa
@@ -239,7 +251,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     // a mesma instância de DataTable é reaproveitada ao trocar de tabela
     // pela Sidebar (só tableName/schema mudam, sem remount).
     const wantNovos = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'novos'
-    setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null)
+    setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setPendingTargetCost(null)
     setViewMode(wantNovos ? 'novos' : 'completo')
   }, [tableName])
 
@@ -273,6 +285,37 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
       .catch(() => { if (!cancelled) setLocalCosts({}) })
     return () => { cancelled = true }
   }, [tableName, schema])
+
+  useEffect(() => {
+    if (!usesTargetCostPending || appUser.isAdmin) return
+    let cancelled = false
+    fetch('/api/pending-target-cost')
+      .then(r => r.ok ? r.json() : {})
+      .then(json => { if (!cancelled) setPendingTargetCost(json) })
+      .catch(() => { if (!cancelled) setPendingTargetCost({}) })
+    return () => { cancelled = true }
+  }, [tableName, usesTargetCostPending, appUser.isAdmin])
+
+  // "✓ Custo Imputado" (Gerente Adm Comercial) — move o código de 'novo'
+  // pra 'em_alteracao': some de "Somente Novos", entra em "Em Alteração de
+  // Custeio" até o Atualizador Global confirmar oficialmente via CSV.
+  const [signalingCode, setSignalingCode] = useState<string | null>(null)
+  const handleSignalCostImputed = async (protheusCode: string) => {
+    const code = protheusCode.trim().toUpperCase()
+    if (!code || signalingCode) return
+    setSignalingCode(code)
+    try {
+      const res = await fetch(`/api/pending-target-cost/${encodeURIComponent(code)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'em_alteracao' }),
+      })
+      if (res.ok) {
+        setPendingTargetCost(prev => ({ ...(prev ?? {}), [code]: { status: 'em_alteracao' } }))
+      }
+    } catch { /* usuário pode tentar de novo */ }
+    setSignalingCode(null)
+  }
 
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
@@ -429,20 +472,31 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   const isRestrictedControladoriaView = !appUser.isAdmin && zeroForceFields.length > 0
 
   // Mesmo critério do destaque amarelo (linha nova / campo alterado desde o
-  // último import, OU pendente de custo real pro perfil restrito), num só
-  // lugar — usado tanto pra pintar a linha/célula quanto pra filtrar em
-  // "Somente Novos".
+  // último import, OU pendente de custo real/custo alvo pro perfil
+  // restrito), num só lugar — usado tanto pra pintar a linha/célula quanto
+  // pra filtrar em "Somente Novos"/"Em processo de alteração de custeio".
+  // pendingKind só existe pra accessories/standard_equipment_items
+  // (usesTargetCostPending): 'novo' = Admin marcou o checkbox, aguardando a
+  // Gerente; 'em_alteracao' = Gerente já sinalizou que imputou o custo,
+  // aguardando confirmação oficial via Atualizador Global; null = fora da
+  // fila (nem pendente, nem em alteração).
   const getBaselineInfo = useCallback((row: Record<string, unknown>) => {
+    if (usesTargetCostPending && !appUser.isAdmin) {
+      const code = String(row.protheus_code ?? '').trim().toUpperCase()
+      const entry = pendingTargetCost?.[code]
+      const pendingKind = entry ? (entry.status === 'em_alteracao' ? 'em_alteracao' : 'novo') : null
+      return { isNewRow: pendingKind === 'novo', pendingKind, baselineRow: undefined as Record<string, unknown> | undefined }
+    }
     if (isRestrictedControladoriaView) {
       const isNewRow = zeroForceFields.some(f => Number(row[f.name]) === 0)
-      return { isNewRow, baselineRow: undefined as Record<string, unknown> | undefined }
+      return { isNewRow, pendingKind: null, baselineRow: undefined as Record<string, unknown> | undefined }
     }
     const key = getRowKey(schema, row)
     const keyIsAmbiguous = !!baseline?.ambiguousKeys.has(key) || liveDuplicateKeys.has(key)
     const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(key)
     const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
-    return { isNewRow, baselineRow }
-  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields])
+    return { isNewRow, pendingKind: null, baselineRow }
+  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, appUser.isAdmin, pendingTargetCost])
 
   // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
@@ -451,9 +505,11 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     rows = applyListSortBy(rows, schema.listSortBy, listFields, lookups)
     if (viewMode === 'novos' && (isRestrictedControladoriaView || baseline !== null)) {
       rows = rows.filter(row => getBaselineInfo(row).isNewRow)
+    } else if (viewMode === 'em_alteracao' && usesTargetCostPending) {
+      rows = rows.filter(row => getBaselineInfo(row).pendingKind === 'em_alteracao')
     }
     return rows
-  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, tableName, viewMode, baseline, isRestrictedControladoriaView, getBaselineInfo])
+  }, [pageData, colFilters, lookups, listFields, duplicateCountMaps, schema, localCosts, tableName, viewMode, baseline, isRestrictedControladoriaView, usesTargetCostPending, getBaselineInfo])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // This gives cascading behavior — each dropdown shows only what's still possible
@@ -640,13 +696,24 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           </button>
           <button
             onClick={() => setViewMode('novos')}
-            title={isRestrictedControladoriaView
-              ? 'Mostrar só os registros com algum campo de controladoria/fiscal/precificação ainda em 0 (pendente)'
-              : 'Mostrar só os registros criados depois do último import no Atualizador Global'}
+            title={usesTargetCostPending
+              ? 'Mostrar só os registros ainda sem custo alvo aprovado pela Comercial'
+              : isRestrictedControladoriaView
+                ? 'Mostrar só os registros com algum campo de controladoria/fiscal/precificação ainda em 0 (pendente)'
+                : 'Mostrar só os registros criados depois do último import no Atualizador Global'}
             className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'novos' ? 'bg-amber-500/15 text-amber-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
           >
             Somente Novos
           </button>
+          {usesTargetCostPending && (
+            <button
+              onClick={() => setViewMode('em_alteracao')}
+              title="Mostrar só os registros que a Comercial já sinalizou como custo imputado, aguardando confirmação oficial via Atualizador Global"
+              className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'em_alteracao' ? 'bg-blue-500/15 text-blue-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+            >
+              Em Alteração de Custeio
+            </button>
+          )}
         </div>
       )}
       {schema.protheusStatusCheckField && (
@@ -820,7 +887,19 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
         )}
       </div>
 
-      {isRestrictedControladoriaView && (
+      {isRestrictedControladoriaView && usesTargetCostPending && (
+        <div className="flex items-center gap-3 flex-wrap text-[11px] text-outline">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
+            registro em amarelo = aguardando custo alvo (Somente Novos)
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500/40 border border-blue-500/60" />
+            registro em azul = custo já imputado, aguardando confirmação via Atualizador Global (Em Alteração de Custeio)
+          </div>
+        </div>
+      )}
+      {isRestrictedControladoriaView && !usesTargetCostPending && (
         <div className="flex items-center gap-1.5 text-[11px] text-outline">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-500/60" />
           registro em amarelo = tem algum campo de controladoria/fiscal/precificação ainda em 0 (pendente)
@@ -927,9 +1006,9 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                       // Linha criada depois do último import CSV (não existia no
                       // retrato) — destaque na linha inteira. Só faz sentido
                       // quando a tabela já tem baseline (baseline !== null).
-                      const { isNewRow, baselineRow } = getBaselineInfo(row)
+                      const { isNewRow, pendingKind, baselineRow } = getBaselineInfo(row)
                       return (
-                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : ''}`}>
+                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : pendingKind === 'em_alteracao' ? 'bg-blue-500/10' : ''}`}>
                         <td className="px-3 py-3 w-8">
                           <input
                             type="checkbox"
@@ -994,7 +1073,17 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                             </td>
                           )
                         })}
-                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary/5 group-hover:bg-primary/10' : isNewRow ? 'bg-amber-500/10 group-hover:bg-amber-500/15' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
+                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary/5 group-hover:bg-primary/10' : isNewRow ? 'bg-amber-500/10 group-hover:bg-amber-500/15' : pendingKind === 'em_alteracao' ? 'bg-blue-500/10 group-hover:bg-blue-500/15' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
+                          {usesTargetCostPending && !appUser.isAdmin && pendingKind === 'novo' && (
+                            <button
+                              onClick={() => handleSignalCostImputed(String(row.protheus_code ?? ''))}
+                              disabled={signalingCode === String(row.protheus_code ?? '').trim().toUpperCase()}
+                              title="Sinaliza que o custo alvo já foi imputado — sai de Somente Novos e entra em Em Alteração de Custeio até ser confirmado via Atualizador Global"
+                              className="text-blue-400 hover:text-blue-300 text-xs font-medium mr-3 transition-colors disabled:opacity-50"
+                            >
+                              ✓ Custo Imputado
+                            </button>
+                          )}
                           <button
                             onClick={() => { setEditRecord(row); setModalOpen(true) }}
                             className="text-outline hover:text-primary text-xs font-medium mr-3 transition-colors"

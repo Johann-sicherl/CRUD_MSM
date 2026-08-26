@@ -80,6 +80,7 @@ export interface Field {
   similarTextSuggest?: boolean // text field, "+ Novo Registro" only: as the user types, suggests the closest existing values already in this same column (fuzzy match — catches near-duplicates like singular/plural variants), to keep naming standardized
   batchMultiSelect?: boolean // batchInsert tables only, "+ Novo Registro" (not editing a single queued item): renders this field as a checkbox list (using its fetchOptions) instead of a single dropdown — every value checked here is crossed with whatever else varies (ex.: accessories picked via cascadeLookup) when items are added to the queue, producing one queue item per combination
   pairKeyFrom?: [string, string] // virtual, sort-only field: sort key is these two other field names' values sorted+joined, so both directions of an unordered pair (ex.: linha A→B e sua espelhada B→A) land next to each other regardless of which one holds which value — use in schema.listSortBy
+  virtual?: boolean          // form-editable field with NO column of its own in the real table — rendered and submitted like any other field, but excluded from insertBody/updateBody/SQL de auditoria/comparação de CSV (ver isRealColumnField). Usado por campos cujo efeito colateral é gravar em outro lugar (ex.: target_cost_pending -> tabela pending_target_cost), nunca na própria tabela.
 }
 
 export interface TableSchema {
@@ -117,6 +118,13 @@ export const FORCE_TO_ONE_FIELDS = [
   'warranty_rate',
   'parts_provision_rate',
 ]
+
+// Nome do campo virtual (ver Field.virtual) que o Admin marca em Cadastro de
+// Componentes/Cadastro de Equipamentos pra sinalizar "preciso que a Gerente
+// Adm Comercial aprove um custo alvo pra este código" — grava/apaga uma
+// linha em pending_target_cost (ver pendingTargetCostGuard.ts), nunca uma
+// coluna em accessories/standard_equipment_items.
+export const TARGET_COST_PENDING_FIELD = 'target_cost_pending'
 
 // Colunas de controladoria/fiscal/precificação desta tabela que ainda são um
 // sinal confiável de "pendente" — mesmo critério usado pelo filtro "Somente
@@ -242,6 +250,7 @@ export const tables: Record<string, TableSchema> = {
         validateExistsIn: { table: 'general_alerts', field: 'legacy_id', displayField: 'description',
           errorMessage: 'Alerta não encontrado — coluna "Alerta" deve conter o ID numérico ou o texto exato do alerta (ou ficar vazio/0 para nenhum)' } },
       { name: 'cost_std', label: 'Custo (R$)',type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
+      { name: TARGET_COST_PENDING_FIELD, label: 'Pendente de custo alvo (Comercial)', type: 'boolean', nullable: false, defaultValue: false, hideInList: true, virtual: true },
       { name: 'resumo', label: 'Resumo', type: 'text', nullable: true, showInList: true, hideInForm: true, hideInList: true, listFilterType: 'text', excludeFromExport: true,
         concatFrom: ['legacy_equipment_id', 'processor', 'memory', 'storage', 'graphics_card', 'conveyor_belt_load_capacity_kg',
           'tube_power_kv', 'certificate', 'conveyor_belt_type', 'motopolia_type', 'language', 'color', 'status'] },
@@ -294,6 +303,7 @@ export const tables: Record<string, TableSchema> = {
         requiredWhen: { field: 'legacy_group_id', values: [11] } }, // MONITORES
       { name: 'quantity_monitor_totem',  label: 'Qtd. Monitor Totem',  type: 'number',  nullable: true },
       { name: 'cost_std',                label: 'Custo (R$)',           type: 'decimal', nullable: false, defaultValue: 0, exclusiveMin: 0, showInList: true },
+      { name: TARGET_COST_PENDING_FIELD, label: 'Pendente de custo alvo (Comercial)', type: 'boolean', nullable: false, defaultValue: false, hideInList: true, virtual: true },
       { name: 'description',             label: 'Descrição',            type: 'textarea',nullable: true },
       { name: 'legacy_general_alert_id', label: 'Alerta', type: 'number', nullable: true, defaultValue: 0,
         lookupFrom: { table: 'general_alerts', keyField: 'legacy_id', displayField: 'description' },
@@ -628,14 +638,15 @@ export function getEditableFields(tableName: string): Field[] {
 // A field whose lookupFrom sets sourceField is entirely computed by joining
 // through ANOTHER field's value (e.g. accessory_name resolved from
 // protheus_code), a concatFrom field just joins other fields' own resolved
-// values, and a countDuplicatesOf field tallies another field's repeated
-// values — none of these has a column of its own in the real database
-// table, they only exist in this schema for the app's own list/form display.
+// values, a countDuplicatesOf field tallies another field's repeated
+// values, and a virtual field's effect lives in outra tabela inteira (ex.:
+// target_cost_pending) — nenhum desses tem coluna própria na tabela real,
+// só existem neste schema para exibição/formulário do próprio app.
 // Used by the Atualizador Global de Tabelas MSM to compare a CSV export
 // (which only has real columns) against the actual table structure, not the
 // app's schema.
 export function isRealColumnField(field: Field): boolean {
-  return !field.lookupFrom?.sourceField && !field.concatFrom && !field.countDuplicatesOf && !field.pairKeyFrom
+  return !field.lookupFrom?.sourceField && !field.concatFrom && !field.countDuplicatesOf && !field.pairKeyFrom && !field.virtual
 }
 
 // Regra da aplicação inteira (não específica de nenhuma tabela): todo texto

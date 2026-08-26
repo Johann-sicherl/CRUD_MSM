@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { tables, getSearchableFields, isRealColumnField } from '@/lib/schema'
 import { recordInsertAudit } from '@/lib/sqlAudit'
 import { protectLocalCostsOnInsert } from '@/lib/localCostGuard'
+import { syncPendingTargetCostOnWrite } from '@/lib/pendingTargetCostGuard'
 
 type RouteParams = { params: { table: string } }
 
@@ -187,6 +188,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await recordInsertAudit(supabaseAdmin, table, schema, insertBody)
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
+
+  try {
+    await syncPendingTargetCostOnWrite(supabaseAdmin, schema, body, String(insertBody.protheus_code ?? ''))
+  } catch { /* best-effort — never block the real operation */ }
 
   return NextResponse.json(data, { status: 201 })
 }
