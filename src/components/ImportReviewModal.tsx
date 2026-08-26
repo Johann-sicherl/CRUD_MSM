@@ -13,6 +13,14 @@ interface Props {
 
 type Phase = 'validating' | 'review' | 'importing' | 'done'
 
+// Formas aceitas de escrever um campo boolean numa planilha (ex.: "Pendente
+// de custo alvo (Comercial)") — sempre normalizadas pro literal "true"/
+// "false" que a API espera (ver /api/[table]/route.ts: só a string exata
+// "true" vira TRUE, qualquer outra coisa — "Sim", "TRUE", "1", "ok" —
+// silenciosamente virava false sem aviso nenhum antes desta validação).
+const BOOL_TRUE  = new Set(['true', 'sim', 's', 'yes', 'y', '1', 'verdadeiro'])
+const BOOL_FALSE = new Set(['false', 'não', 'nao', 'n', 'no', '0', 'falso'])
+
 interface LookupEntry {
   byKeyOrName: Map<string, string>  // lowercase key or name → resolved key
   byKey: Map<string, string>        // key → display name (for reverse lookup)
@@ -37,6 +45,8 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   const numericFields = schema.fields.filter(f =>
     (f.type === 'number' || f.type === 'decimal') && !f.isPk && !f.isReadonly && !lFieldNames.has(f.name)
   )
+  const boolFields     = editableCols.filter(f => f.type === 'boolean')
+  const boolFieldNames = new Set(boolFields.map(f => f.name))
   const selectAllowed = useMemo(() => {
     const map: Record<string, Map<string, string>> = {}
     for (const f of sFields) {
@@ -64,7 +74,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
 
   // On mount: fetch lookup tables, build cache, pre-validate unique fields against DB
   useEffect(() => {
-    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0 && numericFields.length === 0) { setPhase('review'); return }
+    if (lFields.length === 0 && uniqueFields.length === 0 && dFields.length === 0 && sFields.length === 0 && numericFields.length === 0 && boolFields.length === 0) { setPhase('review'); return }
 
     ;(async () => {
       const cache: LookupCache = {}
@@ -199,6 +209,35 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
           }
         }
 
+        // Boolean fields: aceita várias formas de escrever sim/não e sempre
+        // grava o literal "true"/"false" — célula vazia cai no default do
+        // campo (parseImportFile já resolveu isso pra "true"/"false" também,
+        // mas resolve de novo aqui por segurança caso a coluna nem exista na
+        // planilha). Mostra "Sim"/"Não" no campo (via `display`), mas o que é
+        // de fato submetido pra API é sempre o literal normalizado.
+        for (const f of boolFields) {
+          const raw = (newRows[ri][f.name] ?? '').trim()
+          if (!newDisplay[ri]) newDisplay[ri] = {}
+          if (!raw) {
+            const isTrue = f.defaultValue === true || f.defaultValue === 'true'
+            newRows[ri][f.name] = isTrue ? 'true' : 'false'
+            newDisplay[ri][f.name] = isTrue ? 'Sim' : 'Não'
+            continue
+          }
+          const lower = raw.toLowerCase()
+          if (BOOL_TRUE.has(lower)) {
+            newRows[ri][f.name] = 'true'
+            newDisplay[ri][f.name] = 'Sim'
+          } else if (BOOL_FALSE.has(lower)) {
+            newRows[ri][f.name] = 'false'
+            newDisplay[ri][f.name] = 'Não'
+          } else {
+            newDisplay[ri][f.name] = raw
+            if (!newWarnings[ri]) newWarnings[ri] = {}
+            newWarnings[ri][f.name] = `"${raw}" inválido — use Sim ou Não`
+          }
+        }
+
         // Numeric fields must actually parse as a number, and respect exclusiveMin when set
         for (const f of numericFields) {
           const val = (newRows[ri][f.name] ?? '').trim()
@@ -223,6 +262,37 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
   }, [])
 
   const handleChange = useCallback((ri: number, fieldName: string, val: string) => {
+    if (boolFieldNames.has(fieldName)) {
+      // Campo boolean: mesmo padrão de lookup — mostra o texto digitado,
+      // resolve pro literal "true"/"false" por trás.
+      setDisplay(prev => ({ ...prev, [ri]: { ...prev[ri], [fieldName]: val } }))
+      const trimmed = val.trim().toLowerCase()
+      const field = boolFields.find(f => f.name === fieldName)
+
+      const setWarn = (msg: string) => setWarnings(prev => ({ ...prev, [ri]: { ...prev[ri], [fieldName]: msg } }))
+      const clearWarn = () => setWarnings(prev => {
+        if (!prev[ri]?.[fieldName]) return prev
+        const next = { ...prev, [ri]: { ...prev[ri] } }
+        delete next[ri][fieldName]
+        if (!Object.keys(next[ri]).length) delete next[ri]
+        return next
+      })
+
+      if (!trimmed) {
+        const isTrue = field?.defaultValue === true || field?.defaultValue === 'true'
+        setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: isTrue ? 'true' : 'false' } : r))
+        clearWarn()
+      } else if (BOOL_TRUE.has(trimmed)) {
+        setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: 'true' } : r))
+        clearWarn()
+      } else if (BOOL_FALSE.has(trimmed)) {
+        setRows(prev => prev.map((r, i) => i === ri ? { ...r, [fieldName]: 'false' } : r))
+        clearWarn()
+      } else {
+        setWarn(`"${val.trim()}" inválido — use Sim ou Não`)
+      }
+      return
+    }
     if (lFieldNames.has(fieldName)) {
       // Lookup field: update display, resolve live against cache
       setDisplay(prev => ({ ...prev, [ri]: { ...prev[ri], [fieldName]: val } }))
@@ -351,7 +421,7 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
         }
       }
     }
-  }, [lFieldNames, lFields, selectAllowed, numericFields])
+  }, [lFieldNames, lFields, selectAllowed, numericFields, boolFieldNames, boolFields])
 
   const handleRemove = (ri: number) => {
     setRows(prev => prev.filter((_, i) => i !== ri))
@@ -530,11 +600,17 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
                       <td className={`px-3 py-1.5 font-mono text-[10px] select-none ${rowHasError ? 'text-error/60' : 'text-outline/40'}`}>{ri + 1}</td>
                       {editableCols.map(f => {
                         const isLookup = lFieldNames.has(f.name)
+                        const isBoolField = boolFieldNames.has(f.name)
                         const warn     = allWarnings[ri]?.[f.name]
-                        const shownVal = isLookup
+                        const shownVal = (isLookup || isBoolField)
                           ? (display[ri]?.[f.name] ?? row[f.name] ?? '')
                           : (row[f.name] === 'null' ? '' : (row[f.name] ?? ''))
                         const resolvedId = isLookup && !warn ? row[f.name] : null
+                        // Mostra exatamente o literal ("true"/"false") que vai
+                        // pro banco — é a dúvida que gerou este ajuste: sem
+                        // isso não dava pra saber se ia gravar "Sim", "true"
+                        // ou qualquer outra coisa.
+                        const resolvedBool = isBoolField && !warn ? row[f.name] : null
 
                         return (
                           <td key={f.name} className="px-1.5 py-1.5">
@@ -543,11 +619,11 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
                               value={shownVal}
                               onChange={e => handleChange(ri, f.name, e.target.value)}
                               disabled={phase === 'importing'}
-                              title={warn ?? (resolvedId ? `ID: ${resolvedId}` : undefined)}
+                              title={warn ?? (resolvedId ? `ID: ${resolvedId}` : resolvedBool ? `grava: ${resolvedBool}` : undefined)}
                               className={`w-full min-w-[80px] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 transition-colors disabled:opacity-40 ${
                                 warn
                                   ? 'bg-error/10 border border-error/60 text-error focus:border-error focus:ring-error/20'
-                                  : resolvedId
+                                  : resolvedId || resolvedBool
                                     ? 'bg-green-900/10 border border-green-700/40 text-on-surface focus:border-green-600 focus:ring-green-600/20'
                                     : 'bg-surface-container border border-outline-variant/50 text-on-surface focus:border-primary focus:ring-primary/20'
                               }`}
@@ -557,6 +633,9 @@ export default function ImportReviewModal({ schema, tableName, initialRows, onCl
                             )}
                             {resolvedId && (
                               <div className="text-[9px] text-green-500/70 mt-0.5 leading-tight font-mono">ID: {resolvedId}</div>
+                            )}
+                            {resolvedBool && (
+                              <div className="text-[9px] text-green-500/70 mt-0.5 leading-tight font-mono">grava: {resolvedBool}</div>
                             )}
                           </td>
                         )
