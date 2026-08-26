@@ -1426,7 +1426,6 @@ function FieldInput({
       <label className="block text-[14.4px] font-medium text-on-surface-variant mb-1">
         {field.label}
         {isRequired && <span className="text-primary ml-1">*</span>}
-        {disabled && <span className="ml-2 text-[12px] text-outline normal-case font-normal">(somente controladoria/preço/fiscal)</span>}
       </label>
       <fieldset disabled={disabled} className={`border-0 p-0 m-0 min-w-0${disabled ? ' opacity-50' : ''}`}>
         {input}
