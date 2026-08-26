@@ -273,18 +273,24 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     return () => { cancelled = true }
   }, [tableName])
 
-  // Só busca se a tabela realmente tem alguma coluna financeira (as que o
-  // Atualizador Global sempre grava como 1 no Supabase) — nas demais fica
-  // null pra sempre, e a coluna renderiza normal (não existe pra elas).
-  useEffect(() => {
-    if (!schema.fields.some(f => FORCE_TO_ONE_FIELDS.includes(f.name))) return
-    let cancelled = false
-    fetch(`/api/local-costs?table=${tableName}`)
-      .then(r => r.ok ? r.json() : {})
-      .then(json => { if (!cancelled) setLocalCosts(json) })
-      .catch(() => { if (!cancelled) setLocalCosts({}) })
-    return () => { cancelled = true }
-  }, [tableName, schema])
+  // Extraído pra função (em vez de só um efeito) porque o valor real
+  // capturado localmente muda a cada edição de campo de controladoria/
+  // fiscal/precificação nesta MESMA tela — sem recarregar aqui de novo depois
+  // de salvar, a célula ficava com o valor antigo até um F5 (que reexecuta o
+  // efeito do zero). Chamada tanto no mount quanto em todo onSaved/onDone
+  // abaixo, junto com fetchData().
+  const hasForceFields = schema.fields.some(f => FORCE_TO_ONE_FIELDS.includes(f.name))
+  const fetchLocalCosts = useCallback(async () => {
+    if (!hasForceFields) return
+    try {
+      const res = await fetch(`/api/local-costs?table=${tableName}`)
+      setLocalCosts(res.ok ? await res.json() : {})
+    } catch {
+      setLocalCosts({})
+    }
+  }, [tableName, hasForceFields])
+
+  useEffect(() => { fetchLocalCosts() }, [fetchLocalCosts])
 
   useEffect(() => {
     if (!usesTargetCostPending || appUser.isAdmin) return
@@ -640,6 +646,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     if (res.ok) {
       showToast('Registro excluído com sucesso')
       fetchData()
+      fetchLocalCosts()
     } else {
       const err = await res.json()
       showToast(err.error || 'Erro ao excluir', true)
@@ -662,6 +669,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
       fail > 0,
     )
     fetchData()
+    fetchLocalCosts()
   }
 
   const showToast = (msg: string, isError = false) => {
@@ -1163,6 +1171,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setBulkEditOpen(false)
             setSelectedIds(new Set())
             fetchData()
+            fetchLocalCosts()
             showToast(
               fail === 0
                 ? `${ok} registro${ok !== 1 ? 's' : ''} atualizado${ok !== 1 ? 's' : ''} com sucesso`
@@ -1206,6 +1215,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           onSaved={count => {
             setDepItemsModal(false)
             fetchData()
+            fetchLocalCosts()
             showToast(`${count} registros inseridos!`)
           }}
         />
@@ -1218,6 +1228,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           onSaved={count => {
             setRollerModal(false)
             fetchData()
+            fetchLocalCosts()
             showToast(`${count} registros inseridos!`)
           }}
         />
@@ -1230,6 +1241,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           onSaved={count => {
             setNonCombModal(false)
             fetchData()
+            fetchLocalCosts()
             showToast(`${count} registros inseridos!`)
           }}
         />
@@ -1247,6 +1259,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setModalOpen(false)
             setEditRecord(null)
             fetchData()
+            fetchLocalCosts()
             showToast(editRecord ? 'Registro atualizado!' : 'Registro criado!')
           }}
         />
@@ -1262,6 +1275,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setImportRows(null)
             window.dispatchEvent(new CustomEvent('import-review:close'))
             fetchData()
+            fetchLocalCosts()
             showToast(`${saved} registro${saved !== 1 ? 's' : ''} importado${saved !== 1 ? 's' : ''} com sucesso!`)
           }}
         />
