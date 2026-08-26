@@ -25,6 +25,11 @@ interface AuditRow {
   // então também não precisa.
   payload?: Record<string, unknown> | null
   baseline?: Record<string, unknown> | null
+  // Update só: nomes dos campos que de fato mudaram, já calculados no
+  // servidor (inclui campos financeiros forçados a 1 — ver forceIncludeFields
+  // em recordUpdateAudit). Null numa linha antiga, de antes desta coluna
+  // existir — cai no recálculo por baseline/payload abaixo.
+  changed_fields?: string[] | null
 }
 
 // Perfil restrito (não-admin), dentro de uma tabela já visível pra ele:
@@ -42,6 +47,13 @@ interface AuditRow {
 function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[]): boolean {
   if (row.operation === 'delete') return false
   if (row.operation === 'insert') return true
+  // changed_fields (calculado no servidor, ver recordUpdateAudit) já conta
+  // certo mesmo quando o único campo alterado é financeiro — baseline e
+  // payload sempre mostram "1" pra esses, então re-diffar aqui (como o
+  // fallback abaixo faz) nunca detectaria essa troca de segredo por segredo,
+  // e uma edição só de margem/comissão/custo virava invisível pro próprio
+  // perfil que a fez.
+  if (row.changed_fields) return row.changed_fields.some(name => editableFields.includes(name))
   if (!row.baseline || !row.payload) return false
   const changed = diffChangedFields(row.baseline, row.payload)
   return Object.keys(changed).some(name => editableFields.includes(name))

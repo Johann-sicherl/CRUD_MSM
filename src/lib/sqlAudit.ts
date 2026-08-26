@@ -234,6 +234,14 @@ export async function recordUpdateAudit(
     sql_query: buildUpdateSQL(table, schema, changed, keyFields, keyRow),
     payload: updateBody,
     baseline,
+    // Guarda os nomes já calculados aqui (inclui forceIncludeFields) — sem
+    // isso, quem precisar saber "o que mudou" depois (ex.: a Auditoria
+    // decidindo se um perfil restrito pode ver esta linha) só teria
+    // baseline/payload pra re-diffar, e um campo financeiro sempre aparece
+    // como "1" nos dois lados — a edição de custo/margem/comissão vira
+    // invisível de novo, mesmo já tendo sido corrigida aqui na hora de
+    // montar o sql_query.
+    changed_fields: Object.keys(changed),
     status: 'pending' as const,
   }
 
