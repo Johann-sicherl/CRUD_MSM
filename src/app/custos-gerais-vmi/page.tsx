@@ -5,6 +5,7 @@ import type { Field } from '@/lib/schema'
 import { tables } from '@/lib/schema'
 import { getCostItemKey } from '@/lib/csvBaseline'
 import { exportVisibleData, parseImportFile } from '@/lib/importExport'
+import { useAppAuth } from '@/lib/appAuthContext'
 import ColumnFilter from '@/components/ColumnFilter'
 import CostBulkEditModal from '@/components/CostBulkEditModal'
 import CostImportReviewModal from '@/components/CostImportReviewModal'
@@ -73,6 +74,7 @@ function rowKey(row: CostRow): string {
 }
 
 export default function CustosGeraisVmiPage() {
+  const { user: appUser } = useAppAuth()
   const [rows, setRows] = useState<CostRow[]>([])
   const [allPhysical, setAllPhysical] = useState<PhysicalRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,6 +90,11 @@ export default function CustosGeraisVmiPage() {
   const [importLoading, setImportLoading] = useState(false)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Códigos com custo alvo sugerido pelo Admin ainda pendente de aprovação
+  // da Comercial (fila pending_target_cost, status 'novo' só — 'em_alteracao'
+  // já foi repassado, não faz mais parte do que falta exportar). Só o Admin
+  // usa isso (botão "Exportar Custos Sugeridos" abaixo).
+  const [pendingNovoCodes, setPendingNovoCodes] = useState<Set<string>>(new Set())
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -175,6 +182,18 @@ export default function CustosGeraisVmiPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  useEffect(() => {
+    if (!appUser.isAdmin) return
+    fetch('/api/pending-target-cost')
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, { status: string }>) => {
+        setPendingNovoCodes(new Set(
+          Object.entries(data).filter(([, v]) => v.status === 'novo').map(([code]) => code)
+        ))
+      })
+      .catch(() => {})
+  }, [appUser.isAdmin])
+
   const filteredRows = useMemo(() => applyFilters(rows, colFilters), [rows, colFilters])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
@@ -223,6 +242,21 @@ export default function CustosGeraisVmiPage() {
       c.key === 'cost' ? (row.cost ?? '') : getDisplayValue(row, c.key)
     ))
     exportVisibleData(headers, rowData, 'custos_gerais_vmi.xlsx')
+  }
+
+  // Só o Admin vê este botão. Exporta, no MESMO formato que "↑ Importar
+  // Excel" já espera (Código Protheus / Custo (R$)), só os códigos ainda
+  // pendentes de aprovação de custo alvo pela Comercial. O custo aqui é o
+  // sugerido pelo Admin — nunca vai pro Supabase, só existe no arquivo local
+  // desta máquina; este arquivo é o único jeito de a Comercial vê-lo, e o
+  // envio (e-mail, WhatsApp etc.) é manual, fora do sistema.
+  const handleExportSuggestedCosts = () => {
+    const pendingRows = rows.filter(r => pendingNovoCodes.has(r.code))
+    const headers = COLUMNS.map(c => c.label)
+    const rowData = pendingRows.map(row => COLUMNS.map(c =>
+      c.key === 'cost' ? (row.cost ?? '') : getDisplayValue(row, c.key)
+    ))
+    exportVisibleData(headers, rowData, 'custos_sugeridos_pendentes.xlsx')
   }
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,6 +316,16 @@ export default function CustosGeraisVmiPage() {
             >
               ↓ Exportar dados
             </button>
+            {appUser.isAdmin && (
+              <button
+                onClick={handleExportSuggestedCosts}
+                disabled={pendingNovoCodes.size === 0}
+                title="Exporta os custos alvo sugeridos ainda não repassados à Comercial — envie este arquivo pra ela importar via 'Importar Excel' na máquina dela"
+                className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ↓ Exportar Custos Sugeridos{pendingNovoCodes.size > 0 ? ` (${pendingNovoCodes.size})` : ''}
+              </button>
+            )}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={importLoading}
