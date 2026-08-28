@@ -22,11 +22,16 @@ function applyZoom(pct: number) {
 }
 
 export default function ThemeZoomBar() {
-  const [theme, setTheme] = useState('cyberpunk')
+  // "Luz" é o padrão pra quem nunca escolheu um tema nesta máquina — não tem
+  // a animação contínua de scanline nem o grid decorativo (ver globals.css,
+  // --scan-visible), mais leve pra computador de baixa performance. Quem já
+  // tinha um tema salvo neste navegador não é afetado — só computador novo,
+  // sem preferência gravada ainda, começa aqui.
+  const [theme, setTheme] = useState('luz')
   const [zoom,  setZoom]  = useState(100)
 
   useEffect(() => {
-    const t = localStorage.getItem('app-theme') ?? 'cyberpunk'
+    const t = localStorage.getItem('app-theme') ?? 'luz'
     setTheme(t)
     applyTheme(t)
 

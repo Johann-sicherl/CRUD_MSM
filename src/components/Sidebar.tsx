@@ -84,6 +84,13 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   <Link
                     key={m.key}
                     href={m.href}
+                    // Sem pré-carregar em segundo plano o código de toda tela
+                    // listada aqui assim que o menu aparece — em computador
+                    // de baixa performance isso competia por CPU/rede com o
+                    // que a pessoa realmente estava usando. Cada tela ainda
+                    // carrega normalmente ao ser aberta, só não adianta o
+                    // trabalho de telas que talvez nunca sejam abertas.
+                    prefetch={false}
                     className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
                       isActive
                         ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
@@ -104,6 +111,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               </div>
               <Link
                 href="/configuracao-usuarios"
+                prefetch={false}
                 className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
                   pathname === '/configuracao-usuarios'
                     ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'

@@ -11,10 +11,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className="bg-background text-on-surface min-h-screen">
-        {/* Restore theme + zoom before first paint to avoid flash */}
+        {/* Restore theme + zoom before first paint to avoid flash. Default
+            'luz' (sem animação contínua de scanline — ver ThemeZoomBar.tsx)
+            só vale pra quem nunca escolheu um tema nesta máquina. */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function(){
-            var t=localStorage.getItem('app-theme')||'cyberpunk';
+            var t=localStorage.getItem('app-theme')||'luz';
             document.documentElement.dataset.theme=t;
             document.documentElement.style.colorScheme=t==='luz'?'light':'dark';
             var z=parseInt(localStorage.getItem('app-zoom')||'100',10);
