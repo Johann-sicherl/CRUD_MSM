@@ -50,7 +50,11 @@ export function extractRealCosts(
       const raw = rawByLowerName.get(fname.toLowerCase())
       if (raw === undefined || isBlankCell(raw)) { values[fname] = null; continue }
       const v = converted[fname]
-      values[fname] = typeof v === 'number' ? v : null
+      // Arredonda pra 2 casas — o CSV às vezes traz um valor calculado (ex.:
+      // custo total ÷ quantidade) com uma cauda decimal enorme, sem
+      // significado nenhum pra um custo real e que quebra a colagem em
+      // planilha (o Excel interpreta errado um decimal com muitas casas).
+      values[fname] = typeof v === 'number' ? Math.round(v * 100) / 100 : null
       if (typeof v === 'number') hasAny = true
     }
     if (!hasAny) continue // linha sem nenhum valor financeiro real no CSV — nada a guardar
