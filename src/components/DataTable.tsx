@@ -596,7 +596,10 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schema.protheusStatusCheckField, protheusCreds, protheusStatusMap])
 
-  const handleExportVisible = () => {
+  // Compartilhado entre "Exportar dados" (baixa .xlsx) e "Copiar Dados"
+  // (copia como texto, sem gerar arquivo nenhum) — os dois mostram exatamente
+  // as mesmas colunas/linhas visíveis na tela agora.
+  const buildVisibleTableData = () => {
     const includeProtheusFlag = !!schema.protheusStatusCheckField && !!protheusStatusMap
     // View-only columns (e.g. Resumo) never leave this screen — Exportar
     // Matriz/Importar already exclude them via hideInForm; this is the
@@ -620,8 +623,24 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
         return getDisplayValue(row, f.name, f, lookups, listFields, duplicateCountMaps, localCosts, schema, tableName)
       }),
     ])
+    return { headers, rowData }
+  }
+
+  const handleExportVisible = () => {
+    const { headers, rowData } = buildVisibleTableData()
     const safeLabel = schema.label.replace(/[/\\?%*:|"<>]/g, '-')
     exportVisibleData(headers, rowData, `${safeLabel}.xlsx`)
+  }
+
+  // "Copiar Dados" — mesmas colunas/linhas de "Exportar dados", só que direto
+  // pra área de transferência como texto separado por TAB, pra colar numa
+  // planilha já aberta sem precisar baixar e abrir um arquivo .xlsx.
+  const handleCopyVisible = () => {
+    const { headers, rowData } = buildVisibleTableData()
+    const tsv = [headers, ...rowData].map(r => r.join('\t')).join('\n')
+    navigator.clipboard.writeText(tsv)
+      .then(() => showToast(`${rowData.length} registro${rowData.length !== 1 ? 's' : ''} copiado${rowData.length !== 1 ? 's' : ''} — cole na planilha`))
+      .catch(() => showToast('Não foi possível copiar', true))
   }
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -767,6 +786,16 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
       >
         ↓ Exportar dados
       </button>
+      {schema.copyToClipboard && (
+        <button
+          onClick={handleCopyVisible}
+          disabled={filteredRows.length === 0}
+          title={`Copiar ${filteredRows.length} registro${filteredRows.length !== 1 ? 's' : ''} visíveis para colar numa planilha`}
+          className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ⧉ Copiar Dados
+        </button>
+      )}
 
       {/* Inserção — manual ou via Excel — só pra quem tem canCreateDelete. */}
       {canCreateDelete && (

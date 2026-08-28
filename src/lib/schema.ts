@@ -101,6 +101,7 @@ export interface TableSchema {
   auditKeyField?: string | string[]  // field(s) used to identify the row across environments in the generated SQL (defaults to the unique field, then autoIncrement, then all noBulkEdit fields as a composite key, then the PK)
   protheusStatusCheckField?: string  // field whose value is checked against the Protheus product master (SB1010) status (ATIVO/BLOQUEADO) — adds a view-only flag column (and, once connected, an extra "Exportar dados" column)
   listSortBy?: string[]      // client-side tie-break sort applied on top of the server's `orderBy` — one field name per level, ascending numeric. Used for fields the DB alone can't order by (e.g. a value resolved through another table), see DataTable.tsx
+  copyToClipboard?: boolean  // show a "Copiar Dados" button next to "Exportar dados" — copies the same visible rows as tab-separated text, to paste directly into a spreadsheet without downloading a file
 }
 
 // Financial multiplier fields that the Atualizador Global de Tabelas MSM always
@@ -282,6 +283,7 @@ export const tables: Record<string, TableSchema> = {
     compactHeader: true,
     bulkEdit: true,
     auditQueries: true,
+    copyToClipboard: true,
     protheusStatusCheckField: 'protheus_code',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
