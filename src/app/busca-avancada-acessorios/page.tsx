@@ -638,9 +638,9 @@ export default function BuscaAvancadaAcessoriosPage() {
     <div className="p-8 max-w-[108rem]">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
-          Sistema · busc. avançada acessórios
+          Consulta Banco de Dados · busc. avanc. acessórios protheus
         </div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Avançada Acessórios</h1>
+        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Avanc. Acessórios Protheus</h1>
         <p className="text-on-surface-variant text-base mt-1">
           Varre todo cabeçalho de estrutura no Protheus com o prefixo de NIVEL 1 informado (nunca listado
           diretamente), classifica cada um por tipo de equipamento usando as mesmas regras de{' '}

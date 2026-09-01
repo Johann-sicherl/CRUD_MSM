@@ -1113,9 +1113,9 @@ export default function AnalisadorEstruturasPage() {
     <div className="p-8 max-w-[108rem]">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
-          Sistema · busc. itens série estrut.
+          Consulta Banco de Dados · busc. itens série estrut. protheus
         </div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Itens Série Estrut.</h1>
+        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Itens Série Estrut. Protheus</h1>
         <p className="text-on-surface-variant text-base mt-1">
           Busque a estrutura direto no banco Protheus (recomendado) ou envie um ou mais arquivos .xlsx de estrutura
           (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot; — nome do arquivo = código Protheus). Cada código da

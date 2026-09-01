@@ -29,14 +29,15 @@ export const MODULES: ModuleDef[] = [
 
   { key: 'auditoria',                    label: 'Desenvolvedor de Queries',       href: '/auditoria',                    group: 'Sistema' },
   { key: 'clonagem-estrutural-avancada', label: 'Clonagem Estrut. Avançada',      href: '/clonagem-estrutural-avancada', group: 'Sistema' },
-  { key: 'analisador-estruturas',        label: 'Busc. Itens Série Estrut.',      href: '/analisador-estruturas',        group: 'Sistema' },
-  { key: 'busca-avancada-acessorios',    label: 'Busc. Avançada Acessórios',      href: '/busca-avancada-acessorios',    group: 'Sistema' },
   { key: 'depurador-solic-comercial',    label: 'Depurador Solic. Comercial',     href: '/depurador-solic-comercial',    group: 'Sistema' },
+
+  { key: 'analisador-estruturas',        label: 'Busc. Itens Série Estrut. Protheus', href: '/analisador-estruturas',        group: 'Consulta Banco de Dados' },
+  { key: 'busca-avancada-acessorios',    label: 'Busc. Avanc. Acessórios Protheus',   href: '/busca-avancada-acessorios',    group: 'Consulta Banco de Dados' },
 
   { key: 'options',               label: 'Lista Itens de Série',   href: '/options',               group: 'Parâmetros' },
   { key: 'parametros-estrutura',  label: 'Param. Itens de Série',  href: '/parametros-estrutura',  group: 'Parâmetros' },
 ]
 
-export const MODULE_GROUPS: string[] = ['Geral', DOMAIN_LABELS.catalogo, DOMAIN_LABELS.regras, 'Sistema', 'Parâmetros']
+export const MODULE_GROUPS: string[] = ['Geral', DOMAIN_LABELS.catalogo, DOMAIN_LABELS.regras, 'Sistema', 'Consulta Banco de Dados', 'Parâmetros']
 
 export const ALL_MODULE_KEYS: string[] = MODULES.map(m => m.key)
