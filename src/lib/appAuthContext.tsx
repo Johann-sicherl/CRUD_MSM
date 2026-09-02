@@ -188,7 +188,7 @@ function LoginScreen({
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant">
           <h2 className="text-base font-semibold text-on-surface">Entrar — MSM Admin</h2>
         </div>
-        <form className="p-5 flex flex-col gap-3" onSubmit={handleSubmit}>
+        <form className="p-5 flex flex-col gap-3" autoComplete="off" onSubmit={handleSubmit}>
           <p className="text-sm text-on-surface-variant">
             Selecione seu perfil e informe a senha. Perfil sem senha ainda: a que você digitar agora vira a senha dele.
           </p>
@@ -208,8 +208,14 @@ function LoginScreen({
           </label>
           <label className="text-xs font-semibold text-on-surface-variant">
             Senha
+            {/* name/autoComplete distintos dos outros logins do app (Protheus,
+                PDM) — sem isso o Chrome trata os três como o mesmo tipo de
+                campo (mesma origem, mesmo type="password" genérico) e sugere
+                a senha errada de um formulário no outro. */}
             <input
               type="password"
+              name="msm-profile-password"
+              autoComplete="off"
               value={password}
               onChange={e => { setPassword(e.target.value); clearFeedback() }}
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"

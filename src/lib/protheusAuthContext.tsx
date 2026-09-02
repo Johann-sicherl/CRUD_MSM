@@ -65,6 +65,7 @@ function ProtheusLoginModal({ onClose, onConnect }: {
         </div>
         <form
           className="p-5 flex flex-col gap-3"
+          autoComplete="off"
           onSubmit={e => { e.preventDefault(); onConnect(user, password) }}
         >
           <p className="text-sm text-on-surface-variant">
@@ -74,8 +75,14 @@ function ProtheusLoginModal({ onClose, onConnect }: {
           </p>
           <label className="text-xs font-semibold text-on-surface-variant">
             Usuário
+            {/* name/autoComplete distintos dos outros logins do app (perfil MSM,
+                PDM) — sem isso o Chrome trata os três como o mesmo tipo de campo
+                (mesma origem, mesmos type="text"/"password" genéricos) e sugere
+                a senha errada de um formulário no outro. */}
             <input
               type="text"
+              name="protheus-user"
+              autoComplete="off"
               autoFocus
               value={user}
               onChange={e => setUser(e.target.value)}
@@ -86,6 +93,8 @@ function ProtheusLoginModal({ onClose, onConnect }: {
             Senha
             <input
               type="password"
+              name="protheus-password"
+              autoComplete="off"
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
