@@ -172,7 +172,7 @@ export default function PdmConsultaAcessoriosPage() {
                   {PDM_FIELD_MAP.filter(f => f.supabaseField !== 'legacy_group_id').map(f => (
                     <th key={f.supabaseField} className="px-4 py-2 whitespace-nowrap">{f.label}</th>
                   ))}
-                  <th className="px-4 py-2 whitespace-nowrap text-right">Ação</th>
+                  <th className="px-4 py-2 whitespace-nowrap text-right sticky right-0 bg-surface-container border-l border-outline-variant/40 z-10">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/40">
@@ -210,11 +210,13 @@ export default function PdmConsultaAcessoriosPage() {
                           </td>
                         )
                       })}
-                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                      <td className={`px-4 py-2.5 text-right whitespace-nowrap sticky right-0 border-l border-outline-variant/40 z-10 ${
+                        isGhost ? 'bg-surface-container-highest' : isPdmOnly ? 'bg-error-container' : 'bg-surface-container-low'
+                      }`}>
                         {isPdmOnly && (
                           <button
                             onClick={() => setCreatePrefill(pdmRowToPrefill(row.pdm))}
-                            className="text-error hover:text-error/80 text-xs font-medium transition-colors"
+                            className="text-on-error-container hover:opacity-80 text-xs font-semibold transition-opacity"
                           >
                             + Cadastrar
                           </button>
