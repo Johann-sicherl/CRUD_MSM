@@ -11,7 +11,7 @@ import { useAppAuth } from './appAuthContext'
 // pra outro perfil, e (2) não abre sozinha ao entrar no app: só é oferecida
 // automaticamente logo depois que a conexão ao Protheus é feita (ver
 // PdmAuthProvider abaixo), já que é um banco adicional, só usado pela tela
-// Consulta PDM x Supabase.
+// Consulta PDM x Banco MSM.
 
 export interface PdmCreds { user: string; password: string }
 
@@ -80,7 +80,7 @@ function PdmLoginModal({ onClose, onConnect }: {
         >
           <p className="text-sm text-on-surface-variant">
             Informe seu usuário e senha do SQL Server do PDM (base VMI, servidor srvvmis03) — usada pela tela
-            Consulta PDM x Supabase, exclusiva do perfil Administrador. Nada fica salvo; cada consulta abre e
+            Consulta PDM x Banco MSM, exclusiva do perfil Administrador. Nada fica salvo; cada consulta abre e
             fecha sua própria conexão.
           </p>
           <label className="text-xs font-semibold text-on-surface-variant">

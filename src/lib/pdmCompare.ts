@@ -1,9 +1,9 @@
 import type { PdmAccessoryRow } from './pdmDb'
 
 // Compara o resultado da consulta ao PDM com o que já está gravado em
-// accessories (Supabase), campo a campo, pra tela Consulta PDM x Supabase.
-// Mapeamento confirmado com o usuário: NOME_COMERCIAL = campo "Nome",
-// ID_GRUPO = legacy_group_id (accessory_groups) diretamente.
+// accessories (banco de dados MSM), campo a campo, pra tela Consulta PDM x
+// Banco MSM. Mapeamento confirmado com o usuário: NOME_COMERCIAL = campo
+// "Nome", ID_GRUPO = legacy_group_id (accessory_groups) diretamente.
 
 export interface PdmFieldDiff {
   supabaseField: string
@@ -118,8 +118,9 @@ export function comparePdmWithSupabase(
     })
   }
 
-  // Merge oculto: itens já cadastrados no Supabase que a consulta ao PDM não
-  // trouxe — aparecem cinza-esmaecido, só pra indicar o que falta inserir no PDM.
+  // Merge oculto: itens já cadastrados no banco de dados MSM que a consulta
+  // ao PDM não trouxe — aparecem cinza-esmaecido, só pra indicar o que falta
+  // inserir no PDM.
   for (const row of supabaseRows) {
     const code = String(row.protheus_code ?? '').trim().toUpperCase()
     if (!code || matchedCodes.has(code)) continue
@@ -127,4 +128,38 @@ export function comparePdmWithSupabase(
   }
 
   return result
+}
+
+// Pré-preenche o formulário de Cadastro de Componentes a partir de uma linha
+// só-no-PDM (botão "+ Cadastrar" na tela Consulta PDM x Banco MSM) — mesma
+// normalização usada na comparação (trata "N/A" como vazio, vírgula decimal
+// como ponto), só grava a chave quando há valor de verdade.
+export function pdmRowToPrefill(pdm: PdmAccessoryRow): Record<string, string> {
+  const prefill: Record<string, string> = { protheus_code: pdm.codigoProtheus }
+
+  const name = normalizeText(pdm.nomeComercial)
+  if (name) prefill.name = name
+
+  const groupId = normalizeNumber(pdm.idGrupo)
+  if (groupId !== null) prefill.legacy_group_id = String(groupId)
+
+  const color = normalizeText(pdm.corProduto)
+  if (color) prefill.color = color
+
+  const material = normalizeText(pdm.materialPredominante)
+  if (material) prefill.predominant_material = material
+
+  const dimensional = normalizeNumber(pdm.dimensionalMm)
+  if (dimensional !== null) prefill.dimensional_mm = String(dimensional)
+
+  const qtdMonitor = normalizeNumber(pdm.qtdMonTotem)
+  if (qtdMonitor !== null) prefill.quantity_monitor_totem = String(qtdMonitor)
+
+  const monitorSize = normalizeNumber(pdm.tamanhoMonitor)
+  if (monitorSize !== null) prefill.monitor_size = String(monitorSize)
+
+  const obs = normalizeText(pdm.obs)
+  if (obs) prefill.description = obs
+
+  return prefill
 }

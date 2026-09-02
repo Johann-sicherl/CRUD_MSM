@@ -1332,7 +1332,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
 function LocalCostCell({ value }: { value: number | null }) {
   return (
     <span
-      title="Valor real, guardado só localmente — o Supabase mantém 1 por sigilo. Edite pelo botão 'Editar'."
+      title="Valor real, guardado só localmente — o banco de dados MSM mantém 1 por sigilo. Edite pelo botão 'Editar'."
       className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
         value === null
           ? 'text-outline border-outline-variant/50'

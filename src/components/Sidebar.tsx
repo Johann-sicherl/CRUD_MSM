@@ -103,7 +103,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   </Link>
                 )
               })}
-              {/* Consulta PDM x Supabase: fora de MODULES/visibleModules de
+              {/* Consulta PDM x Banco MSM: fora de MODULES/visibleModules de
                   propósito (mesmo tratamento de Configuração de Usuários,
                   abaixo) — assim nenhuma configuração de perfil consegue
                   liberar essa tela pra quem não é Administrador. */}
@@ -117,7 +117,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                       : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                   }`}
                 >
-                  <span className="truncate">Consulta PDM x Supabase</span>
+                  <span className="truncate">Consulta PDM x Banco MSM</span>
                 </Link>
               )}
             </div>
@@ -170,7 +170,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
             {protheusCreds ? '✓ Protheus conectado' : '🔌 Conectar ao Protheus'}
           </button>
           {/* Conexão ao banco do PDM — só existe pro Administrador, usada
-              exclusivamente pela tela Consulta PDM x Supabase. */}
+              exclusivamente pela tela Consulta PDM x Banco MSM. */}
           {appUser.isAdmin && (
             <button
               onClick={() => pdmCreds ? disconnectPdm() : openPdmPrompt()}
