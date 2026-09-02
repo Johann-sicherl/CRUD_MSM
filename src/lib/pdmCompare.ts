@@ -26,10 +26,13 @@ interface FieldMapEntry {
   kind: FieldKind
 }
 
-// Mesmos campos exibidos em Cadastro de Componentes — cost_std (Custo) e
-// legacy_general_alert_id ficam de fora: custo real não vem do PDM (é
-// capturado à parte, ver localCostStore.ts) e o valor de alerta do PDM
-// (ALERTA_GERAL) não tem garantia de bater 1:1 com o ID de general_alerts.
+// Todas as colunas trazidas pela query do PDM, exceto CODIGO_PROTHEUS (chave
+// de junção, tratada à parte) — cost_std (Custo) fica de fora porque o custo
+// real não vem do PDM (é capturado à parte, ver localCostStore.ts).
+// ALERTA_GERAL -> legacy_general_alert_id: comparados como número, mesma
+// convenção 0 = "sem alerta" dos dois lados; se algum dia aparecer um valor
+// do PDM que não seja o ID de general_alerts de verdade, isso pode gerar um
+// falso "divergente" nessa coluna especificamente.
 export const PDM_FIELD_MAP: FieldMapEntry[] = [
   { pdmKey: 'idGrupo',              supabaseField: 'legacy_group_id',      label: 'Grupo',                kind: 'number' },
   { pdmKey: 'corProduto',           supabaseField: 'color',                label: 'Cor',                  kind: 'text' },
@@ -39,6 +42,7 @@ export const PDM_FIELD_MAP: FieldMapEntry[] = [
   { pdmKey: 'tamanhoMonitor',       supabaseField: 'monitor_size',         label: 'Tam. Monitor (pol)',   kind: 'number' },
   { pdmKey: 'nomeComercial',        supabaseField: 'name',                 label: 'Nome',                 kind: 'text' },
   { pdmKey: 'obs',                  supabaseField: 'description',          label: 'Descrição',            kind: 'text' },
+  { pdmKey: 'alertaGeral',          supabaseField: 'legacy_general_alert_id', label: 'Alerta',            kind: 'number' },
 ]
 
 function normalizeText(v: unknown): string {
@@ -160,6 +164,9 @@ export function pdmRowToPrefill(pdm: PdmAccessoryRow): Record<string, string> {
 
   const obs = normalizeText(pdm.obs)
   if (obs) prefill.description = obs
+
+  const alerta = normalizeNumber(pdm.alertaGeral)
+  if (alerta !== null) prefill.legacy_general_alert_id = String(alerta)
 
   return prefill
 }
