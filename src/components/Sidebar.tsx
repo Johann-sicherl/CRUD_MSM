@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
+import { usePdmAuth } from '@/lib/pdmAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
 import { MODULES, MODULE_GROUPS } from '@/lib/modules'
 
@@ -18,6 +19,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const [hovered, setHovered] = useState(false)
   const expanded = pinned || hovered
   const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
+  const { creds: pdmCreds, disconnect: disconnectPdm, openPrompt: openPdmPrompt } = usePdmAuth()
   const { user: appUser, logout: appLogout } = useAppAuth()
 
   // Módulos visíveis vêm do perfil (ver Configuração de Usuários). Admin
@@ -101,6 +103,23 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   </Link>
                 )
               })}
+              {/* Consulta PDM x Supabase: fora de MODULES/visibleModules de
+                  propósito (mesmo tratamento de Configuração de Usuários,
+                  abaixo) — assim nenhuma configuração de perfil consegue
+                  liberar essa tela pra quem não é Administrador. */}
+              {group === 'Consulta Banco de Dados' && appUser.isAdmin && (
+                <Link
+                  href="/pdm-consulta-acessorios"
+                  prefetch={false}
+                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                    pathname === '/pdm-consulta-acessorios'
+                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  }`}
+                >
+                  <span className="truncate">Consulta PDM x Supabase</span>
+                </Link>
+              )}
             </div>
           ))}
 
@@ -150,6 +169,21 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           >
             {protheusCreds ? '✓ Protheus conectado' : '🔌 Conectar ao Protheus'}
           </button>
+          {/* Conexão ao banco do PDM — só existe pro Administrador, usada
+              exclusivamente pela tela Consulta PDM x Supabase. */}
+          {appUser.isAdmin && (
+            <button
+              onClick={() => pdmCreds ? disconnectPdm() : openPdmPrompt()}
+              title={pdmCreds ? 'Desconectar do PDM' : 'Conectar ao PDM'}
+              className={`flex items-center justify-center gap-1.5 px-2 py-1 rounded border text-[9px] font-mono transition-colors ${
+                pdmCreds
+                  ? 'text-green-400 border-green-500/30 bg-green-500/10 hover:bg-green-500/20'
+                  : 'text-outline border-outline-variant hover:border-primary hover:text-primary'
+              }`}
+            >
+              {pdmCreds ? '✓ PDM conectado' : '🔌 Conectar ao PDM'}
+            </button>
+          )}
           {/* Perfil logado neste app (Engenharia do Produto / Gerente Adm
               Comercial) — não confundir com a conexão ao Protheus acima. */}
           <div className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-outline-variant text-[9px] font-mono">

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import ThemeZoomBar from '@/components/ThemeZoomBar'
 import { ProtheusAuthProvider } from '@/lib/protheusAuthContext'
+import { PdmAuthProvider } from '@/lib/pdmAuthContext'
 import { AppAuthProvider } from '@/lib/appAuthContext'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -46,15 +47,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   return (
     <AppAuthProvider>
       <ProtheusAuthProvider>
-        <Sidebar pinned={pinned} onPinChange={handlePinChange} />
-        <main
-          className={`relative z-10 min-h-screen flex flex-col transition-[margin-left] duration-200 ${
-            pinned ? 'ml-64' : 'ml-0'
-          }`}
-        >
-          <ThemeZoomBar />
-          {children}
-        </main>
+        <PdmAuthProvider>
+          <Sidebar pinned={pinned} onPinChange={handlePinChange} />
+          <main
+            className={`relative z-10 min-h-screen flex flex-col transition-[margin-left] duration-200 ${
+              pinned ? 'ml-64' : 'ml-0'
+            }`}
+          >
+            <ThemeZoomBar />
+            {children}
+          </main>
+        </PdmAuthProvider>
       </ProtheusAuthProvider>
     </AppAuthProvider>
   )
