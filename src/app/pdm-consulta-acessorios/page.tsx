@@ -72,6 +72,8 @@ export default function PdmConsultaAcessoriosPage() {
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [colFilters, setColFilters] = useState<Record<string, string[]>>({})
   const [filterSearch, setFilterSearch] = useState<Record<string, string>>({})
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
@@ -178,6 +180,22 @@ export default function PdmConsultaAcessoriosPage() {
     )
   }, [comparison, colFilters, columns])
 
+  // Aviso visual (gradiente na borda direita) de que há mais colunas pra ver
+  // rolando a tabela — mesmo mecanismo de DataTable.tsx.
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+  useEffect(() => {
+    checkScroll()
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(checkScroll)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [filteredComparison, checkScroll])
+
   const handleToggleFilter = useCallback((key: string, val: string) => {
     setColFilters(prev => {
       const cur = prev[key] ?? []
@@ -228,7 +246,7 @@ export default function PdmConsultaAcessoriosPage() {
   }
 
   return (
-    <div className="p-8 max-w-[108rem]">
+    <div className="p-8">
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
           Consulta Banco de Dados · consulta pdm x banco msm
@@ -301,7 +319,8 @@ export default function PdmConsultaAcessoriosPage() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-surface-container-highest border border-outline-variant inline-block opacity-60" /> só existe no Banco MSM — falta inserir no PDM</span>
           </div>
 
-          <div className="border border-outline-variant rounded-lg overflow-x-auto bg-surface-container-low">
+          <div className="relative border border-outline-variant rounded-lg bg-surface-container-low">
+          <div ref={scrollRef} onScroll={checkScroll} className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-outline-variant bg-surface-container-highest text-left text-xs text-outline uppercase tracking-wide">
@@ -404,6 +423,11 @@ export default function PdmConsultaAcessoriosPage() {
                 })}
               </tbody>
             </table>
+          </div>
+          {/* Fade gradient — avisa que dá pra rolar pra ver mais colunas */}
+          {canScrollRight && (
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-surface-container-low via-surface-container-low/70 to-transparent z-[5]" />
+          )}
           </div>
 
           <div className="text-xs text-outline font-mono mt-2">
