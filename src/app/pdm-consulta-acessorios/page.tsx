@@ -8,7 +8,7 @@ import { exportVisibleData } from '@/lib/importExport'
 import RecordModal from '@/components/RecordModal'
 import ColumnFilter from '@/components/ColumnFilter'
 import type { PdmAccessoryRow } from '@/lib/pdmDb'
-import { PDM_FIELD_MAP, comparePdmWithSupabase, displayText, pdmRowToPrefill, type PdmComparisonRow } from '@/lib/pdmCompare'
+import { PDM_FIELD_MAP, comparePdmWithSupabase, displayText, pdmRowToPrefill, findPreviousRevision, type PdmComparisonRow } from '@/lib/pdmCompare'
 
 // Compara o catálogo de Cadastro de Componentes (banco de dados MSM) com o
 // que está validado no PDM (AC_VALIDADO = 'S') — tela exclusiva do perfil
@@ -68,6 +68,7 @@ export default function PdmConsultaAcessoriosPage() {
   const [error, setError] = useState('')
   const [editRecord, setEditRecord] = useState<Record<string, unknown> | null>(null)
   const [createPrefill, setCreatePrefill] = useState<Record<string, string> | null>(null)
+  const [revisionCandidate, setRevisionCandidate] = useState<{ oldCode: string; newCode: string; prefill: Record<string, string> } | null>(null)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [colFilters, setColFilters] = useState<Record<string, string[]>>({})
   const [filterSearch, setFilterSearch] = useState<Record<string, string>>({})
@@ -133,6 +134,14 @@ export default function PdmConsultaAcessoriosPage() {
   }, [pdmRows, supabaseRows])
 
   const columns = useMemo(() => buildColumns(groupNames), [groupNames])
+
+  // Códigos já cadastrados no banco MSM — usado pra achar, entre eles, uma
+  // revisão anterior do mesmo desenho de um item só-no-PDM (ver
+  // findPreviousRevision em pdmCompare.ts e o botão "Substituir revisão" abaixo).
+  const supabaseCodes = useMemo(
+    () => (supabaseRows ?? []).map(r => String(r.protheus_code ?? '')).filter(Boolean),
+    [supabaseRows]
+  )
 
   // Mesmo estilo "Excel" do resto do app: as opções de CADA coluna já
   // consideram os filtros ativos das OUTRAS colunas, mas nunca o dela mesma.
@@ -319,6 +328,10 @@ export default function PdmConsultaAcessoriosPage() {
                   const diffFieldSet = row.status === 'ok' || row.status === 'mismatch'
                     ? new Set(row.diffs.map(d => d.supabaseField))
                     : new Set<string>()
+                  // Componente com código de revisão (ex.: 34.01.10040.01) cuja
+                  // revisão anterior (34.01.10040.00) já está cadastrada — troca
+                  // o "+ Cadastrar" por "Substituir revisão" nessa linha.
+                  const prevRevision = isPdmOnly ? findPreviousRevision(row.protheusCode, supabaseCodes) : null
 
                   return (
                     <tr
@@ -359,7 +372,16 @@ export default function PdmConsultaAcessoriosPage() {
                       <td className={`px-4 py-2.5 text-right whitespace-nowrap sticky right-0 border-l border-outline-variant/40 z-10 ${
                         isGhost ? 'bg-surface-container-highest' : isPdmOnly ? 'bg-error-container' : 'bg-surface-container-low'
                       }`}>
-                        {isPdmOnly && (
+                        {isPdmOnly && prevRevision && (
+                          <button
+                            onClick={() => setRevisionCandidate({ oldCode: prevRevision, newCode: row.protheusCode, prefill: pdmRowToPrefill(row.pdm) })}
+                            title={`Revisão anterior encontrada no banco MSM: ${prevRevision}`}
+                            className="text-on-error-container hover:opacity-80 text-xs font-semibold transition-opacity"
+                          >
+                            ↻ Substituir revisão
+                          </button>
+                        )}
+                        {isPdmOnly && !prevRevision && (
                           <button
                             onClick={() => setCreatePrefill(pdmRowToPrefill(row.pdm))}
                             className="text-on-error-container hover:opacity-80 text-xs font-semibold transition-opacity"
@@ -412,6 +434,21 @@ export default function PdmConsultaAcessoriosPage() {
         />
       )}
 
+      {revisionCandidate && (
+        <RevisionReplaceModal
+          oldCode={revisionCandidate.oldCode}
+          newCode={revisionCandidate.newCode}
+          prefill={revisionCandidate.prefill}
+          onClose={() => setRevisionCandidate(null)}
+          onCreateAsNew={() => { setCreatePrefill(revisionCandidate.prefill); setRevisionCandidate(null) }}
+          onReplaced={() => {
+            showToast(`Substituído: ${revisionCandidate.oldCode} → ${revisionCandidate.newCode}`)
+            setRevisionCandidate(null)
+            fetchDbSide()
+          }}
+        />
+      )}
+
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg text-sm animate-fade-in border ${
           toast.isError
@@ -421,6 +458,118 @@ export default function PdmConsultaAcessoriosPage() {
           {toast.isError ? '✕' : '✓'} {toast.msg}
         </div>
       )}
+    </div>
+  )
+}
+
+// Pop-up de confirmação com prévia — abre ao clicar em "Substituir revisão"
+// numa linha só-no-PDM cujo código bate com uma revisão anterior já
+// cadastrada (ver findPreviousRevision em pdmCompare.ts). Busca, antes de
+// qualquer alteração, quantas linhas em cada tabela referenciam o código
+// antigo (/api/replace-protheus-code/preview); só grava algo quando o
+// usuário confirma "Sim, substituir" (/api/replace-protheus-code — troca o
+// código em accessories e em toda tabela que o referencia, numa única
+// transação no banco, e migra o custo real local pra chave nova).
+function RevisionReplaceModal({ oldCode, newCode, prefill, onClose, onCreateAsNew, onReplaced }: {
+  oldCode: string
+  newCode: string
+  prefill: Record<string, string>
+  onClose: () => void
+  onCreateAsNew: () => void
+  onReplaced: () => void
+}) {
+  const [preview, setPreview] = useState<{ counts: Record<string, number>; labels: Record<string, string> } | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(true)
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/replace-protheus-code/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldCode }),
+    })
+      .then(res => res.json())
+      .then(json => { if (!cancelled) setPreview(json) })
+      .catch(() => { if (!cancelled) setError('Não foi possível calcular a prévia') })
+      .finally(() => { if (!cancelled) setLoadingPreview(false) })
+    return () => { cancelled = true }
+  }, [oldCode])
+
+  const handleApply = async () => {
+    setApplying(true)
+    setError('')
+    try {
+      const res = await fetch('/api/replace-protheus-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldCode, newCode, fields: prefill }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error || 'Falha ao substituir'); return }
+      onReplaced()
+    } catch {
+      setError('Erro de comunicação ao substituir')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant">
+          <h2 className="text-base font-semibold text-on-surface">Revisão de componente detectada</h2>
+          <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+        <div className="p-5 flex flex-col gap-3">
+          <p className="text-sm text-on-surface-variant">
+            Este componente existe no banco de dados com uma revisão anterior à atual (código{' '}
+            <span className="font-mono text-on-surface">{oldCode}</span>). Deseja substituir o componente da
+            revisão anterior pela atual (<span className="font-mono text-on-surface">{newCode}</span>)?
+          </p>
+
+          {loadingPreview ? (
+            <p className="text-xs text-outline">Calculando o que será afetado...</p>
+          ) : preview ? (
+            <div className="text-xs text-on-surface-variant border border-outline-variant rounded p-3 flex flex-col gap-1">
+              <div className="font-semibold text-on-surface mb-1">Isto vai atualizar {oldCode} → {newCode} em:</div>
+              {Object.entries(preview.counts).filter(([table]) => table !== 'accessories').map(([table, n]) => (
+                <div key={table} className="flex justify-between">
+                  <span>{preview.labels[table] ?? table}</span>
+                  <span className={n > 0 ? 'text-primary font-semibold' : 'text-outline'}>{n}</span>
+                </div>
+              ))}
+              <div className="flex justify-between border-t border-outline-variant/40 pt-1 mt-1">
+                <span>Custo real local (se houver)</span>
+                <span className="text-primary font-semibold">migra junto</span>
+              </div>
+            </div>
+          ) : null}
+
+          {error && <p className="text-xs text-error">{error}</p>}
+
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <button type="button" onClick={onCreateAsNew} className="text-xs text-outline hover:text-on-surface transition-colors">
+              Cadastrar como item novo
+            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={applying || loadingPreview}
+                className="px-4 py-1.5 bg-error-container text-on-error-container rounded text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
+              >
+                {applying ? 'Substituindo...' : 'Sim, substituir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

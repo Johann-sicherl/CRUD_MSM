@@ -163,3 +163,28 @@ export function pdmRowToPrefill(pdm: PdmAccessoryRow): Record<string, string> {
 
   return prefill
 }
+
+// Código com sufixo de revisão — desenhos (prefixo 33/34, ver pdmDb.ts)
+// ganham um ".NN" a mais no PDM (ex.: 34.01.10040.01) na frente do código
+// "chapado" (XX.XX.XXXXX) que os demais itens usam.
+const REVISIONED_CODE_RE = /^(\d{2}\.\d{2}\.\d{5})\.(\d+)$/
+
+export function parseRevisionedCode(code: string): { base: string; revision: string } | null {
+  const m = code.trim().match(REVISIONED_CODE_RE)
+  if (!m) return null
+  return { base: m[1], revision: m[2] }
+}
+
+// Entre os códigos já cadastrados no banco MSM, acha um com a MESMA base de
+// desenho que o código do PDM, mas revisão diferente — a revisão anterior
+// do mesmo componente físico, candidata a ser substituída em vez de
+// duplicada (ver tela Consulta PDM x Banco MSM).
+export function findPreviousRevision(pdmCode: string, supabaseCodes: string[]): string | null {
+  const parsed = parseRevisionedCode(pdmCode)
+  if (!parsed) return null
+  for (const code of supabaseCodes) {
+    const other = parseRevisionedCode(code)
+    if (other && other.base === parsed.base && other.revision !== parsed.revision) return code
+  }
+  return null
+}

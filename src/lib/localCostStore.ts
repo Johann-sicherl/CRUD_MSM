@@ -92,3 +92,20 @@ export function deleteCostRow(tableName: string, key: string): void {
   delete store[bucket][key]
   writeCostStore(store)
 }
+
+// Chamado pela substituição de revisão de componente (Consulta PDM x Banco
+// MSM) — move o custo real capturado sob o código antigo pra chave do
+// código novo, sem isso o item revisado apareceria sem custo real (0/N/A)
+// mesmo já tendo sido capturado antes, sob o código anterior. Sem efeito se
+// não houver custo capturado pra oldKey (nada a migrar).
+export function renameCostRow(tableName: string, oldKey: string, newKey: string): void {
+  if (!oldKey || !newKey || oldKey === newKey) return
+  const store = readCostStore()
+  const bucket = costBucketFor(tableName)
+  const table = store[bucket]
+  if (!table || !(oldKey in table)) return
+  const row = table[oldKey]
+  delete table[oldKey]
+  table[newKey] = { ...row, updatedAt: new Date().toISOString() }
+  writeCostStore(store)
+}
