@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppAuth } from '@/lib/appAuthContext'
 import { usePdmAuth } from '@/lib/pdmAuthContext'
 import { tables } from '@/lib/schema'
+import { exportVisibleData } from '@/lib/importExport'
 import RecordModal from '@/components/RecordModal'
+import ColumnFilter from '@/components/ColumnFilter'
 import type { PdmAccessoryRow } from '@/lib/pdmDb'
 import { PDM_FIELD_MAP, comparePdmWithSupabase, displayText, pdmRowToPrefill, type PdmComparisonRow } from '@/lib/pdmCompare'
 
@@ -22,10 +24,37 @@ import { PDM_FIELD_MAP, comparePdmWithSupabase, displayText, pdmRowToPrefill, ty
 //  - cinza esmaecido na LINHA, sem interação: existe no banco MSM, não veio
 //    na consulta ao PDM — só um lembrete visual do que falta inserir lá.
 
+const STATUS_LABEL: Record<PdmComparisonRow['status'], string> = {
+  ok: 'OK',
+  mismatch: 'Divergente',
+  'pdm-only': 'Só no PDM',
+  'supabase-only': 'Só no Banco MSM',
+}
+
 function resolveGroupName(rawId: unknown, groupNames: Map<number, string>): string {
   const n = rawId === null || rawId === undefined ? NaN : Number(String(rawId).trim())
   if (Number.isNaN(n)) return '—'
   return groupNames.get(n) ?? `#${n}`
+}
+
+interface ColumnDef {
+  key: string
+  label: string
+  getValue: (row: PdmComparisonRow) => string
+}
+
+function buildColumns(groupNames: Map<number, string>): ColumnDef[] {
+  return [
+    { key: 'status', label: 'Status', getValue: row => STATUS_LABEL[row.status] },
+    { key: 'grupo', label: 'Grupo', getValue: row =>
+      resolveGroupName(row.status === 'supabase-only' ? row.supabaseRow.legacy_group_id : row.pdm.idGrupo, groupNames) },
+    { key: 'protheus_code', label: 'Código Protheus', getValue: row => row.protheusCode },
+    ...PDM_FIELD_MAP.filter(f => f.supabaseField !== 'legacy_group_id').map(f => ({
+      key: f.supabaseField,
+      label: f.label,
+      getValue: (row: PdmComparisonRow) => row.status === 'supabase-only' ? displayText(row.supabaseRow[f.supabaseField]) : displayText(row.pdm[f.pdmKey]),
+    })),
+  ]
 }
 
 export default function PdmConsultaAcessoriosPage() {
@@ -39,6 +68,14 @@ export default function PdmConsultaAcessoriosPage() {
   const [error, setError] = useState('')
   const [editRecord, setEditRecord] = useState<Record<string, unknown> | null>(null)
   const [createPrefill, setCreatePrefill] = useState<Record<string, string> | null>(null)
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
+  const [colFilters, setColFilters] = useState<Record<string, string[]>>({})
+  const [filterSearch, setFilterSearch] = useState<Record<string, string>>({})
+
+  const showToast = (msg: string, isError = false) => {
+    setToast({ msg, isError })
+    setTimeout(() => setToast(null), 3500)
+  }
 
   const fetchDbSide = useCallback(async () => {
     const [accRes, groupsRes] = await Promise.all([
@@ -95,6 +132,54 @@ export default function PdmConsultaAcessoriosPage() {
     return comparePdmWithSupabase(pdmRows, supabaseRows)
   }, [pdmRows, supabaseRows])
 
+  const columns = useMemo(() => buildColumns(groupNames), [groupNames])
+
+  // Mesmo estilo "Excel" do resto do app: as opções de CADA coluna já
+  // consideram os filtros ativos das OUTRAS colunas, mas nunca o dela mesma.
+  const columnOptions = useMemo(() => {
+    if (!comparison) return {} as Record<string, string[]>
+    const result: Record<string, string[]> = {}
+    for (const col of columns) {
+      const otherActive = Object.entries(colFilters).filter(([k, v]) => k !== col.key && v.length > 0)
+      const candidateRows = comparison.filter(row =>
+        otherActive.every(([k, vals]) => {
+          const c = columns.find(cc => cc.key === k)
+          return c ? vals.includes(c.getValue(row)) : true
+        })
+      )
+      const seen = new Set<string>()
+      for (const row of candidateRows) {
+        const v = col.getValue(row)
+        if (v && v !== '—') seen.add(v)
+      }
+      result[col.key] = Array.from(seen).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    }
+    return result
+  }, [comparison, columns, colFilters])
+
+  const filteredComparison = useMemo(() => {
+    if (!comparison) return null
+    const active = Object.entries(colFilters).filter(([, v]) => v.length > 0)
+    if (active.length === 0) return comparison
+    return comparison.filter(row =>
+      active.every(([k, vals]) => {
+        const c = columns.find(cc => cc.key === k)
+        return c ? vals.includes(c.getValue(row)) : true
+      })
+    )
+  }, [comparison, colFilters, columns])
+
+  const handleToggleFilter = useCallback((key: string, val: string) => {
+    setColFilters(prev => {
+      const cur = prev[key] ?? []
+      return { ...prev, [key]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] }
+    })
+  }, [])
+  const handleClearFilter = useCallback((key: string) => {
+    setColFilters(prev => ({ ...prev, [key]: [] }))
+  }, [])
+  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
+
   const counts = useMemo(() => {
     if (!comparison) return null
     return {
@@ -104,6 +189,24 @@ export default function PdmConsultaAcessoriosPage() {
       dbOnly: comparison.filter(r => r.status === 'supabase-only').length,
     }
   }, [comparison])
+
+  const buildExportData = () => {
+    const rows = filteredComparison ?? []
+    return { headers: columns.map(c => c.label), rowData: rows.map(row => columns.map(c => c.getValue(row))) }
+  }
+
+  const handleExport = async () => {
+    const { headers, rowData } = buildExportData()
+    await exportVisibleData(headers, rowData, 'Consulta_PDM_x_Banco_MSM.xlsx')
+  }
+
+  const handleCopy = () => {
+    const { headers, rowData } = buildExportData()
+    const tsv = [headers, ...rowData].map(r => r.join('\t')).join('\n')
+    navigator.clipboard.writeText(tsv)
+      .then(() => showToast(`${rowData.length} registro${rowData.length !== 1 ? 's' : ''} copiado${rowData.length !== 1 ? 's' : ''} — cole na planilha`))
+      .catch(() => showToast('Não foi possível copiar', true))
+  }
 
   if (!user.isAdmin) {
     return (
@@ -127,7 +230,7 @@ export default function PdmConsultaAcessoriosPage() {
         </p>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <button
           onClick={() => pdmCreds ? runQuery(pdmCreds) : openPdmPrompt()}
           disabled={loading}
@@ -135,8 +238,34 @@ export default function PdmConsultaAcessoriosPage() {
         >
           {loading ? 'Consultando...' : comparison ? 'Atualizar consulta' : pdmCreds ? 'Consultar PDM' : 'Conectar e consultar PDM'}
         </button>
+        {comparison && (
+          <>
+            <button
+              onClick={handleExport}
+              disabled={filteredComparison?.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-40"
+            >
+              ↓ Exportar dados
+            </button>
+            <button
+              onClick={handleCopy}
+              disabled={filteredComparison?.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-40"
+            >
+              ⧉ Copiar Dados
+            </button>
+            {hasActiveColFilters && (
+              <button
+                onClick={() => { setColFilters({}); setFilterSearch({}) }}
+                className="text-xs text-outline hover:text-primary transition-colors"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </>
+        )}
         {counts && (
-          <div className="flex items-center gap-2 text-xs font-mono">
+          <div className="flex items-center gap-2 text-xs font-mono ml-auto">
             <span className="px-2 py-1 rounded border border-outline-variant text-on-surface-variant">{counts.ok} ok</span>
             <span className="px-2 py-1 rounded border border-error/30 bg-error/10 text-error">{counts.mismatch} divergente{counts.mismatch !== 1 ? 's' : ''}</span>
             <span className="px-2 py-1 rounded border border-error/30 bg-error/10 text-error">{counts.pdmOnly} só no PDM</span>
@@ -155,7 +284,7 @@ export default function PdmConsultaAcessoriosPage() {
         <div className="text-sm text-on-surface-variant">Consultando o banco PDM...</div>
       )}
 
-      {comparison && (
+      {filteredComparison && (
         <>
           <div className="flex flex-wrap items-center gap-4 text-xs text-on-surface-variant mb-3">
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-error/15 border border-error/30 inline-block" /> célula divergente</span>
@@ -166,25 +295,30 @@ export default function PdmConsultaAcessoriosPage() {
           <div className="border border-outline-variant rounded-lg overflow-x-auto bg-surface-container-low">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-outline-variant bg-surface-container text-left text-xs text-outline uppercase tracking-wide">
-                  <th className="px-4 py-2 whitespace-nowrap">Grupo</th>
-                  <th className="px-4 py-2 whitespace-nowrap">Código Protheus</th>
-                  {PDM_FIELD_MAP.filter(f => f.supabaseField !== 'legacy_group_id').map(f => (
-                    <th key={f.supabaseField} className="px-4 py-2 whitespace-nowrap">{f.label}</th>
+                <tr className="border-b border-outline-variant bg-surface-container-highest text-left text-xs text-outline uppercase tracking-wide">
+                  {columns.map(col => (
+                    <th key={col.key} className="px-4 py-2 align-top min-w-[130px]">
+                      <div className="font-semibold mb-1.5 normal-case tracking-normal text-[11px]">{col.label}</div>
+                      <ColumnFilter
+                        searchValue={filterSearch[col.key] ?? ''}
+                        onSearchChange={v => setFilterSearch(prev => ({ ...prev, [col.key]: v }))}
+                        selectedValues={colFilters[col.key] ?? []}
+                        onToggleValue={v => handleToggleFilter(col.key, v)}
+                        onClearValues={() => handleClearFilter(col.key)}
+                        options={columnOptions[col.key] ?? []}
+                      />
+                    </th>
                   ))}
-                  <th className="px-4 py-2 whitespace-nowrap text-right sticky right-0 bg-surface-container border-l border-outline-variant/40 z-10">Ação</th>
+                  <th className="px-4 py-2 whitespace-nowrap text-right align-top sticky right-0 bg-surface-container-highest border-l border-outline-variant/40 z-10">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/40">
-                {comparison.map(row => {
+                {filteredComparison.map(row => {
                   const isGhost = row.status === 'supabase-only'
                   const isPdmOnly = row.status === 'pdm-only'
                   const diffFieldSet = row.status === 'ok' || row.status === 'mismatch'
                     ? new Set(row.diffs.map(d => d.supabaseField))
                     : new Set<string>()
-
-                  const groupId = row.status === 'supabase-only' ? row.supabaseRow.legacy_group_id : row.pdm.idGrupo
-                  const grupoLabel = resolveGroupName(groupId, groupNames)
 
                   return (
                     <tr
@@ -195,18 +329,30 @@ export default function PdmConsultaAcessoriosPage() {
                         : 'hover:bg-surface-container-high transition-colors'
                       }
                     >
-                      <td className="px-4 py-2.5 text-on-surface-variant whitespace-nowrap">{grupoLabel}</td>
-                      <td className="px-4 py-2.5 font-mono text-on-surface whitespace-nowrap">{row.protheusCode}</td>
-                      {PDM_FIELD_MAP.filter(f => f.supabaseField !== 'legacy_group_id').map(f => {
-                        const value = row.status === 'supabase-only'
-                          ? displayText(row.supabaseRow[f.supabaseField])
-                          : displayText(row.pdm[f.pdmKey])
-                        const isDiff = diffFieldSet.has(f.supabaseField)
+                      {columns.map(col => {
+                        if (col.key === 'status') {
+                          return (
+                            <td key={col.key} className="px-4 py-2.5 whitespace-nowrap">
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                                row.status === 'ok' ? 'text-on-surface-variant border-outline-variant'
+                                : row.status === 'mismatch' ? 'text-error border-error/30 bg-error/10'
+                                : row.status === 'pdm-only' ? 'text-error border-error/30 bg-error/10'
+                                : 'text-outline border-outline-variant'
+                              }`}>
+                                {STATUS_LABEL[row.status]}
+                              </span>
+                            </td>
+                          )
+                        }
+                        if (col.key === 'protheus_code') {
+                          return <td key={col.key} className="px-4 py-2.5 font-mono text-on-surface whitespace-nowrap">{row.protheusCode}</td>
+                        }
+                        const isDiff = diffFieldSet.has(col.key)
                         return (
-                          <td key={f.supabaseField} className={`px-4 py-2.5 text-on-surface-variant whitespace-nowrap ${isDiff ? 'bg-error/15' : ''}`}
-                            title={isDiff && row.status === 'mismatch' ? `Banco MSM: ${displayText(row.supabaseRow[f.supabaseField])}` : undefined}
+                          <td key={col.key} className={`px-4 py-2.5 text-on-surface-variant whitespace-nowrap ${isDiff ? 'bg-error/15' : ''}`}
+                            title={isDiff && row.status === 'mismatch' ? `Banco MSM: ${displayText(row.supabaseRow[col.key])}` : undefined}
                           >
-                            {value}
+                            {col.getValue(row)}
                           </td>
                         )
                       })}
@@ -237,6 +383,12 @@ export default function PdmConsultaAcessoriosPage() {
               </tbody>
             </table>
           </div>
+
+          <div className="text-xs text-outline font-mono mt-2">
+            {filteredComparison.length < (comparison?.length ?? 0)
+              ? <>{filteredComparison.length} de {comparison?.length} registros <span className="text-primary">· filtrado</span></>
+              : <>{comparison?.length} registros</>}
+          </div>
         </>
       )}
 
@@ -258,6 +410,16 @@ export default function PdmConsultaAcessoriosPage() {
           onClose={() => setCreatePrefill(null)}
           onSaved={() => { setCreatePrefill(null); fetchDbSide() }}
         />
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg text-sm animate-fade-in border ${
+          toast.isError
+            ? 'bg-error-container border-error/30 text-on-error-container'
+            : 'bg-surface-container-highest border-outline-variant text-on-surface'
+        }`}>
+          {toast.isError ? '✕' : '✓'} {toast.msg}
+        </div>
       )}
     </div>
   )
