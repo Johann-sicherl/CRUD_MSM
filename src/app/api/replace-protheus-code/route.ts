@@ -37,6 +37,11 @@ async function recordReplaceAudit(
   },
 ): Promise<void> {
   const keyValue = `${oldCode} → ${newCode}`
+  // formatRecordKey (auditoria/page.tsx) faz record_key_value.split('|') e casa
+  // posicionalmente com record_key_field.split(',') — uma tabela com 2 campos-
+  // chave (non_combinable_comps, dependant_items) precisa de 2 valores
+  // separados por "|", senão o segundo campo mostra "campo=" vazio na tela.
+  const keyValueFor = (fieldCount: number) => Array(fieldCount).fill(keyValue).join('|')
   const rows: Record<string, unknown>[] = []
 
   // accessories — sempre afetada (a função já garante que oldCode existe).
@@ -60,7 +65,7 @@ async function recordReplaceAudit(
     table_name: 'accessories',
     operation: 'update',
     record_key_field: 'protheus_code',
-    record_key_value: keyValue,
+    record_key_value: keyValueFor(1),
     sql_query: `UPDATE accessories SET ${accessorySets.join(', ')} WHERE protheus_code = ${sqlStr(oldCode)};`,
     payload: accessoryPayload,
     baseline: { protheus_code: oldCode },
@@ -72,7 +77,7 @@ async function recordReplaceAudit(
       table_name: 'relationship_equip_accessory',
       operation: 'update',
       record_key_field: 'protheus_code',
-      record_key_value: keyValue,
+      record_key_value: keyValueFor(1),
       sql_query: `UPDATE relationship_equip_accessory SET protheus_code = ${sqlStr(newCode)} WHERE protheus_code = ${sqlStr(oldCode)};`,
       payload: { protheus_code: newCode },
       baseline: { protheus_code: oldCode },
@@ -85,7 +90,7 @@ async function recordReplaceAudit(
       table_name: 'non_combinable_comps',
       operation: 'update',
       record_key_field: 'protheus_code,remove_list_code',
-      record_key_value: keyValue,
+      record_key_value: keyValueFor(2),
       sql_query: [
         `UPDATE non_combinable_comps SET protheus_code = ${sqlStr(newCode)} WHERE protheus_code = ${sqlStr(oldCode)};`,
         `UPDATE non_combinable_comps SET remove_list_code = ${sqlStr(newCode)} WHERE remove_list_code = ${sqlStr(oldCode)};`,
@@ -101,7 +106,7 @@ async function recordReplaceAudit(
       table_name: 'dependant_items',
       operation: 'update',
       record_key_field: 'protheus_code,protheus_item_code',
-      record_key_value: keyValue,
+      record_key_value: keyValueFor(2),
       sql_query: [
         `UPDATE dependant_items SET protheus_code = ${sqlStr(newCode)} WHERE protheus_code = ${sqlStr(oldCode)};`,
         `UPDATE dependant_items SET protheus_item_code = ${sqlStr(newCode)} WHERE protheus_item_code = ${sqlStr(oldCode)};`,
@@ -117,7 +122,7 @@ async function recordReplaceAudit(
       table_name: 'roller_tables',
       operation: 'update',
       record_key_field: 'protheus_code',
-      record_key_value: keyValue,
+      record_key_value: keyValueFor(1),
       sql_query: `UPDATE roller_tables SET protheus_code = ${sqlStr(newCode)} WHERE protheus_code = ${sqlStr(oldCode)};`,
       payload: { protheus_code: newCode },
       baseline: { protheus_code: oldCode },
@@ -130,7 +135,7 @@ async function recordReplaceAudit(
       table_name: 'pending_target_cost',
       operation: 'update',
       record_key_field: 'protheus_code',
-      record_key_value: keyValue,
+      record_key_value: keyValueFor(1),
       sql_query: `UPDATE pending_target_cost SET protheus_code = ${sqlStr(newCode)} WHERE protheus_code = ${sqlStr(oldCode)};`,
       payload: { protheus_code: newCode },
       baseline: { protheus_code: oldCode },
