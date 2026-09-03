@@ -11,7 +11,7 @@ export interface PdmCredentials {
   password: string
 }
 
-const CONNECTION_BASE = {
+export const CONNECTION_BASE = {
   server: 'srvvmis03',
   database: 'VMI',
   port: 1433,
@@ -90,6 +90,7 @@ LEFT JOIN PROPFILESCOMPLETE n ON a.DocumentID = n.DocumentID AND n.VariableID = 
 
 SELECT
 
+t.DocumentID,
 t.CODIGO_PROTHEUS,
 t.ID_GRUPO,
 t.COR_PRODUTO,
@@ -108,6 +109,7 @@ ORDER BY ID_GRUPO ASC
 `
 
 export interface PdmAccessoryRow {
+  documentId: number
   codigoProtheus: string
   idGrupo: string | null
   corProduto: string | null
@@ -132,6 +134,7 @@ export async function fetchPdmAccessories(creds: PdmCredentials): Promise<PdmAcc
     const result = await pool.request().query(QUERY)
     return (result.recordset as Record<string, unknown>[])
       .map(row => ({
+        documentId: Number(row.DocumentID),
         codigoProtheus: cell(row.CODIGO_PROTHEUS) ?? '',
         idGrupo: cell(row.ID_GRUPO),
         corProduto: cell(row.COR_PRODUTO),
@@ -143,7 +146,7 @@ export async function fetchPdmAccessories(creds: PdmCredentials): Promise<PdmAcc
         obs: cell(row.OBS),
         alertaGeral: cell(row.ALERTA_GERAL),
       }))
-      .filter(row => row.codigoProtheus)
+      .filter(row => row.codigoProtheus && Number.isFinite(row.documentId))
   } finally {
     await pool.close()
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppAuth } from '@/lib/appAuthContext'
 import { usePdmAuth } from '@/lib/pdmAuthContext'
 import { tables } from '@/lib/schema'
@@ -8,7 +8,30 @@ import { exportVisibleData } from '@/lib/importExport'
 import RecordModal from '@/components/RecordModal'
 import ColumnFilter from '@/components/ColumnFilter'
 import type { PdmAccessoryRow } from '@/lib/pdmDb'
+import type { PdmPropertyRow } from '@/lib/pdmProperties'
 import { PDM_FIELD_MAP, comparePdmWithSupabase, displayText, pdmRowToPrefill, findPreviousRevision, type PdmComparisonRow } from '@/lib/pdmCompare'
+
+// Tipo de arquivo do PDM (Vault) por ExtensionID — mesma convenção da query
+// (ver pdmDb.ts): 3 = desenho, 4 = montagem, 5 = peça.
+const EXTENSION_LABEL: Record<number, string> = { 3: 'Desenho', 4: 'Montagem', 5: 'Peça' }
+
+const PROPERTY_COLUMNS: { key: keyof PdmPropertyRow; label: string }[] = [
+  { key: 'filename', label: 'Arquivo' },
+  { key: 'codigo', label: 'Código' },
+  { key: 'denominacao', label: 'Denominação' },
+  { key: 'revisao', label: 'Revisão' },
+  { key: 'material', label: 'Material' },
+  { key: 'tratamento', label: 'Tratamento' },
+  { key: 'peso', label: 'Peso' },
+  { key: 'areaSup', label: 'Área Sup.' },
+  { key: 'espessura', label: 'Espessura' },
+  { key: 'custoSw', label: 'Custo SW' },
+  { key: 'maquina', label: 'Máquina' },
+  { key: 'grupo', label: 'Grupo' },
+  { key: 'projetadoPor', label: 'Projetado por' },
+  { key: 'desenhadoPor', label: 'Desenhado por' },
+  { key: 'aprovadoPor', label: 'Aprovado por' },
+]
 
 // Compara o catálogo de Cadastro de Componentes (banco de dados MSM) com o
 // que está validado no PDM (AC_VALIDADO = 'S') — tela exclusiva do perfil
@@ -75,6 +98,15 @@ export default function PdmConsultaAcessoriosPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
+  // Painel de propriedades expansível por linha (ver PROPERTY_COLUMNS acima)
+  // — busca sob demanda na primeira vez que a linha é aberta, depois fica em
+  // cache por código Protheus pro resto da sessão (a lista de componentes só
+  // muda numa nova consulta, que já limpa este cache junto).
+  const [expandedCode, setExpandedCode] = useState<string | null>(null)
+  const [propsByCode, setPropsByCode] = useState<Record<string, PdmPropertyRow[]>>({})
+  const [propsLoading, setPropsLoading] = useState<Record<string, boolean>>({})
+  const [propsError, setPropsError] = useState<Record<string, string>>({})
+
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
     setTimeout(() => setToast(null), 3500)
@@ -98,6 +130,9 @@ export default function PdmConsultaAcessoriosPage() {
   const runQuery = useCallback(async (creds: { user: string; password: string }) => {
     setLoading(true)
     setError('')
+    setExpandedCode(null)
+    setPropsByCode({})
+    setPropsError({})
     try {
       const [pdmRes] = await Promise.all([
         fetch('/api/pdm-consulta-acessorios', {
@@ -206,6 +241,32 @@ export default function PdmConsultaAcessoriosPage() {
     setColFilters(prev => ({ ...prev, [key]: [] }))
   }, [])
   const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
+
+  // Expande/recolhe o painel de propriedades de uma linha. Peça (sem
+  // sub-itens) ou montagem (traz a estrutura inteira) — ver
+  // src/lib/pdmProperties.ts. Sem PDM associado (linha "só no Banco MSM",
+  // cinza) não tem o que buscar.
+  const togglePropertiesRow = useCallback((row: PdmComparisonRow) => {
+    if (row.status === 'supabase-only') return
+    const code = row.protheusCode
+    if (expandedCode === code) { setExpandedCode(null); return }
+    setExpandedCode(code)
+    if (propsByCode[code] || propsLoading[code] || !pdmCreds) return
+    setPropsLoading(prev => ({ ...prev, [code]: true }))
+    setPropsError(prev => ({ ...prev, [code]: '' }))
+    fetch('/api/pdm-component-properties', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: pdmCreds.user, password: pdmCreds.password, documentId: row.pdm.documentId }),
+    })
+      .then(async res => ({ ok: res.ok, json: await res.json().catch(() => ({})) }))
+      .then(({ ok, json }) => {
+        if (!ok) { setPropsError(prev => ({ ...prev, [code]: json.error || 'Falha ao buscar propriedades' })); return }
+        setPropsByCode(prev => ({ ...prev, [code]: json.rows || [] }))
+      })
+      .catch(() => setPropsError(prev => ({ ...prev, [code]: 'Erro de comunicação com o banco PDM' })))
+      .finally(() => setPropsLoading(prev => ({ ...prev, [code]: false })))
+  }, [expandedCode, propsByCode, propsLoading, pdmCreds])
 
   const counts = useMemo(() => {
     if (!comparison) return null
@@ -324,6 +385,7 @@ export default function PdmConsultaAcessoriosPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-outline-variant bg-surface-container-highest text-left text-xs text-outline uppercase tracking-wide">
+                  <th className="px-2 py-2 w-8" aria-label="Expandir propriedades" />
                   {columns.map(col => (
                     <th key={col.key} className="px-4 py-2 align-top min-w-[130px]">
                       <div className="font-semibold mb-1.5 normal-case tracking-normal text-[11px]">{col.label}</div>
@@ -351,16 +413,28 @@ export default function PdmConsultaAcessoriosPage() {
                   // revisão anterior (34.01.10040.00) já está cadastrada — troca
                   // o "+ Cadastrar" por "Substituir revisão" nessa linha.
                   const prevRevision = isPdmOnly ? findPreviousRevision(row.protheusCode, supabaseCodes) : null
+                  const isExpanded = expandedCode === row.protheusCode
 
                   return (
+                    <Fragment key={`${row.status}-${row.protheusCode}`}>
                     <tr
-                      key={`${row.status}-${row.protheusCode}`}
                       className={
                         isGhost ? 'opacity-50 pointer-events-none bg-surface-container-highest'
                         : isPdmOnly ? 'bg-error/10'
                         : 'hover:bg-surface-container-high transition-colors'
                       }
                     >
+                      <td className="px-2 py-2.5 text-center">
+                        {!isGhost && (
+                          <button
+                            onClick={() => togglePropertiesRow(row)}
+                            title="Ver propriedades no PDM"
+                            className="text-outline hover:text-primary transition-colors w-5 h-5 inline-flex items-center justify-center"
+                          >
+                            {isExpanded ? '▾' : '▸'}
+                          </button>
+                        )}
+                      </td>
                       {columns.map(col => {
                         if (col.key === 'status') {
                           return (
@@ -419,6 +493,49 @@ export default function PdmConsultaAcessoriosPage() {
                         )}
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={columns.length + 2} className="px-4 py-3 bg-surface-container-high border-b border-outline-variant/40">
+                          {propsLoading[row.protheusCode] ? (
+                            <div className="text-xs text-outline font-mono">Buscando propriedades no PDM...</div>
+                          ) : propsError[row.protheusCode] ? (
+                            <div className="text-xs text-error">⚠ {propsError[row.protheusCode]}</div>
+                          ) : (propsByCode[row.protheusCode]?.length ?? 0) === 0 ? (
+                            <div className="text-xs text-outline font-mono">Nenhuma propriedade encontrada no PDM para este documento.</div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="text-xs border border-outline-variant/60 rounded overflow-hidden">
+                                <thead>
+                                  <tr className="bg-surface-container-highest text-outline uppercase tracking-wide text-left">
+                                    <th className="px-3 py-1.5 font-semibold whitespace-nowrap">Nível</th>
+                                    <th className="px-3 py-1.5 font-semibold whitespace-nowrap">Tipo</th>
+                                    {PROPERTY_COLUMNS.map(pc => (
+                                      <th key={pc.key} className="px-3 py-1.5 font-semibold whitespace-nowrap">{pc.label}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-outline-variant/30">
+                                  {propsByCode[row.protheusCode].map(pRow => (
+                                    <tr key={pRow.documentId} className={pRow.level === 0 ? 'bg-surface-container-highest/60 font-medium' : undefined}>
+                                      <td className="px-3 py-1.5 whitespace-nowrap text-on-surface-variant">{pRow.level}</td>
+                                      <td className="px-3 py-1.5 whitespace-nowrap text-on-surface-variant">
+                                        {(pRow.extensionId !== null && EXTENSION_LABEL[pRow.extensionId]) ?? '—'}
+                                      </td>
+                                      {PROPERTY_COLUMNS.map(pc => (
+                                        <td key={pc.key} className="px-3 py-1.5 whitespace-nowrap text-on-surface-variant">
+                                          {(pRow[pc.key] as string | null) ?? '—'}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>
