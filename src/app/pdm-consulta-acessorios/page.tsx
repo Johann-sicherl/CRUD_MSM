@@ -528,7 +528,9 @@ function RevisionReplaceModal({ oldCode, newCode, prefill, onClose, onCreateAsNe
       const res = await fetch('/api/replace-protheus-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldCode, newCode, fields: prefill }),
+        // Só o código — os outros campos do item (Nome, Grupo, Cor etc.)
+        // ficam como já estavam cadastrados, mesmo que divirjam do PDM.
+        body: JSON.stringify({ oldCode, newCode }),
       })
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Falha ao substituir'); return }

@@ -7,9 +7,10 @@
 -- no banco MSM sob a revisão anterior (ex.: 34.01.10040.00), substitui o
 -- código antigo pelo novo em accessories e em toda tabela que referencia um
 -- Código Protheus de componente — preservando o ID interno (uuid) e o
--- histórico da linha, em vez de apagar e recriar. Também atualiza os demais
--- campos do item (Nome, Grupo, Cor etc.) com os dados mais recentes vindos
--- do PDM, já que a revisão nova é quem passa a valer.
+-- histórico da linha, em vez de apagar e recriar. Mexe só no código — os
+-- demais campos do item (Nome, Grupo, Cor etc.) ficam como já estavam
+-- cadastrados no banco MSM, mesmo que divirjam do PDM (decisão explícita:
+-- a troca de revisão é só o código, não uma reimportação dos outros dados).
 --
 -- protheus_code/protheus_item_code NUNCA têm FOREIGN KEY de verdade no
 -- banco (ver msm_foreign_keys.sql — só legacy_group_id/legacy_equipment_id
@@ -23,17 +24,15 @@
 -- backend (Node), já que não mora no Postgres.
 -- ============================================================
 
+-- Versão anterior tinha 8 parâmetros a mais (p_name, p_legacy_group_id...)
+-- pra sincronizar outros campos do item junto com o código — removidos.
+-- CREATE OR REPLACE não troca a lista de parâmetros de uma função já
+-- existente, então precisa derrubar a assinatura antiga primeiro.
+DROP FUNCTION IF EXISTS replace_protheus_code(TEXT, TEXT, TEXT, INTEGER, TEXT, TEXT, NUMERIC, INTEGER, NUMERIC, TEXT);
+
 CREATE OR REPLACE FUNCTION replace_protheus_code(
   p_old_code TEXT,
-  p_new_code TEXT,
-  p_name TEXT DEFAULT NULL,
-  p_legacy_group_id INTEGER DEFAULT NULL,
-  p_color TEXT DEFAULT NULL,
-  p_predominant_material TEXT DEFAULT NULL,
-  p_dimensional_mm NUMERIC DEFAULT NULL,
-  p_quantity_monitor_totem INTEGER DEFAULT NULL,
-  p_monitor_size NUMERIC DEFAULT NULL,
-  p_description TEXT DEFAULT NULL
+  p_new_code TEXT
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -58,18 +57,7 @@ BEGIN
     RAISE EXCEPTION 'Código % já existe em Cadastro de Componentes — nada foi alterado.', p_new_code;
   END IF;
 
-  UPDATE accessories SET
-    protheus_code = p_new_code,
-    name = COALESCE(p_name, name),
-    legacy_group_id = COALESCE(p_legacy_group_id, legacy_group_id),
-    color = COALESCE(p_color, color),
-    predominant_material = COALESCE(p_predominant_material, predominant_material),
-    dimensional_mm = COALESCE(p_dimensional_mm, dimensional_mm),
-    quantity_monitor_totem = COALESCE(p_quantity_monitor_totem, quantity_monitor_totem),
-    monitor_size = COALESCE(p_monitor_size, monitor_size),
-    description = COALESCE(p_description, description),
-    updated_at = NOW()
-  WHERE protheus_code = p_old_code;
+  UPDATE accessories SET protheus_code = p_new_code, updated_at = NOW() WHERE protheus_code = p_old_code;
   GET DIAGNOSTICS v_n = ROW_COUNT;
   v_counts := jsonb_set(v_counts, '{accessories}', to_jsonb(v_n));
 
@@ -104,6 +92,6 @@ $$;
 -- Mesmo motivo do global_table_replace: SECURITY DEFINER roda com
 -- privilégios do dono, então o acesso via API REST do Supabase precisa ser
 -- restrito só ao backend (service_role) — nunca anon/authenticated.
-REVOKE EXECUTE ON FUNCTION replace_protheus_code(TEXT, TEXT, TEXT, INTEGER, TEXT, TEXT, NUMERIC, INTEGER, NUMERIC, TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION replace_protheus_code(TEXT, TEXT, TEXT, INTEGER, TEXT, TEXT, NUMERIC, INTEGER, NUMERIC, TEXT) FROM anon, authenticated;
-GRANT EXECUTE ON FUNCTION replace_protheus_code(TEXT, TEXT, TEXT, INTEGER, TEXT, TEXT, NUMERIC, INTEGER, NUMERIC, TEXT) TO service_role;
+REVOKE EXECUTE ON FUNCTION replace_protheus_code(TEXT, TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION replace_protheus_code(TEXT, TEXT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION replace_protheus_code(TEXT, TEXT) TO service_role;
