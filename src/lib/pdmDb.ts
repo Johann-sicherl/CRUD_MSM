@@ -23,12 +23,17 @@ export const CONNECTION_BASE = {
   requestTimeout: 60000,
 }
 
-// Query fornecida pelo usuário, verbatim (mesmas CTEs/JOINs) — só filtra
-// AC_VALIDADO = 'S', ou seja, apenas itens já validados no PDM.
+// Query fornecida pelo usuário (mesmas CTEs/JOINs) — filtra AC_VALIDADO = 'S'
+// (só itens já validados no PDM) e, no PROPFIL, ConfigurationID = '2' (ver
+// auditoria: sem esse filtro, o MAX(RevisionNo) considerava revisões de
+// QUALQUER configuração, podendo escolher uma revisão que a config 2 nunca
+// atingiu — o JOIN seguinte, que já exige ConfigurationID = '2', então não
+// achava linha nenhuma e a propriedade saía em branco por engano).
 const QUERY = `
 WITH PROPFIL AS(
 SELECT VariableID, DocumentID, MAX(RevisionNo) AS REV_FIM
 FROM VariableValue
+WHERE ConfigurationID = '2'
 GROUP BY DocumentID, VariableID),
 
 FILES AS(

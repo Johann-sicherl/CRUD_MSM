@@ -18,6 +18,16 @@ import { CONNECTION_BASE, type PdmCredentials } from './pdmDb'
 // Se for montagem (ExtensionID = 4), traz a montagem + todas as peças e
 // sub-montagens dela, recursivamente, deduplicadas por DocumentID (uma peça
 // repetida em vários pontos da estrutura aparece uma vez só).
+//
+// Duas correções em cima do que o usuário forneceu (ver auditoria):
+// 1. No JOIN de `b` (documento filho), Deleted/UserDocRefsModified também são
+//    checados em `b`, não só em `a` — a versão original do usuário repetia as
+//    condições de `a` no JOIN de `b`, deixando o filho sem essa validação (um
+//    componente apagado/com refs modificadas ainda entrava na estrutura).
+// 2. MAXREV filtra ConfigurationID = 2 antes do MAX(RevisionNo) — sem isso, a
+//    revisão máxima podia vir de outra configuração que a config 2 nunca
+//    atingiu, e o JOIN seguinte (que já exige ConfigurationID = 2) não achava
+//    linha nenhuma, deixando a propriedade em branco por engano.
 
 const QUERY = `
 ;WITH BOM_TREE AS (
@@ -40,6 +50,8 @@ const QUERY = `
       ON x.XRefDocument = b.DocumentID
      AND b.ObjectTypeID = 1
      AND b.ExtensionID IN (4, 5)
+     AND b.UserDocRefsModified = 'False'
+     AND b.Deleted = 'False'
     WHERE x.RefTimeStamp <> ''
 ),
 DOCS AS (
@@ -52,6 +64,7 @@ MAXREV AS (
     FROM VariableValue v
     INNER JOIN DOCS f ON f.DocumentID = v.DocumentID
     WHERE v.VariableID IN (66,76,85,87,88,90,91,93,94,95,96,100,101,102,108)
+      AND v.ConfigurationID = 2
     GROUP BY v.DocumentID, v.VariableID
 ),
 VAL AS (
