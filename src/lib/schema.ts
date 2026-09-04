@@ -99,6 +99,7 @@ export interface TableSchema {
   bulkEdit?: boolean        // show "Alterar selecionados" button to mass-update checked rows
   auditQueries?: boolean    // log a ready-to-run SQL statement to audit_log on every insert/update/delete, for manual export to the production database
   auditKeyField?: string | string[]  // field(s) used to identify the row across environments in the generated SQL (defaults to the unique field, then autoIncrement, then all noBulkEdit fields as a composite key, then the PK)
+  auditNullAsText?: string  // in the audit_log SQL (INSERT/UPDATE only, never the WHERE key), a blank/NULL type:'text' field is written as this literal instead of NULL — e.g. 'N/A' on Cadastro de Equipamentos, so an unfilled optional field never lands as NULL in the official database. Never applied to number/decimal/boolean/jsonb fields (would break the column's real type).
   protheusStatusCheckField?: string  // field whose value is checked against the Protheus product master (SB1010) status (ATIVO/BLOQUEADO) — adds a view-only flag column (and, once connected, an extra "Exportar dados" column)
   listSortBy?: string[]      // client-side tie-break sort applied on top of the server's `orderBy` — one field name per level, ascending numeric. Used for fields the DB alone can't order by (e.g. a value resolved through another table), see DataTable.tsx
   copyToClipboard?: boolean  // show a "Copiar Dados" button next to "Exportar dados" — copies the same visible rows as tab-separated text, to paste directly into a spreadsheet without downloading a file
@@ -225,6 +226,7 @@ export const tables: Record<string, TableSchema> = {
     compactHeader: true,
     bulkEdit: true,
     auditQueries: true,
+    auditNullAsText: 'N/A',
     protheusStatusCheckField: 'protheus_code',
     fields: [
       { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },

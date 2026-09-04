@@ -55,11 +55,26 @@ function whereClause(keyFields: Field[], row: Record<string, unknown>): string {
   return keyFields.map(f => `${f.name} = ${sqlLiteral(f, row[f.name])}`).join(' AND ')
 }
 
+/** Same as sqlLiteral, but for a table with `auditNullAsText` set (e.g.
+ *  Cadastro de Equipamentos → 'N/A'), a blank/NULL type:'text' field is
+ *  written as that literal instead of NULL — never for other types, where a
+ *  text literal would just break the column. Only used for VALUES/SET, never
+ *  the WHERE key (see whereClause above), since the key fields identify the
+ *  row and are never meant to fall back to a placeholder. */
+function sqlLiteralForAudit(schema: TableSchema, field: Field, value: unknown): string {
+  const isBlank = value === null || value === undefined || value === ''
+  if (isBlank && schema.auditNullAsText && field.type === 'text') {
+    return sqlLiteral(field, schema.auditNullAsText)
+  }
+  return sqlLiteral(field, value)
+}
+
 /** INSERT statement. Lists every editable column explicitly — including empty
- *  ones as NULL — so whoever reviews it sees the full row shape at a glance.
- *  created_at/updated_at are skipped so the production DB fills them with its
- *  own NOW() default; legacy_id-style autoIncrement fields are still included
- *  since the route always computes and provides a value for those. */
+ *  ones as NULL (or `schema.auditNullAsText`, see sqlLiteralForAudit) — so
+ *  whoever reviews it sees the full row shape at a glance. created_at/
+ *  updated_at are skipped so the production DB fills them with its own NOW()
+ *  default; legacy_id-style autoIncrement fields are still included since the
+ *  route always computes and provides a value for those. */
 export function buildInsertSQL(table: string, schema: TableSchema, row: Record<string, unknown>): string {
   const cols: string[] = []
   const vals: string[] = []
@@ -76,7 +91,7 @@ export function buildInsertSQL(table: string, schema: TableSchema, row: Record<s
     // generate an INSERT against a column that doesn't exist.
     if (!isRealColumnField(field)) continue
     cols.push(field.name)
-    vals.push(sqlLiteral(field, row[field.name]))
+    vals.push(sqlLiteralForAudit(schema, field, row[field.name]))
   }
   return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${vals.join(', ')});`
 }
@@ -96,7 +111,7 @@ export function buildUpdateSQL(
     if (keyNames.has(name)) continue
     const field = schema.fields.find(f => f.name === name)
     if (!field || !isRealColumnField(field)) continue
-    sets.push(`${name} = ${sqlLiteral(field, val)}`)
+    sets.push(`${name} = ${sqlLiteralForAudit(schema, field, val)}`)
   }
   return `UPDATE ${table} SET ${sets.join(', ')} WHERE ${whereClause(keyFields, keyRow)};`
 }
