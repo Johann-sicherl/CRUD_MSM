@@ -107,6 +107,13 @@ export default function PdmConsultaAcessoriosPage() {
   const [propsLoading, setPropsLoading] = useState<Record<string, boolean>>({})
   const [propsError, setPropsError] = useState<Record<string, string>>({})
 
+  // Pop-up "incluir PDM?" ao clicar em Exportar dados / Copiar Dados — ver
+  // runExportOrCopy abaixo. bulkFetchProgress != null enquanto busca as
+  // propriedades de cada linha uma a uma (sequencial, pra não sobrecarregar
+  // o SQL Server do PDM com dezenas de consultas recursivas em paralelo).
+  const [exportChoiceOpen, setExportChoiceOpen] = useState<'export' | 'copy' | null>(null)
+  const [bulkFetchProgress, setBulkFetchProgress] = useState<{ done: number; total: number } | null>(null)
+
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
     setTimeout(() => setToast(null), 3500)
@@ -283,17 +290,91 @@ export default function PdmConsultaAcessoriosPage() {
     return { headers: columns.map(c => c.label), rowData: rows.map(row => columns.map(c => c.getValue(row))) }
   }
 
-  const handleExport = async () => {
-    const { headers, rowData } = buildExportData()
-    await exportVisibleData(headers, rowData, 'Consulta_PDM_x_Banco_MSM.xlsx')
-  }
-
-  const handleCopy = () => {
-    const { headers, rowData } = buildExportData()
+  const copyTsv = (headers: string[], rowData: string[][]) => {
     const tsv = [headers, ...rowData].map(r => r.join('\t')).join('\n')
     navigator.clipboard.writeText(tsv)
-      .then(() => showToast(`${rowData.length} registro${rowData.length !== 1 ? 's' : ''} copiado${rowData.length !== 1 ? 's' : ''} — cole na planilha`))
+      .then(() => showToast(`${rowData.length} linha${rowData.length !== 1 ? 's' : ''} copiada${rowData.length !== 1 ? 's' : ''} — cole na planilha`))
       .catch(() => showToast('Não foi possível copiar', true))
+  }
+
+  // Monta a versão "com PDM": uma linha por item da estrutura de cada
+  // componente (a peça/montagem em si +, se for montagem, cada item dela —
+  // ver PROPERTY_COLUMNS/togglePropertiesRow), repetindo as colunas normais
+  // da tela em cada uma. Busca sequencialmente (uma consulta recursiva de
+  // cada vez no PDM) e reaproveita o que já estiver em cache de expansões
+  // manuais — só busca de novo o que ainda não foi aberto na tela.
+  const buildExportDataWithPdmProperties = async (): Promise<{ headers: string[]; rowData: string[][] } | null> => {
+    if (!pdmCreds) { showToast('Conecte ao PDM primeiro', true); return null }
+    const rows = filteredComparison ?? []
+    const cache = { ...propsByCode }
+    let hadError = false
+    setBulkFetchProgress({ done: 0, total: rows.length })
+
+    const headers = [
+      ...columns.map(c => c.label),
+      'PDM Nível', 'PDM Tipo',
+      ...PROPERTY_COLUMNS.map(pc => `PDM ${pc.label}`),
+    ]
+    const blankProps = () => ['—', '—', ...PROPERTY_COLUMNS.map(() => '—')]
+    const outRows: string[][] = []
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      const baseValues = columns.map(c => c.getValue(row))
+      if (row.status === 'supabase-only') {
+        outRows.push([...baseValues, ...blankProps()])
+      } else {
+        let propRows = cache[row.protheusCode]
+        if (!propRows) {
+          try {
+            const res = await fetch('/api/pdm-component-properties', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user: pdmCreds.user, password: pdmCreds.password, documentId: row.pdm.documentId }),
+            })
+            const json = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(json.error || 'Falha ao buscar propriedades')
+            propRows = (json.rows || []) as PdmPropertyRow[]
+            cache[row.protheusCode] = propRows
+          } catch {
+            hadError = true
+            propRows = []
+          }
+        }
+        if (propRows.length === 0) {
+          outRows.push([...baseValues, ...blankProps()])
+        } else {
+          for (const pRow of propRows) {
+            outRows.push([
+              ...baseValues,
+              String(pRow.level),
+              (pRow.extensionId !== null ? EXTENSION_LABEL[pRow.extensionId] : undefined) ?? '—',
+              ...PROPERTY_COLUMNS.map(pc => (pRow[pc.key] as string | null) ?? '—'),
+            ])
+          }
+        }
+      }
+      setBulkFetchProgress({ done: i + 1, total: rows.length })
+    }
+
+    setPropsByCode(cache)
+    setBulkFetchProgress(null)
+    if (hadError) showToast('Algumas propriedades não puderam ser buscadas — linhas marcadas com "—"', true)
+    return { headers, rowData: outRows }
+  }
+
+  const runExportOrCopy = async (mode: 'export' | 'copy', withPdm: boolean) => {
+    setExportChoiceOpen(null)
+    if (!withPdm) {
+      const { headers, rowData } = buildExportData()
+      if (mode === 'export') await exportVisibleData(headers, rowData, 'Consulta_PDM_x_Banco_MSM.xlsx')
+      else copyTsv(headers, rowData)
+      return
+    }
+    const result = await buildExportDataWithPdmProperties()
+    if (!result) return
+    if (mode === 'export') await exportVisibleData(result.headers, result.rowData, 'Consulta_PDM_x_Banco_MSM_com_Propriedades_BOM.xlsx')
+    else copyTsv(result.headers, result.rowData)
   }
 
   if (!user.isAdmin) {
@@ -329,14 +410,14 @@ export default function PdmConsultaAcessoriosPage() {
         {comparison && (
           <>
             <button
-              onClick={handleExport}
+              onClick={() => setExportChoiceOpen('export')}
               disabled={filteredComparison?.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-40"
             >
               ↓ Exportar dados
             </button>
             <button
-              onClick={handleCopy}
+              onClick={() => setExportChoiceOpen('copy')}
               disabled={filteredComparison?.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-40"
             >
@@ -588,6 +669,64 @@ export default function PdmConsultaAcessoriosPage() {
             fetchDbSide()
           }}
         />
+      )}
+
+      {exportChoiceOpen && !bulkFetchProgress && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setExportChoiceOpen(null)}
+        >
+          <div
+            className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <h3 className="text-base font-semibold text-on-surface">
+                {exportChoiceOpen === 'export' ? 'Exportar dados' : 'Copiar dados'} — incluir PDM?
+              </h3>
+            </div>
+            <div className="p-5 flex flex-col gap-3">
+              <p className="text-sm text-on-surface-variant">
+                Quer incluir, pra cada componente, as propriedades e a estrutura (BOM) completa dele no PDM? Uma
+                montagem traz uma linha por item da estrutura — o resultado fica bem maior.
+              </p>
+              <button
+                onClick={() => runExportOrCopy(exportChoiceOpen, false)}
+                className="w-full text-left px-4 py-3 bg-surface-container-low border border-outline-variant rounded hover:border-primary transition-colors"
+              >
+                <span className="block text-sm font-semibold text-on-surface">Não, só os dados desta tela</span>
+                <span className="block text-xs text-outline mt-0.5">Mesmas colunas que já aparecem na tabela</span>
+              </button>
+              <button
+                onClick={() => runExportOrCopy(exportChoiceOpen, true)}
+                className="w-full text-left px-4 py-3 bg-surface-container-low border border-outline-variant rounded hover:border-primary transition-colors"
+              >
+                <span className="block text-sm font-semibold text-on-surface">Sim, incluir propriedades e BOM do PDM</span>
+                <span className="block text-xs text-outline mt-0.5">Busca no PDM a estrutura completa de cada componente — pode demorar um pouco</span>
+              </button>
+            </div>
+            <div className="px-5 py-3 border-t border-outline-variant flex justify-end">
+              <button onClick={() => setExportChoiceOpen(null)} className="text-sm text-outline hover:text-on-surface transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkFetchProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-sm p-5 flex flex-col gap-3 animate-fade-in">
+            <div className="text-sm font-semibold text-on-surface">Buscando propriedades no PDM...</div>
+            <div className="w-full h-2 bg-surface-container-highest rounded overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${(bulkFetchProgress.done / Math.max(1, bulkFetchProgress.total)) * 100}%` }}
+              />
+            </div>
+            <div className="text-xs text-outline font-mono">{bulkFetchProgress.done} / {bulkFetchProgress.total}</div>
+          </div>
+        </div>
       )}
 
       {toast && (
