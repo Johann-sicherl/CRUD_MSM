@@ -90,11 +90,16 @@ export default function CustosGeraisVmiPage() {
   const [importLoading, setImportLoading] = useState(false)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // Códigos com custo alvo sugerido pelo Admin ainda pendente de aprovação
-  // da Comercial (fila pending_target_cost, status 'novo' só — 'em_alteracao'
-  // já foi repassado, não faz mais parte do que falta exportar). Só o Admin
-  // usa isso (botão "Exportar Custos Sugeridos" abaixo).
-  const [pendingNovoCodes, setPendingNovoCodes] = useState<Set<string>>(new Set())
+  // Fila de aprovação de custo alvo (protheus_code -> status 'novo' |
+  // 'em_alteracao') — mesma fonte de DataTable.tsx/pending-target-cost.
+  // Usada tanto pelo Admin (deriva pendingNovoCodes pro "Exportar Custos
+  // Sugeridos") quanto pela Gerente Adm Comercial (filtro "Somente Novos"/
+  // "Em Alteração de Custeio" e o botão "Custo Imputado" em lote abaixo).
+  const [pendingTargetCost, setPendingTargetCost] = useState<Record<string, { status: string }> | null>(null)
+  // 'completo' | 'novos' | 'em_alteracao' — só o perfil restrito usa (ver
+  // gating nos botões/tabela abaixo); admin sempre vê tudo, como já era.
+  const [viewMode, setViewMode] = useState<'completo' | 'novos' | 'em_alteracao'>('completo')
+  const [markingImputed, setMarkingImputed] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -182,19 +187,31 @@ export default function CustosGeraisVmiPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  useEffect(() => {
-    if (!appUser.isAdmin) return
+  const fetchPendingTargetCost = useCallback(() => {
     fetch('/api/pending-target-cost')
       .then(r => r.ok ? r.json() : {})
-      .then((data: Record<string, { status: string }>) => {
-        setPendingNovoCodes(new Set(
-          Object.entries(data).filter(([, v]) => v.status === 'novo').map(([code]) => code)
-        ))
-      })
-      .catch(() => {})
-  }, [appUser.isAdmin])
+      .then((data: Record<string, { status: string }>) => setPendingTargetCost(data))
+      .catch(() => setPendingTargetCost({}))
+  }, [])
 
-  const filteredRows = useMemo(() => applyFilters(rows, colFilters), [rows, colFilters])
+  useEffect(() => { fetchPendingTargetCost() }, [fetchPendingTargetCost])
+
+  // Só o que o Admin usa (botão "Exportar Custos Sugeridos" abaixo).
+  const pendingNovoCodes = useMemo(() => {
+    const set = new Set<string>()
+    for (const [code, v] of Object.entries(pendingTargetCost ?? {})) if (v.status === 'novo') set.add(code)
+    return set
+  }, [pendingTargetCost])
+
+  // "Somente Novos"/"Em Alteração de Custeio" — só o perfil restrito (admin
+  // sempre vê "Completo", igual já era). Aplicado ANTES dos filtros de
+  // coluna, mesma ordem de precedência que a tabela normal (DataTable.tsx).
+  const viewFilteredRows = useMemo(() => {
+    if (appUser.isAdmin || viewMode === 'completo') return rows
+    return rows.filter(r => pendingTargetCost?.[r.code]?.status === viewMode)
+  }, [rows, viewMode, pendingTargetCost, appUser.isAdmin])
+
+  const filteredRows = useMemo(() => applyFilters(viewFilteredRows, colFilters), [viewFilteredRows, colFilters])
 
   // For each column: distinct display values from rows that pass ALL OTHER column filters
   // — gives cascading behavior, same as the table list pages
@@ -204,7 +221,7 @@ export default function CustosGeraisVmiPage() {
       const otherFilters = Object.fromEntries(
         Object.entries(colFilters).filter(([name]) => name !== col.key)
       )
-      const candidateRows = applyFilters(rows, otherFilters)
+      const candidateRows = applyFilters(viewFilteredRows, otherFilters)
       const seen = new Set<string>()
       for (const row of candidateRows) seen.add(getDisplayValue(row, col.key))
       result[col.key] = Array.from(seen).sort((a, b) => {
@@ -214,7 +231,7 @@ export default function CustosGeraisVmiPage() {
       })
     }
     return result
-  }, [rows, colFilters])
+  }, [viewFilteredRows, colFilters])
 
   // Conta como "ativo" tanto uma opção marcada quanto só texto digitado na
   // caixa de busca de algum filtro (mesmo sem marcar nada ainda).
@@ -278,6 +295,43 @@ export default function CustosGeraisVmiPage() {
   }
 
   const selectedRows = rows.filter(r => selectedIds.has(rowKey(r)))
+  // Só os selecionados que ainda estão em 'novo' — já imputado ou fora da
+  // fila não entra na contagem/no envio (ver PATCH /api/pending-target-cost,
+  // que já ignora com segurança um código fora da fila, mas não faz sentido
+  // nem tentar).
+  const selectedNovoCodes = selectedRows.filter(r => pendingTargetCost?.[r.code]?.status === 'novo').map(r => r.code)
+
+  // "Custo Imputado" em lote — reaproveita o checkbox de seleção que já
+  // existe (em vez de um botão linha a linha, como em DataTable.tsx) e o
+  // mesmo PATCH que a Comercial já usa lá, um código de cada vez.
+  const handleMarkImputed = async () => {
+    if (selectedNovoCodes.length === 0) return
+    setMarkingImputed(true)
+    let ok = 0
+    let fail = 0
+    for (const code of selectedNovoCodes) {
+      try {
+        const res = await fetch(`/api/pending-target-cost/${encodeURIComponent(code)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'em_alteracao' }),
+        })
+        if (res.ok) ok++
+        else fail++
+      } catch {
+        fail++
+      }
+    }
+    setMarkingImputed(false)
+    setSelectedIds(new Set())
+    fetchPendingTargetCost()
+    showToast(
+      fail === 0
+        ? `${ok} código${ok !== 1 ? 's' : ''} marcado${ok !== 1 ? 's' : ''} como Custo Imputado`
+        : `${ok} marcado${ok !== 1 ? 's' : ''}, ${fail} com erro`,
+      fail > 0,
+    )
+  }
 
   return (
     <div className="p-8 flex flex-col gap-4">
@@ -294,12 +348,47 @@ export default function CustosGeraisVmiPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {!appUser.isAdmin && (
+              <div className="flex items-center rounded border border-outline-variant overflow-hidden text-xs font-medium shrink-0">
+                <button
+                  onClick={() => setViewMode('completo')}
+                  title="Mostrar todos os registros"
+                  className={`px-3 py-2 transition-colors ${viewMode === 'completo' ? 'bg-primary/15 text-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+                >
+                  Completo
+                </button>
+                <button
+                  onClick={() => setViewMode('novos')}
+                  title="Mostrar só os códigos ainda sem custo alvo aprovado"
+                  className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'novos' ? 'bg-amber-500/15 text-amber-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+                >
+                  Somente Novos
+                </button>
+                <button
+                  onClick={() => setViewMode('em_alteracao')}
+                  title="Mostrar só os códigos já sinalizados como custo imputado, aguardando confirmação via Atualizador Global"
+                  className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'em_alteracao' ? 'bg-blue-500/15 text-blue-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+                >
+                  Em Alteração de Custeio
+                </button>
+              </div>
+            )}
             {hasActiveColFilters && (
               <button
                 onClick={() => { setColFilters({}); setFilterSearch({}) }}
                 className="px-3 py-2 text-sm text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
               >
                 ✕ Limpar filtros
+              </button>
+            )}
+            {!appUser.isAdmin && selectedIds.size > 0 && (
+              <button
+                onClick={handleMarkImputed}
+                disabled={markingImputed || selectedNovoCodes.length === 0}
+                title={selectedNovoCodes.length === 0 ? 'Nenhum dos selecionados está em Somente Novos' : `Marcar ${selectedNovoCodes.length} código(s) como Custo Imputado`}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-500 transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {markingImputed ? 'Atualizando…' : `✓ Custo Imputado (${selectedNovoCodes.length})`}
               </button>
             )}
             {selectedIds.size > 0 && (
