@@ -33,20 +33,30 @@ interface AuditRow {
 }
 
 // Perfil restrito (não-admin), dentro de uma tabela já visível pra ele:
+// - insert: só é relevante se o código estiver (ou tiver passado) pela fila
+//   de aprovação de custo alvo (pending_target_cost) — ou seja, um cadastro
+//   novo que o Admin marcou "Pendente de custo alvo" nele (ver
+//   TARGET_COST_PENDING_FIELD em schema.ts). Um cadastro novo comum, sem
+//   passar por essa fila, não é assunto dela — só clutter na Auditoria.
+//   equipments nunca tem esse checkbox (só accessories/
+//   standard_equipment_items), então um INSERT ali nunca aparece pra este
+//   perfil, por construção.
 // - update: só é relevante se mexeu em algum campo que ele mesmo pode editar
 //   (ver Configuração de Usuários) — ex.: mudar o nome de um componente não
 //   aparece pro Gerente Adm Comercial, mas mudar o custo padrão aparece,
-//   porque cost_std está nos campos liberados pra ele.
-// - insert: sempre relevante — um componente novo é relevante pra quem
-//   acompanha custo/precificação, mesmo que ele não tenha permissão de criar
-//   registros. Não há "campo alterado" aqui, é a linha inteira.
+//   porque cost_std está nos campos liberados pra ele. Não depende da fila
+//   de custo alvo — a própria edição dela (ex.: em Custos Gerais VMI) tem
+//   que continuar aparecendo, esteja o código na fila ou não.
 // - delete: NUNCA aparece pra esse perfil, em nenhuma tabela — exclusão de
 //   linha completa fica restrita a quem tem acesso total.
 // Falta de payload/baseline num update (não deveria acontecer) esconde a
 // linha, por cautela — não mostra o que não dá pra confirmar que é relevante.
-function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[]): boolean {
+function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[], pendingCodes: Set<string> | null): boolean {
   if (row.operation === 'delete') return false
-  if (row.operation === 'insert') return true
+  if (row.operation === 'insert') {
+    if (!pendingCodes) return false
+    return pendingCodes.has(row.record_key_value.trim().toUpperCase())
+  }
   // changed_fields (calculado no servidor, ver recordUpdateAudit) já conta
   // certo mesmo quando o único campo alterado é financeiro — baseline e
   // payload sempre mostram "1" pra esses, então re-diffar aqui (como o
@@ -64,10 +74,10 @@ function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[])
 // engenharia do que também é de controladoria/custo/precificação). Une todos
 // os perfis não-admin em vez de fixar em "Gerente Adm Comercial" por nome —
 // hoje é só ela, mas continua certo se outro perfil restrito for criado.
-function isRelevantToAnyRestrictedProfile(row: AuditRow, restrictedProfiles: UserProfile[]): boolean {
+function isRelevantToAnyRestrictedProfile(row: AuditRow, restrictedProfiles: UserProfile[], pendingCodes: Set<string> | null): boolean {
   return restrictedProfiles.some(p =>
     p.visibleModules.includes(row.table_name) &&
-    isRelevantForRestrictedProfile(row, p.editableFieldsByTable[row.table_name] ?? [])
+    isRelevantForRestrictedProfile(row, p.editableFieldsByTable[row.table_name] ?? [], pendingCodes)
   )
 }
 
@@ -218,6 +228,11 @@ export default function AuditoriaPage() {
   // e visibleRows abaixo). Recarregado toda vez que a auditoria recarrega,
   // pra sempre refletir o custo mais recente já imputado nesta máquina.
   const [localCosts, setLocalCosts] = useState<LocalCostsStore>({})
+  // Códigos (protheus_code, maiúsculo) na fila de aprovação de custo alvo
+  // (pending_target_cost, qualquer status) — usado só pra decidir se um
+  // INSERT é relevante pro perfil restrito (ver isRelevantForRestrictedProfile).
+  // null = ainda carregando.
+  const [pendingTargetCostCodes, setPendingTargetCostCodes] = useState<Set<string> | null>(null)
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError })
@@ -248,6 +263,17 @@ export default function AuditoriaPage() {
   }, [tableFilter, statusFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Buscado sempre (admin também precisa, pro cálculo de "Somente
+  // Engenharia" na exportação em TXT — ver isRelevantToAnyRestrictedProfile).
+  useEffect(() => {
+    fetch('/api/pending-target-cost')
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, { status: string }>) => {
+        setPendingTargetCostCodes(new Set(Object.keys(data).map(c => c.trim().toUpperCase())))
+      })
+      .catch(() => setPendingTargetCostCodes(new Set()))
+  }, [])
 
   useEffect(() => {
     if (!appUser.isAdmin) return
@@ -289,9 +315,9 @@ export default function AuditoriaPage() {
       return !!schema &&
         appUser.visibleModules.includes(r.table_name) &&
         isControllershipTable(schema) &&
-        isRelevantForRestrictedProfile(r, appUser.editableFieldsByTable[r.table_name] ?? [])
+        isRelevantForRestrictedProfile(r, appUser.editableFieldsByTable[r.table_name] ?? [], pendingTargetCostCodes)
     })
-  }, [rows, localCosts, appUser])
+  }, [rows, localCosts, appUser, pendingTargetCostCodes])
 
   const selectedRows = visibleRows.filter(r => selectedIds.has(r.id))
 
@@ -374,7 +400,7 @@ export default function AuditoriaPage() {
     setExportChoiceOpen(false)
     runTxtExport(
       onlyEngenharia
-        ? visibleRows.filter(r => !isRelevantToAnyRestrictedProfile(r, restrictedProfiles))
+        ? visibleRows.filter(r => !isRelevantToAnyRestrictedProfile(r, restrictedProfiles, pendingTargetCostCodes))
         : visibleRows
     )
   }
