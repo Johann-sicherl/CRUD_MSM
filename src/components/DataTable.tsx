@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, getControllershipPendingFields, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
+import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, getControllershipPendingFields, isControllershipTable, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
+import { parseCsvRaw } from '@/lib/csvTableDetect'
+import { detectControladoriaTable } from '@/lib/csvControladoriaDetect'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
@@ -176,6 +178,13 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [importRows,    setImportRows]     = useState<Record<string, string>[] | null>(null)
   const [importLoading, setImportLoading] = useState(false)
+  // Import de custos (Controladoria/Fiscal/Precificação) pro perfil restrito
+  // — ver botão "↑ Importar Custos (Excel)" abaixo, gated a
+  // isControllershipTable(schema) && !appUser.isAdmin. Rota própria (nunca
+  // cria/apaga linha, só atualiza as colunas financeiras da tabela), mesma
+  // usada em Atualizador Global > perfil restrito (AtualizadorGlobalControladoria.tsx).
+  const controladoriaFileInputRef = useRef<HTMLInputElement>(null)
+  const [controladoriaImportLoading, setControladoriaImportLoading] = useState(false)
   const [newMenuOpen,   setNewMenuOpen]   = useState(false)
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -663,6 +672,49 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     }
   }
 
+  // Import de custos (Controladoria/Fiscal/Precificação) — perfil restrito,
+  // ver botão "↑ Importar Custos (Excel)". Nunca cria/apaga linha, só
+  // atualiza as colunas financeiras dos códigos já cadastrados; mesma rota
+  // usada em Atualizador Global > perfil restrito.
+  const handleControladoriaImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setControladoriaImportLoading(true)
+    try {
+      const { headers, rows } = await parseCsvRaw(file)
+      const detection = headers.length > 0 ? detectControladoriaTable(headers) : null
+      if (!detection || detection.tableName !== tableName) {
+        showToast(
+          detection
+            ? `Este arquivo é de "${detection.schema.label}", não desta tela`
+            : 'Nenhuma coluna de Controladoria/Fiscal/Precificação reconhecida neste arquivo',
+          true,
+        )
+        return
+      }
+      const res = await fetch(`/api/global-update-controladoria/${tableName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, profileId: appUser.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) { showToast(json.error || 'Falha ao importar', true); return }
+      const parts = [
+        `${json.updated} atualizado${json.updated !== 1 ? 's' : ''}`,
+        json.notFound > 0 ? `${json.notFound} não encontrado(s)` : null,
+        json.errors?.length > 0 ? `${json.errors.length} erro(s)` : null,
+      ].filter(Boolean)
+      showToast(parts.join(' — '), (json.errors?.length ?? 0) > 0)
+      fetchData()
+      fetchLocalCosts()
+    } catch {
+      showToast('Erro ao importar arquivo', true)
+    } finally {
+      setControladoriaImportLoading(false)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     setDeleteId(null)
     const res = await fetch(`/api/${tableName}/${id}`, { method: 'DELETE' })
@@ -799,6 +851,31 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
         >
           ⧉ Copiar Dados
         </button>
+      )}
+
+      {/* Import de custos pro perfil restrito (Gerente Adm Comercial) —
+          admin já tem "+ Novo Registro > Importar Excel" abaixo (cria linha
+          nova) e a tela Atualizador Global (substituição completa); aqui é
+          só atualização das colunas de Controladoria/Fiscal/Precificação
+          dos códigos já cadastrados, direto na tela da tabela. */}
+      {!appUser.isAdmin && isControllershipTable(schema) && (
+        <>
+          <button
+            onClick={() => controladoriaFileInputRef.current?.click()}
+            disabled={controladoriaImportLoading}
+            title="Atualiza custo/IPI/margem/comissão dos códigos já cadastrados a partir de um CSV — não cria nem apaga registro"
+            className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {controladoriaImportLoading ? '…' : '↑ Importar Custos (CSV)'}
+          </button>
+          <input
+            ref={controladoriaFileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleControladoriaImportFile}
+          />
+        </>
       )}
 
       {/* Inserção — manual ou via Excel — só pra quem tem canCreateDelete. */}
