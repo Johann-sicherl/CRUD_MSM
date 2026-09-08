@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables, isControllershipTable, getControllershipPendingFields } from '@/lib/schema'
 import { getAuditKeyFields } from '@/lib/sqlAudit'
+import { findHeaderForField } from '@/lib/csvControladoriaDetect'
 import { getProfileById } from '@/lib/userProfileStore'
 import { updateTableRow } from '@/lib/tableWrite'
 
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // mais aqui do que a velocidade.
   for (const row of rows) {
     const headerByLower = new Map(Object.keys(row).map(h => [h.trim().toLowerCase(), h]))
-    const keyHeader = headerByLower.get(keyField.name.toLowerCase())
+    const keyHeader = findHeaderForField(keyField, headerByLower)
     const rawKey = keyHeader ? row[keyHeader] : undefined
     const normalizedKey = normalizeKey(rawKey)
     if (!normalizedKey) { notFound++; continue }
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const updateBody: Record<string, unknown> = {}
     for (const field of allowedFields) {
-      const header = headerByLower.get(field.name.toLowerCase())
+      const header = findHeaderForField(field, headerByLower)
       if (header !== undefined) updateBody[field.name] = row[header]
     }
     if (Object.keys(updateBody).length === 0) continue
