@@ -23,7 +23,7 @@ interface Props {
   // Vem de ?view=novos na URL (ver [table]/page.tsx) — usado pelo cartão de
   // pendências de controladoria do Dashboard pra abrir a tabela já filtrada
   // em "Somente Novos", sem precisar o usuário clicar de novo.
-  initialViewMode?: 'completo' | 'novos'
+  initialViewMode?: 'completo' | 'novos' | 'em_alteracao'
 }
 
 interface PageData {
@@ -242,17 +242,18 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
 
   useEffect(() => {
     // Não confia só no initialViewMode vindo do server (searchParams) — numa
-    // navegação client-side (Link do pop-up de pendências) pra uma rota já
+    // navegação client-side (Link de um pop-up de pendências) pra uma rota já
     // visitada sem ?view=, o router do Next.js pode reaproveitar a página já
     // cacheada e nunca repassar o param novo. Lendo a URL de verdade do
-    // navegador aqui garante que "Ir para janela" sempre abra em "Somente
-    // Novos", mesmo quando isso acontece. Roda em toda troca de tabela
-    // (inclusive a primeira montagem), e também reseta os outros filtros —
-    // a mesma instância de DataTable é reaproveitada ao trocar de tabela
-    // pela Sidebar (só tableName/schema mudam, sem remount).
-    const wantNovos = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'novos'
+    // navegador aqui garante que "Ir para janela" sempre abra na aba certa
+    // (?view=novos ou ?view=em_alteracao), mesmo quando isso acontece. Roda
+    // em toda troca de tabela (inclusive a primeira montagem), e também
+    // reseta os outros filtros — a mesma instância de DataTable é
+    // reaproveitada ao trocar de tabela pela Sidebar (só tableName/schema
+    // mudam, sem remount).
+    const wantedView = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null
     setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setPendingTargetCost(null)
-    setViewMode(wantNovos ? 'novos' : 'completo')
+    setViewMode(wantedView === 'novos' ? 'novos' : wantedView === 'em_alteracao' ? 'em_alteracao' : 'completo')
   }, [tableName])
 
   useEffect(() => {

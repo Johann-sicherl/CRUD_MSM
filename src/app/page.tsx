@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { tables, DOMAIN_LABELS } from '@/lib/schema'
 import { useAppAuth } from '@/lib/appAuthContext'
 import PendingControladoriaModal from '@/components/PendingControladoriaModal'
+import CusteioComercialModal from '@/components/CusteioComercialModal'
 import type { PendingControladoriaTable } from '@/app/api/dashboard/pending-controladoria/route'
+import type { CusteioComercialTable } from '@/app/api/dashboard/custeio-comercial/route'
 
 const DOMAIN_ORDER = ['catalogo', 'regras', 'plataforma']
 
@@ -21,6 +23,13 @@ export default function Dashboard() {
   // estão em 0 (a "chave" de pendência — ver localCostGuard.ts).
   const [pendingTables, setPendingTables] = useState<PendingControladoriaTable[] | null>(null)
   const [pendingModalOpen, setPendingModalOpen] = useState(false)
+
+  // Cartão "Em Custeio (Comercial)" — só pro admin: visibilidade de quantos
+  // componentes estão na fila de custeio da Gerente Adm Comercial (fila
+  // pending_target_cost) e quantos já foram sinalizados com "Custo Imputado"
+  // (status 'em_alteracao') vs. ainda aguardando (status 'novo').
+  const [custeioTables, setCusteioTables] = useState<CusteioComercialTable[] | null>(null)
+  const [custeioModalOpen, setCusteioModalOpen] = useState(false)
 
   useEffect(() => {
     fetch('/api/tables')
@@ -43,7 +52,19 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [appUser.isAdmin])
 
+  useEffect(() => {
+    if (!appUser.isAdmin) return
+    let cancelled = false
+    fetch('/api/dashboard/custeio-comercial')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (!cancelled && json) setCusteioTables(json.tables) })
+      .catch(() => { if (!cancelled) setCusteioTables([]) })
+    return () => { cancelled = true }
+  }, [appUser.isAdmin])
+
   const pendingTotal = (pendingTables ?? []).filter(t => t.count > 0).reduce((sum, t) => sum + t.count, 0)
+  const custeioNovoTotal = (custeioTables ?? []).filter(t => t.novo > 0).reduce((sum, t) => sum + t.novo, 0)
+  const custeioEmAlteracaoTotal = (custeioTables ?? []).filter(t => t.emAlteracao > 0).reduce((sum, t) => sum + t.emAlteracao, 0)
 
   const byDomain = DOMAIN_ORDER.map(domain => ({
     domain,
@@ -110,6 +131,28 @@ export default function Dashboard() {
             <div className="text-sm text-outline mt-1">clique para ver por tabela</div>
           </button>
         )}
+
+        {appUser.isAdmin && (
+          <button
+            onClick={() => setCusteioModalOpen(true)}
+            disabled={custeioTables === null}
+            title="Visibilidade sobre a fila de custeio da Gerente Adm Comercial — quantos componentes aguardam custeio e quantos já têm Custo Imputado"
+            className="bg-surface-container border border-blue-500/30 rounded-lg p-5 text-left hover:border-blue-500/60 hover:shadow-neon transition-all disabled:cursor-wait col-span-2 lg:col-span-1"
+          >
+            <div className="text-xs font-mono text-blue-400 uppercase tracking-[0.1em] mb-2">Em Custeio (Comercial)</div>
+            <div className="text-3xl font-bold text-blue-400 font-mono">
+              {custeioTables === null ? <span className="animate-pulse">…</span> : (custeioNovoTotal + custeioEmAlteracaoTotal).toLocaleString('pt-BR')}
+            </div>
+            <div className="text-sm text-outline mt-1 flex items-center gap-3">
+              {custeioTables === null ? 'clique para ver por tabela' : (
+                <>
+                  <span className="text-amber-400">{custeioNovoTotal.toLocaleString('pt-BR')} aguardando</span>
+                  <span className="text-blue-400">{custeioEmAlteracaoTotal.toLocaleString('pt-BR')} imputado{custeioEmAlteracaoTotal !== 1 ? 's' : ''}</span>
+                </>
+              )}
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Table groups */}
@@ -154,6 +197,10 @@ export default function Dashboard() {
 
       {pendingModalOpen && pendingTables && (
         <PendingControladoriaModal tables={pendingTables} onClose={() => setPendingModalOpen(false)} />
+      )}
+
+      {custeioModalOpen && custeioTables && (
+        <CusteioComercialModal tables={custeioTables} onClose={() => setCusteioModalOpen(false)} />
       )}
     </div>
   )

@@ -16,9 +16,10 @@ export default function TablePage({ params, searchParams }: Props) {
   const schema = tables[table]
   if (!schema) notFound()
 
-  // ?view=novos vem do cartão de pendências de controladoria do Dashboard —
-  // abre a tabela já filtrada em "Somente Novos" (ver DataTable.tsx).
-  const initialViewMode = searchParams.view === 'novos' ? 'novos' : undefined
+  // ?view=novos/em_alteracao vem dos cartões de pendências do Dashboard —
+  // abre a tabela já filtrada em "Somente Novos" ou "Em Alteração de
+  // Custeio" (ver DataTable.tsx).
+  const initialViewMode = searchParams.view === 'novos' ? 'novos' : searchParams.view === 'em_alteracao' ? 'em_alteracao' : undefined
 
   return (
     <div className="p-8">
