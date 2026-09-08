@@ -206,9 +206,13 @@ export default function CustosGeraisVmiPage() {
   // "Somente Novos"/"Em Alteração de Custeio" — só o perfil restrito (admin
   // sempre vê "Completo", igual já era). Aplicado ANTES dos filtros de
   // coluna, mesma ordem de precedência que a tabela normal (DataTable.tsx).
+  // pending_target_cost sempre grava o código em maiúsculo (ver
+  // pendingTargetCostGuard.ts) — precisa normalizar r.code do mesmo jeito
+  // antes de comparar, senão um código com letra minúscula na tabela nunca
+  // bate com a fila (mesmo padrão de bug já corrigido no card do Dashboard).
   const viewFilteredRows = useMemo(() => {
     if (appUser.isAdmin || viewMode === 'completo') return rows
-    return rows.filter(r => pendingTargetCost?.[r.code]?.status === viewMode)
+    return rows.filter(r => pendingTargetCost?.[r.code.trim().toUpperCase()]?.status === viewMode)
   }, [rows, viewMode, pendingTargetCost, appUser.isAdmin])
 
   const filteredRows = useMemo(() => applyFilters(viewFilteredRows, colFilters), [viewFilteredRows, colFilters])
@@ -298,8 +302,8 @@ export default function CustosGeraisVmiPage() {
   // Só os selecionados que ainda estão em 'novo' — já imputado ou fora da
   // fila não entra na contagem/no envio (ver PATCH /api/pending-target-cost,
   // que já ignora com segurança um código fora da fila, mas não faz sentido
-  // nem tentar).
-  const selectedNovoCodes = selectedRows.filter(r => pendingTargetCost?.[r.code]?.status === 'novo').map(r => r.code)
+  // nem tentar). Mesma normalização de viewFilteredRows acima.
+  const selectedNovoCodes = selectedRows.filter(r => pendingTargetCost?.[r.code.trim().toUpperCase()]?.status === 'novo').map(r => r.code)
 
   // "Custo Imputado" em lote — reaproveita o checkbox de seleção que já
   // existe (em vez de um botão linha a linha, como em DataTable.tsx) e o
