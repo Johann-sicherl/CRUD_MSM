@@ -4,18 +4,34 @@ import { tables, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { convertCsvRows } from '@/lib/globalUpdateConvert'
 import { extractRealCosts } from '@/lib/localCostExtract'
 import { replaceTableCosts } from '@/lib/localCostStore'
+import { getProfileById } from '@/lib/userProfileStore'
 
 type RouteParams = { params: { table: string } }
 
 // Deliberately does not import anything from '@/lib/sqlAudit' — a full-table
 // replace from the official CSV export must never appear in Auditoria.
-
+//
+// Só admin — substitui a tabela inteira (apaga + recria), sem olhar campo
+// nenhum. O perfil Gerente Adm Comercial usa a rota separada
+// /api/global-update-controladoria/[table], que só atualiza (nunca cria nem
+// apaga linha) e só nas colunas de Controladoria/Fiscal/Precificação. Não
+// existe sessão de servidor neste app (login é só a escolha de um perfil,
+// guardada no navegador — ver appAuthContext.tsx), então a única forma de
+// saber quem está chamando é o cliente informar o id do perfil, e o servidor
+// busca as permissões de verdade a partir dele (getProfileById) — nunca
+// confia num "isAdmin" solto que viesse do corpo da requisição.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { table } = params
   const schema = tables[table]
   if (!schema) return NextResponse.json({ error: 'Tabela não encontrada' }, { status: 404 })
 
   const body = await request.json()
+
+  const profile = await getProfileById(String(body?.profileId ?? ''))
+  if (!profile || !profile.isAdmin) {
+    return NextResponse.json({ error: 'Acesso restrito a administradores' }, { status: 403 })
+  }
+
   const rows: Record<string, unknown>[] = Array.isArray(body.rows) ? body.rows : []
   if (rows.length === 0) return NextResponse.json({ error: 'Nenhuma linha para importar' }, { status: 400 })
 

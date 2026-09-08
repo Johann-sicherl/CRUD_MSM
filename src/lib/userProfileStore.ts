@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { supabaseAdmin } from './supabase'
-import { tables, FORCE_TO_ONE_FIELDS } from './schema'
+import { tables, FORCE_TO_ONE_FIELDS, isControllershipTable } from './schema'
 import { ALL_MODULE_KEYS } from './modules'
 
 // Perfis de usuário do app (quem loga, com que senha, quem vê/edita o quê) —
@@ -45,8 +45,14 @@ function fromRow(row: ProfileRow): UserProfile {
 
 // Estado de hoje, preservado tal e qual: Engenharia do Produto sem nenhuma
 // restrição, Gerente Adm Comercial só com os módulos e campos de
-// controladoria/preço/fiscal que já tinha liberado.
-const CONTROLLERSHIP_TABLES = ['equipments', 'standard_equipment_items', 'accessories', 'dependant_items']
+// controladoria/preço/fiscal que já tinha liberado. Derivado de
+// isControllershipTable (schema.ts) — mesma fonte usada por Auditoria de
+// Queries e Atualizador Global — em vez de uma lista solta aqui, que já
+// tinha ficado desatualizada (incluía dependant_items, cujo cost_std foi
+// desativado como sinal de controladoria há um tempo). Só afeta o
+// primeiro-acesso (seed de perfis novos) — um perfil já existente no
+// Supabase não é recalculado por isto.
+const CONTROLLERSHIP_TABLES = Object.keys(tables).filter(t => isControllershipTable(tables[t]))
 
 function hardcodedDefaults(): Omit<ProfileRow, 'password'>[] {
   return [
@@ -117,6 +123,22 @@ export async function readProfiles(): Promise<UserProfile[]> {
   if (data && data.length > 0) return (data as ProfileRow[]).map(fromRow)
   const seeded = await seedDefaultProfiles()
   return seeded.map(fromRow)
+}
+
+// Confere quem está chamando uma rota a partir do id de perfil que o próprio
+// cliente informa (não existe sessão/cookie de servidor neste app — ver
+// appAuthContext.tsx: login é só a escolha de um perfil, guardada no
+// sessionStorage do navegador). Não é uma prova criptográfica de identidade
+// (um id poderia em teoria ser forjado por alguém mexendo na requisição),
+// mas busca as permissões de VERDADE no banco a partir do id — nunca confia
+// num "isAdmin" que o cliente mande solto — então pelo menos amarra a
+// checagem a um perfil real já cadastrado em Configuração de Usuários,
+// impossível de escalar sem saber o id de um perfil admin de verdade.
+export async function getProfileById(id: string): Promise<UserProfile | null> {
+  if (!id) return null
+  const { data, error } = await supabaseAdmin.from('user_profiles').select('*').eq('id', id).maybeSingle()
+  if (error || !data) return null
+  return fromRow(data as ProfileRow)
 }
 
 function countAdmins(rows: { is_admin: boolean }[]): number {
