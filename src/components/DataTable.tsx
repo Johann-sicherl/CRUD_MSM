@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { TableSchema, Field, getListFields, DOMAIN_LABELS, FORCE_TO_ONE_FIELDS, getControllershipPendingFields, isControllershipTable, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { exportMatrix, parseImportFile, exportVisibleData } from '@/lib/importExport'
-import { parseCsvRaw } from '@/lib/csvTableDetect'
-import { detectControladoriaTable } from '@/lib/csvControladoriaDetect'
+import { detectControladoriaTable, parseControladoriaFile } from '@/lib/csvControladoriaDetect'
 import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
@@ -682,7 +681,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     if (!file) return
     setControladoriaImportLoading(true)
     try {
-      const { headers, rows } = await parseCsvRaw(file)
+      const { headers, rows } = await parseControladoriaFile(file)
       const detection = headers.length > 0 ? detectControladoriaTable(headers) : null
       if (!detection || detection.tableName !== tableName) {
         showToast(
@@ -863,15 +862,15 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           <button
             onClick={() => controladoriaFileInputRef.current?.click()}
             disabled={controladoriaImportLoading}
-            title="Atualiza custo/IPI/margem/comissão dos códigos já cadastrados a partir de um CSV — não cria nem apaga registro"
+            title="Atualiza custo/IPI/margem/comissão dos códigos já cadastrados a partir de uma planilha (CSV ou Excel) — não cria nem apaga registro"
             className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
           >
-            {controladoriaImportLoading ? '…' : '↑ Importar Custos (CSV)'}
+            {controladoriaImportLoading ? '…' : '↑ Importar Custos'}
           </button>
           <input
             ref={controladoriaFileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx,.xls"
             className="hidden"
             onChange={handleControladoriaImportFile}
           />

@@ -2,9 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { useAppAuth } from '@/lib/appAuthContext'
-import { parseCsvRaw } from '@/lib/csvTableDetect'
 import { isBlankCell } from '@/lib/globalUpdateConvert'
-import { detectControladoriaTable, type ControladoriaDetection } from '@/lib/csvControladoriaDetect'
+import { detectControladoriaTable, parseControladoriaFile, type ControladoriaDetection } from '@/lib/csvControladoriaDetect'
 
 // Versão restrita do Atualizador Global pro perfil Gerente Adm Comercial —
 // só Grupo de Equipamentos/Cadastro de Equipamentos/Cadastro de Componentes
@@ -50,7 +49,7 @@ export default function AtualizadorGlobalControladoria() {
     for (const file of Array.from(fileList)) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       try {
-        const { headers, rows } = await parseCsvRaw(file)
+        const { headers, rows } = await parseControladoriaFile(file)
         const detection = headers.length > 0 ? detectControladoriaTable(headers) : null
         setFiles(prev => [...prev, { id, name: file.name, headers, rows, detection, status: 'reviewing' }])
         setExpandedId(prevId => prevId ?? id)
@@ -122,7 +121,7 @@ export default function AtualizadorGlobalControladoria() {
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Atualizador Global de Tabelas MSM</h1>
         <p className="text-on-surface-variant text-base mt-1">
-          Envie o CSV de Grupo de Equipamentos, Cadastro de Equipamentos ou Cadastro de Componentes pra
+          Envie a planilha (CSV ou Excel) de Grupo de Equipamentos, Cadastro de Equipamentos ou Cadastro de Componentes pra
           imputar custo/IPI/margem/comissão em lote. Só as colunas de Controladoria/Fiscal/Precificação são
           atualizadas — nome, descrição, grupo e demais dados do registro nunca são alterados por aqui. Um
           código que não exista ainda na tabela é ignorado (não é criado); a criação de itens novos continua
@@ -134,7 +133,7 @@ export default function AtualizadorGlobalControladoria() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.xlsx,.xls"
           multiple
           onChange={e => handleFilesSelected(e.target.files)}
           className="hidden"
@@ -144,7 +143,7 @@ export default function AtualizadorGlobalControladoria() {
           htmlFor="global-update-controladoria-file-input"
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary cursor-pointer transition-colors text-sm font-semibold"
         >
-          ⇪ Selecionar arquivo(s) CSV
+          ⇪ Selecionar arquivo(s) CSV ou Excel
         </label>
       </div>
 
@@ -192,7 +191,7 @@ export default function AtualizadorGlobalControladoria() {
                     {!d ? (
                       <div className="text-sm text-error">
                         Nenhuma tabela de Controladoria/Fiscal/Precificação tem colunas correspondentes a este
-                        arquivo. Confira se o CSV tem a coluna de código ({'protheus_code'} ou {'legacy_id'})
+                        arquivo. Confira se a planilha tem a coluna de código ({'protheus_code'} ou {'legacy_id'})
                         e pelo menos uma coluna financeira (ex.: cost_std, ipi_tax_rate).
                       </div>
                     ) : (

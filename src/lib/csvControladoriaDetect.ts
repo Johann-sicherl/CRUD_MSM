@@ -1,5 +1,44 @@
 import { tables, isControllershipTable, getControllershipPendingFields, type Field, type TableSchema } from './schema'
 import { getAuditKeyFields } from './sqlAudit'
+import { parseCsvText } from './csvTableDetect'
+
+// Lê CSV (parser próprio, texto exato — ver parseCsvText) ou .xlsx/.xls (via
+// SheetJS). O Atualizador Global do admin evita SheetJS de propósito (ela
+// reformata célula com cara de data, o que corromperia created_at/
+// updated_at) — mas aqui só entram colunas de Controladoria/Fiscal/
+// Precificação (sempre decimal) + a chave de negócio (texto/número), nunca
+// timestamp, então esse risco não existe pra este fluxo.
+export async function parseControladoriaFile(file: File): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const isExcel = /\.(xlsx|xls)$/i.test(file.name)
+  if (!isExcel) {
+    const text = await file.text()
+    const matrix = parseCsvText(text).filter(r => !(r.length === 1 && r[0].trim() === ''))
+    if (matrix.length === 0) return { headers: [], rows: [] }
+    const headers = matrix[0].map(h => h.trim())
+    const rows = matrix.slice(1)
+      .filter(r => r.some(c => c.trim() !== ''))
+      .map(r => {
+        const obj: Record<string, string> = {}
+        headers.forEach((h, i) => { obj[h] = r[i] !== undefined ? r[i] : '' })
+        return obj
+      })
+    return { headers, rows }
+  }
+
+  const XLSX = await import('xlsx')
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { type: 'array' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+  if (rawRows.length === 0) return { headers: [], rows: [] }
+  const headers = Object.keys(rawRows[0])
+  const rows = rawRows.map(r => {
+    const obj: Record<string, string> = {}
+    for (const h of headers) obj[h] = String(r[h] ?? '').trim()
+    return obj
+  })
+  return { headers, rows }
+}
 
 export interface ControladoriaDetection {
   tableName: string
