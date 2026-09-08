@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { tables, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { tables, FORCE_TO_ONE_FIELDS, isControllershipTable } from '@/lib/schema'
 import { diffChangedFields, buildInsertSQL, sqlLiteral } from '@/lib/sqlAudit'
 import { costBucketFor, getCostItemKey } from '@/lib/csvBaseline'
 import { useAppAuth } from '@/lib/appAuthContext'
@@ -258,12 +258,17 @@ export default function AuditoriaPage() {
   }, [appUser.isAdmin])
 
   // Perfil sem acesso total: só enxerga (no filtro e nas linhas) as tabelas
-  // que também aparecem pra ele na Sidebar — pro Gerente Adm Comercial isso
-  // já é exatamente as tabelas de controladoria/custo/precificação, mas a
-  // regra em si é genérica (segue Configuração de Usuários).
+  // que também sejam de Controladoria/Fiscal/Precificação de verdade (ver
+  // isControllershipTable) — travado no código, não só em "Configuração de
+  // Usuários": mesmo que alguém marque outra tabela em visibleModules pra
+  // esse perfil (ex.: por engano, ou pra liberar acesso a outra tela sem
+  // relação nenhuma com custo), a Auditoria nunca mostra o que não faz
+  // sentido pra ele. visibleModules continua valendo pra restringir AINDA
+  // MAIS (ex.: tirar uma das 3 tabelas desse perfil específico), só não pode
+  // mais alargar além das tabelas de controladoria.
   const auditedTables = useMemo(
     () => Object.entries(tables).filter(([key, s]) =>
-      s.auditQueries && (appUser.isAdmin || appUser.visibleModules.includes(key))
+      s.auditQueries && (appUser.isAdmin || (appUser.visibleModules.includes(key) && isControllershipTable(s)))
     ),
     [appUser],
   )
@@ -271,7 +276,7 @@ export default function AuditoriaPage() {
   // Além da tabela, um perfil restrito só vê updates que mexem em campo que
   // ele mesmo pode editar, e nunca vê delete — ver
   // isRelevantForRestrictedProfile. Insert conta sempre, dentro de uma
-  // tabela visível.
+  // tabela visível e de controladoria.
   const visibleRows = useMemo(() => {
     // Substitui aqui, uma vez, pra tela/Copiar/Copiar todas/Exportar
     // selecionadas/Exportar TXTs todos mostrarem o mesmo custo real — antes
@@ -279,10 +284,13 @@ export default function AuditoriaPage() {
     // query (ou usar qualquer outro botão) continuava mostrando "1".
     const withRealCosts = rows.map(r => ({ ...r, sql_query: substituteRealCostValues(r, localCosts) }))
     if (appUser.isAdmin) return withRealCosts
-    return withRealCosts.filter(r =>
-      appUser.visibleModules.includes(r.table_name) &&
-      isRelevantForRestrictedProfile(r, appUser.editableFieldsByTable[r.table_name] ?? [])
-    )
+    return withRealCosts.filter(r => {
+      const schema = tables[r.table_name]
+      return !!schema &&
+        appUser.visibleModules.includes(r.table_name) &&
+        isControllershipTable(schema) &&
+        isRelevantForRestrictedProfile(r, appUser.editableFieldsByTable[r.table_name] ?? [])
+    })
   }, [rows, localCosts, appUser])
 
   const selectedRows = visibleRows.filter(r => selectedIds.has(r.id))

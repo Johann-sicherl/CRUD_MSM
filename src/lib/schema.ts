@@ -139,6 +139,17 @@ export function getControllershipPendingFields(schema: TableSchema): Field[] {
   return schema.fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name) && !f.hideInList)
 }
 
+// Uma tabela "faz sentido" pra Controladoria/Fiscal/Precificação quando tem
+// pelo menos um campo financeiro de verdade (ver getControllershipPendingFields
+// acima) — hoje dá exatamente equipments, standard_equipment_items e
+// accessories. Usado pra travar, no código (não só em "Configuração de
+// Usuários"), o que a Auditoria de Queries e o Atualizador Global mostram
+// pro perfil Gerente Adm Comercial, pra nunca depender só de alguém manter a
+// configuração de módulos/campos editáveis em dia.
+export function isControllershipTable(schema: TableSchema): boolean {
+  return getControllershipPendingFields(schema).length > 0
+}
+
 // Campos elegíveis para restrição por usuário (ver Configuração de Usuários)
 // — os mesmos que RecordModal renderiza como editáveis no formulário.
 export function getFormEditableFields(schema: TableSchema): Field[] {
