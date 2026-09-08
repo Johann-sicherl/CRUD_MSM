@@ -33,7 +33,7 @@ export default function Dashboard() {
   // ficar incompleta se algum código não bater com nenhuma linha (ver
   // "unmatched" e o comentário em api/dashboard/custeio-comercial/route.ts).
   const [custeioTables, setCusteioTables] = useState<CusteioComercialTable[] | null>(null)
-  const [custeioTotals, setCusteioTotals] = useState<{ novo: number; emAlteracao: number; unmatched: number } | null>(null)
+  const [custeioTotals, setCusteioTotals] = useState<{ novo: number; emAlteracao: number; outrasPendencias: number; unmatched: number } | null>(null)
   const [custeioModalOpen, setCusteioModalOpen] = useState(false)
 
   useEffect(() => {
@@ -65,9 +65,9 @@ export default function Dashboard() {
       .then(json => {
         if (cancelled || !json) return
         setCusteioTables(json.tables)
-        setCusteioTotals({ novo: json.novo ?? 0, emAlteracao: json.emAlteracao ?? 0, unmatched: json.unmatched ?? 0 })
+        setCusteioTotals({ novo: json.novo ?? 0, emAlteracao: json.emAlteracao ?? 0, outrasPendencias: json.outrasPendencias ?? 0, unmatched: json.unmatched ?? 0 })
       })
-      .catch(() => { if (!cancelled) { setCusteioTables([]); setCusteioTotals({ novo: 0, emAlteracao: 0, unmatched: 0 }) } })
+      .catch(() => { if (!cancelled) { setCusteioTables([]); setCusteioTotals({ novo: 0, emAlteracao: 0, outrasPendencias: 0, unmatched: 0 }) } })
     return () => { cancelled = true }
   }, [appUser.isAdmin])
 
@@ -143,18 +143,21 @@ export default function Dashboard() {
           <button
             onClick={() => setCusteioModalOpen(true)}
             disabled={custeioTotals === null}
-            title="Visibilidade sobre a fila de custeio da Gerente Adm Comercial — quantos componentes aguardam custeio e quantos já têm Custo Imputado"
+            title="Visibilidade sobre o que está pendente do lado da Gerente Adm Comercial — fila de custeio (Custo Imputado) + demais pendências de controladoria/fiscal/precificação"
             className="bg-surface-container border border-blue-500/30 rounded-lg p-5 text-left hover:border-blue-500/60 hover:shadow-neon transition-all disabled:cursor-wait col-span-2 lg:col-span-1"
           >
             <div className="text-xs font-mono text-blue-400 uppercase tracking-[0.1em] mb-2">Em Custeio (Comercial)</div>
             <div className="text-3xl font-bold text-blue-400 font-mono">
-              {custeioTotals === null ? <span className="animate-pulse">…</span> : (custeioTotals.novo + custeioTotals.emAlteracao).toLocaleString('pt-BR')}
+              {custeioTotals === null ? <span className="animate-pulse">…</span> : (custeioTotals.novo + custeioTotals.emAlteracao + custeioTotals.outrasPendencias).toLocaleString('pt-BR')}
             </div>
-            <div className="text-sm text-outline mt-1 flex items-center gap-3">
+            <div className="text-sm text-outline mt-1 flex items-center gap-3 flex-wrap">
               {custeioTotals === null ? 'clique para ver por tabela' : (
                 <>
                   <span className="text-amber-400">{custeioTotals.novo.toLocaleString('pt-BR')} aguardando</span>
                   <span className="text-blue-400">{custeioTotals.emAlteracao.toLocaleString('pt-BR')} imputado{custeioTotals.emAlteracao !== 1 ? 's' : ''}</span>
+                  {custeioTotals.outrasPendencias > 0 && (
+                    <span className="text-primary">{custeioTotals.outrasPendencias.toLocaleString('pt-BR')} outra{custeioTotals.outrasPendencias !== 1 ? 's' : ''} pendência{custeioTotals.outrasPendencias !== 1 ? 's' : ''}</span>
+                  )}
                 </>
               )}
             </div>
