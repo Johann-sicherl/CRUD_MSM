@@ -16,7 +16,13 @@ export async function GET() {
 
   const byCode: Record<string, { status: string; flagged_at: string; status_changed_at: string | null }> = {}
   for (const row of (data ?? []) as Record<string, unknown>[]) {
-    const code = String(row.protheus_code ?? '')
+    // Normaliza igual a quem grava aqui (pendingTargetCostGuard.ts sempre
+    // salva em maiúsculo/trim) — defesa extra: se alguma linha antiga tiver
+    // ficado com espaço/caixa diferente por qualquer motivo, quem consome
+    // esta rota (DataTable.tsx, Custos Gerais VMI) já normaliza a própria
+    // chave de busca do mesmo jeito, então a chave devolvida aqui tem que
+    // bater exatamente, sem depender de o dado já estar perfeito na tabela.
+    const code = String(row.protheus_code ?? '').trim().toUpperCase()
     if (!code) continue
     byCode[code] = {
       status: String(row.status ?? 'novo'),

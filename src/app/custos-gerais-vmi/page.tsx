@@ -210,9 +210,15 @@ export default function CustosGeraisVmiPage() {
   // pendingTargetCostGuard.ts) — precisa normalizar r.code do mesmo jeito
   // antes de comparar, senão um código com letra minúscula na tabela nunca
   // bate com a fila (mesmo padrão de bug já corrigido no card do Dashboard).
+  // viewMode 'novos' (nome da aba, plural) != status 'novo' (valor gravado
+  // no banco, singular) — comparar os dois direto nunca batia, por isso
+  // "Somente Novos" ficava sempre vazio mesmo com item pendente de verdade
+  // ("Em Alteração de Custeio" funcionava por coincidência: os dois lados
+  // usam a mesma grafia "em_alteracao").
   const viewFilteredRows = useMemo(() => {
     if (appUser.isAdmin || viewMode === 'completo') return rows
-    return rows.filter(r => pendingTargetCost?.[r.code.trim().toUpperCase()]?.status === viewMode)
+    const wantStatus = viewMode === 'novos' ? 'novo' : 'em_alteracao'
+    return rows.filter(r => pendingTargetCost?.[r.code.trim().toUpperCase()]?.status === wantStatus)
   }, [rows, viewMode, pendingTargetCost, appUser.isAdmin])
 
   const filteredRows = useMemo(() => applyFilters(viewFilteredRows, colFilters), [viewFilteredRows, colFilters])
@@ -274,7 +280,7 @@ export default function CustosGeraisVmiPage() {
   // desta máquina; este arquivo é o único jeito de a Comercial vê-lo, e o
   // envio (e-mail, WhatsApp etc.) é manual, fora do sistema.
   const handleExportSuggestedCosts = () => {
-    const pendingRows = rows.filter(r => pendingNovoCodes.has(r.code))
+    const pendingRows = rows.filter(r => pendingNovoCodes.has(r.code.trim().toUpperCase()))
     const headers = COLUMNS.map(c => c.label)
     const rowData = pendingRows.map(row => COLUMNS.map(c =>
       c.key === 'cost' ? (row.cost ?? '') : getDisplayValue(row, c.key)
