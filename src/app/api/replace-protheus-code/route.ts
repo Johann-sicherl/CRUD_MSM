@@ -39,7 +39,11 @@ async function recordReplaceAudit(oldCode: string, newCode: string, counts: Reco
     operation: 'update',
     record_key_field: 'protheus_code',
     record_key_value: keyValueFor(1),
-    sql_query: `UPDATE accessories SET protheus_code = ${sqlStr(newCode)}, updated_at = NOW() WHERE protheus_code = ${sqlStr(oldCode)};`,
+    // updated_at fica de fora do SQL de Auditoria de propósito, igual em
+    // qualquer outra edição (ver diffChangedFields em sqlAudit.ts — tratado
+    // como bookkeeping, não uma edição de verdade), mesmo a função SQL real
+    // (replace_protheus_code) atualizando esse campo no banco de dados MSM.
+    sql_query: `UPDATE accessories SET protheus_code = ${sqlStr(newCode)} WHERE protheus_code = ${sqlStr(oldCode)};`,
     payload: { protheus_code: newCode },
     baseline: { protheus_code: oldCode },
     status: 'pending',
