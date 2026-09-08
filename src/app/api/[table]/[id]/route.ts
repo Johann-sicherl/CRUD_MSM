@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { tables, isRealColumnField, FORCE_TO_ONE_FIELDS } from '@/lib/schema'
-import { recordUpdateAudit, recordDeleteAudit } from '@/lib/sqlAudit'
-import { protectLocalCostsOnUpdate, protectLocalCostsOnDelete } from '@/lib/localCostGuard'
-import { syncPendingTargetCostOnWrite, clearPendingTargetCostOnDelete } from '@/lib/pendingTargetCostGuard'
+import { tables } from '@/lib/schema'
+import { recordDeleteAudit } from '@/lib/sqlAudit'
+import { protectLocalCostsOnDelete } from '@/lib/localCostGuard'
+import { clearPendingTargetCostOnDelete } from '@/lib/pendingTargetCostGuard'
+import { updateTableRow } from '@/lib/tableWrite'
 
 type RouteParams = { params: { table: string; id: string } }
 
@@ -18,49 +19,12 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { table, id } = params
-  if (!tables[table]) return NextResponse.json({ error: 'Tabela não encontrada' }, { status: 404 })
+  const schema = tables[table]
+  if (!schema) return NextResponse.json({ error: 'Tabela não encontrada' }, { status: 404 })
 
   const body = await request.json()
-  const schema = tables[table]
-  const updateBody: Record<string, unknown> = {}
-
-  for (const field of schema.fields.filter(f => !f.isPk && !f.isReadonly && isRealColumnField(f))) {
-    if (field.name === 'password' && !body[field.name]) continue
-    if (body[field.name] !== undefined) {
-      updateBody[field.name] = parseValue(field.type, body[field.name])
-    }
-  }
-
-  if (schema.hasTimestamps) updateBody.updated_at = new Date().toISOString()
-
-  const hasForceFields = schema.fields.some(f => FORCE_TO_ONE_FIELDS.includes(f.name))
-  let beforeRow: Record<string, unknown> | null = null
-  if (schema.auditQueries || hasForceFields) {
-    const { data: before } = await supabaseAdmin.from(table).select('*').eq('id', id).maybeSingle()
-    beforeRow = before as Record<string, unknown> | null
-  }
-
-  // Colunas financeiras (FORCE_TO_ONE_FIELDS): o Supabase nunca recebe o
-  // valor real digitado aqui — vai sempre 1. Só captura como "real" o que
-  // realmente mudou em relação ao que já estava salvo (beforeRow), pra
-  // reabrir/salvar o formulário sem tocar no custo não sobrescrever com 1 o
-  // valor real já guardado localmente.
-  const realCostFieldsChanged = protectLocalCostsOnUpdate(table, schema, updateBody, body, beforeRow)
-
-  const { data, error } = await supabaseAdmin.from(table).update(updateBody).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-
-  if (schema.auditQueries) {
-    try {
-      await recordUpdateAudit(supabaseAdmin, table, schema, beforeRow, updateBody, realCostFieldsChanged)
-    } catch { /* audit log is best-effort — never block the real operation */ }
-  }
-
-  try {
-    const protheusCode = String(updateBody.protheus_code ?? beforeRow?.protheus_code ?? '')
-    await syncPendingTargetCostOnWrite(supabaseAdmin, schema, body, protheusCode)
-  } catch { /* best-effort — never block the real operation */ }
-
+  const { data, error } = await updateTableRow(supabaseAdmin, table, schema, id, body)
+  if (error) return NextResponse.json({ error }, { status: 400 })
   return NextResponse.json(data)
 }
 
@@ -108,16 +72,4 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   }
 
   return NextResponse.json({ deleted: true, id })
-}
-
-function parseValue(type: string, value: unknown): unknown {
-  if (value === '' || value === null || value === undefined) return null
-  if (type === 'jsonb') {
-    if (typeof value === 'string') { try { return JSON.parse(value) } catch { return value } }
-    return value
-  }
-  if (type === 'boolean') return value === true || value === 'true'
-  if (type === 'number')  { const n = parseInt(String(value));   return Number.isNaN(n) ? null : n }
-  if (type === 'decimal') { const n = parseFloat(String(value)); return Number.isNaN(n) ? null : n }
-  return value
 }

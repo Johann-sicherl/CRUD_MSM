@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { useAppAuth } from '@/lib/appAuthContext'
+import AtualizadorGlobalControladoria from '@/components/AtualizadorGlobalControladoria'
 import {
   parseCsvRaw, detectTable, computeRowIssues,
   type DetectionResult, type SelectInvalidDetail,
@@ -56,7 +58,20 @@ function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline'; childr
   )
 }
 
+// Perfil sem acesso total (Gerente Adm Comercial) cai numa tela à parte —
+// só as 3 tabelas de Controladoria/Fiscal/Precificação, e só ATUALIZA as
+// colunas financeiras delas (nunca cria/apaga linha, nunca toca no resto do
+// registro). Ver AtualizadorGlobalControladoria.tsx e
+// /api/global-update-controladoria/[table]. Admin continua exatamente como
+// sempre foi, abaixo.
 export default function AtualizadorGlobalPage() {
+  const { user: appUser } = useAppAuth()
+  if (!appUser.isAdmin) return <AtualizadorGlobalControladoria />
+  return <AtualizadorGlobalAdmin />
+}
+
+function AtualizadorGlobalAdmin() {
+  const { user: appUser } = useAppAuth()
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [confirmChecked, setConfirmChecked] = useState(false)
@@ -108,7 +123,7 @@ export default function AtualizadorGlobalPage() {
       const res = await fetch(`/api/global-update/${file.detection.tableName}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: file.rows }),
+        body: JSON.stringify({ rows: file.rows, profileId: appUser.id }),
       })
       const json = await res.json()
       if (!res.ok) {
