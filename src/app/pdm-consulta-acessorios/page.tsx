@@ -817,7 +817,7 @@ function RevisionReplaceModal({ oldCode, newCode, prefill, onClose, onCreateAsNe
           ) : preview ? (
             <div className="text-xs text-on-surface-variant border border-outline-variant rounded p-3 flex flex-col gap-1">
               <div className="font-semibold text-on-surface mb-1">Isto vai atualizar {oldCode} → {newCode} em:</div>
-              {Object.entries(preview.counts).filter(([table]) => table !== 'accessories').map(([table, n]) => (
+              {Object.entries(preview.counts).map(([table, n]) => (
                 <div key={table} className="flex justify-between">
                   <span>{preview.labels[table] ?? table}</span>
                   <span className={n > 0 ? 'text-primary font-semibold' : 'text-outline'}>{n}</span>
