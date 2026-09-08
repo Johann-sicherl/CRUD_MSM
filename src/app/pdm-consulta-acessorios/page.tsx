@@ -247,7 +247,9 @@ export default function PdmConsultaAcessoriosPage() {
   const handleClearFilter = useCallback((key: string) => {
     setColFilters(prev => ({ ...prev, [key]: [] }))
   }, [])
-  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
+  // Conta como "ativo" tanto uma opção marcada quanto só texto digitado na
+  // caixa de busca de algum filtro (mesmo sem marcar nada ainda).
+  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0) || Object.values(filterSearch).some(v => v.trim() !== '')
 
   // Expande/recolhe o painel de propriedades de uma linha. Peça (sem
   // sub-itens) ou montagem (traz a estrutura inteira) — ver

@@ -543,7 +543,10 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     return result
   }, [pageData, colFilters, lookups, listFields, schema, duplicateCountMaps, localCosts, tableName])
 
-  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
+  // Conta como "ativo" tanto uma opção marcada quanto só texto digitado na
+  // caixa de busca de algum filtro (mesmo sem marcar nada ainda) — sem isso
+  // "Limpar filtros" ficava escondido enquanto só havia texto pra limpar.
+  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0) || Object.values(filterSearch).some(v => v.trim() !== '')
 
   const handleToggleFilter = useCallback((name: string, val: string) => {
     setColFilters(prev => {

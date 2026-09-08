@@ -216,7 +216,9 @@ export default function CustosGeraisVmiPage() {
     return result
   }, [rows, colFilters])
 
-  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0)
+  // Conta como "ativo" tanto uma opção marcada quanto só texto digitado na
+  // caixa de busca de algum filtro (mesmo sem marcar nada ainda).
+  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0) || Object.values(filterSearch).some(v => v.trim() !== '')
 
   const handleToggleFilter = (name: string, val: string) => {
     setColFilters(prev => {
