@@ -42,6 +42,47 @@ que adicionar uma tabela/tela ao `MODULES` array não cobre essas duas telas;
 qualquer alteração de acesso a elas precisa mexer na checagem `isAdmin`
 diretamente no componente/rota.
 
+Além do guard `isAdmin` dentro da própria página, o **link** para essas
+páginas fica hardcoded direto no render de `Sidebar.tsx` (não gerado a
+partir de `MODULES`/`visibleModules`) — defesa em profundidade
+deliberada: mesmo um erro de configuração no checklist de "módulos
+visíveis" de um perfil não pode fazer esse link aparecer para quem não é
+admin.
+
+## "+Novo Registro" (criação em lote) escondido do Gerente Adm Comercial
+
+O botão "+Novo Registro" / "Importar Excel" (fila de insert, mecanismo (c)
+de `specs/import-export.md`) é gated por `canCreateDelete` — e o perfil
+Gerente Adm Comercial não tem essa permissão, por design: ela só deve poder
+imputar custo no que já existe (via o import restrito de Controladoria),
+nunca cadastrar componente/equipamento novo por essa tela.
+
+## Global Table Replace já teve zero checagem de permissão
+
+Histórico relevante: antes desta sessão, a rota do Atualizador Global
+(substituição total, admin) não tinha **nenhuma** verificação de permissão
+no servidor — qualquer um com acesso ao menu podia importar em qualquer das
+tabelas. Achado da própria Claude durante a auditoria de permissões (não
+reportado pelo usuário), corrigido exigindo uma checagem real via
+`getProfileById` + `profile.isAdmin` (ver `/api/global-update/[table]/route.ts`).
+Serve de lembrete para revisar rotas antigas equivalentes ao adicionar
+mecanismos novos — a ausência de checagem não é sempre óbvia até alguém
+procurar.
+
+## Ordem de nesting dos providers é estrutural
+
+`ClientLayout.tsx`: `<AppAuthProvider><ProtheusAuthProvider><PdmAuthProvider>...`
+— `PdmAuthProvider` chama `useProtheusAuth()` e `useAppAuth()` internamente,
+então precisa ficar como descendente dos dois. Trocar a ordem quebra esses
+hooks com "must be used within Provider".
+
+## Tela de Consulta PDM é admin-only
+
+"Consulta PDM x Banco MSM" (credenciais do PDM/Vault + comparação PDM vs.
+Supabase, ver `specs/pdm-protheus-integracao.md`) nunca deve ficar visível,
+nem solicitar credencial, para o perfil Gerente Adm Comercial — só para
+Administrador.
+
 ## Controladoria/Fiscal/Precificação (perfil Gerente Adm Comercial)
 
 Ver `specs/dados-e-schema.md` (`isControllershipTable`) e

@@ -19,6 +19,7 @@ Next.js 14 (App Router) + TypeScript + Supabase, ferramenta administrativa inter
 - Escritas financeiras em massa são sequenciais de propósito (não `Promise.all`) — previsibilidade e erro isolado por linha importam mais que velocidade.
 - Auditoria (`recordInsertAudit`/`recordUpdateAudit`/`recordDeleteAudit`/`recordReplaceAudit`) é sempre best-effort: chamada dentro de `try/catch` que nunca bloqueia a operação real.
 - Listagens grandes: PostgREST tem cap padrão de 1000 linhas — use `.range()`/`limit` explícito quando precisar de mais.
+- Nunca citar "Supabase" em texto voltado ao usuário (labels, títulos, mensagens de erro) — sempre "banco de dados MSM". Comentário interno e nome de variável/tipo (`SupabaseClient` etc.) não conta, só o que aparece na tela.
 - Comentários só quando o "porquê" não é óbvio (armadilha, decisão que já foi tentada de outro jeito e falhou). Nunca comentário de "o quê".
 - Commits: mensagem em português explicando o porquê, nunca `--amend`, sempre `git push -u origin claude/crud-msm-audit-tccz64`. Rodapé de atribuição do ambiente de sessão vai no fim de todo commit/PR (ver instruções de sistema da sessão).
 

@@ -34,7 +34,15 @@ Existem **três mecanismos distintos** de import — não confundir:
   mesmo que esteja presente).
 - Reaproveita `updateTableRow` (`tableWrite.ts`) — o mesmo caminho do PUT
   normal de `/api/[table]/[id]` — para herdar de graça a auditoria e a
-  proteção de custo real local, sem duplicar essa lógica.
+  proteção de custo real local, sem duplicar essa lógica. **Decisão
+  arquitetural deliberada**: em vez de criar um caminho de escrita paralelo
+  para este import, a lógica de UPDATE existente foi extraída para esse
+  helper único, reaproveitado pelos dois fluxos — para nunca duplicar (e
+  arriscar divergir) a regra de negócio de auditoria/proteção de custo.
+- Grupo de Equipamentos, Cadastro de Equipamentos e Cadastro de Componentes
+  têm cada um um botão "Importar Custos" na própria tela, reaproveitando
+  exatamente este mesmo mecanismo — conveniência de UI, nenhuma regra de
+  negócio nova.
 - Permissão via `getProfileById`, nunca um `isAdmin` do corpo (ver
   `specs/permissoes-e-perfis.md`).
 - Processamento das linhas é **sequencial**, de propósito (dados financeiros

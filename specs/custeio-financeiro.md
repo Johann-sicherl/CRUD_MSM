@@ -82,6 +82,40 @@ Custos Sugeridos" do admin e na normalização de chave da rota GET
 `status` da fila, replicar este mapeamento — nunca comparar as strings
 direto.
 
+## "Grupo de Equipamentos pendente" ≠ fila de custo alvo
+
+São dois conceitos de pendência **diferentes**, não um bug quando aparecem
+divergentes:
+- **Pendência de Controladoria** — qualquer tabela com
+  `isControllershipTable` que ainda tenha um campo financeiro zerado (sinal
+  de "ainda não custeado" — ver `getControllershipPendingFields`). Isso
+  inclui Grupo de Equipamentos.
+- **Fila de custo alvo** (`pending_target_cost`, `TARGET_COST_PENDING_FIELD`)
+  — só existe onde há o checkbox correspondente, hoje apenas Cadastro de
+  Componentes e Cadastro de Equipamentos. Grupo de Equipamentos não tem esse
+  checkbox e por isso nunca aparece nessa fila especificamente.
+
+Se um usuário perguntar "por que não estou vendo todas as pendências", a
+resposta normalmente é que ele está confundindo as duas listas — não que
+há um bug de contagem.
+
+## Captura do custo real acontece antes do forçamento a sentinela
+
+Mesmo num import de tabela completa pelo Atualizador Global, o custo real de
+cada linha do CSV é extraído para o arquivo local (`extractRealCosts`)
+**antes** de o valor no Supabase ser forçado a `1`/`0` — a captura em si não
+é o ponto de risco. O risco real a proteger ao tocar nesse fluxo é uma
+coluna **não-financeira** ser sobrescrita por acidente durante o import, não
+a perda do valor de custo.
+
+## "Custo Imputado" reaproveita o multi-select existente
+
+A ação em massa "Custo Imputado" (Custos Gerais VMI) foi construída para
+reaproveitar o checkbox de multi-seleção que `DataTable` já tinha, com um
+botão "Alterar para Custo Imputado" — pedido explícito do usuário, para não
+introduzir uma ação linha a linha redundante com um mecanismo que já
+existia.
+
 ## Dashboard — card "Em Custeio"
 
 Conta quantos códigos estão na fila `pending_target_cost`. Bug já corrigido:

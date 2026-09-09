@@ -27,6 +27,22 @@ ordenação e o destaque amarelo de "campo mudou" (via `shouldCompareField`/
 `valuesEqual` de `csvBaseline.ts`, ver `specs/csv-baseline-comparacao.md`)
 são todos derivados do `TableSchema`, não hardcoded por tela.
 
+Convenções obrigatórias para qualquer tela nova de tabela larga (replicar,
+não redescobrir):
+- **Coluna sticky (ex. "Ação")**: fundo sempre **opaco** por estado de linha
+  (nunca cor com `/alpha`) — senão o conteúdo que rola por baixo aparece
+  através da coluna fixa. Bug real já causado por isso: a coluna de ação
+  "desaparecia" (na prática, ficava ilegível) numa tabela de 10 colunas.
+- **Gradiente de fade indicando scroll horizontal restante**
+  (`scrollRef`/`canScrollRight`/`checkScroll`/`ResizeObserver`) — omitir
+  isso numa tela nova é tratado como bug, não escolha de estilo.
+- **"Limpar filtros"** deve aparecer assim que o usuário digita na busca do
+  filtro, não só depois de selecionar uma opção.
+- Nenhuma tela de tabela deve ter `max-w` fixo no container central — uma
+  tela já teve isso por engano (`max-w-[108rem]`), ficando visivelmente mais
+  estreita que as outras; removido para manter a largura consistente entre
+  telas.
+
 ## `ColumnFilter.tsx` — portal + zoom
 
 Renderiza o dropdown de filtro num portal direto no `<body>`
@@ -42,7 +58,10 @@ precisa da mesma compensação.
 
 Filtro de coluna tem toggle **aditivo vs. substituição** — selecionar um
 valor novo adiciona ao filtro atual em vez de substituí-lo, replicando o
-comportamento de filtro do Excel que o usuário já conhece.
+comportamento de filtro do Excel que o usuário já conhece. As opções
+listadas no dropdown de uma coluna excluem o filtro **dela mesma** (para não
+esconder as próprias opções), mas respeitam os filtros já ativos de **todas
+as outras** colunas.
 
 ## `BulkEditModal.tsx` vs `CostBulkEditModal.tsx`
 
@@ -65,6 +84,24 @@ múltiplas tabelas.
   `background`, `error`, `error-container`, `on-error-container`, entre
   outros — sempre usar os tokens do tema, nunca cor fixa, para que os dois
   temas (e futuros) continuem funcionando.
+
+## Formulários de credencial e o gerenciador de senhas do Chrome
+
+- O login do próprio app (escolha de perfil) mantém `autoComplete="off"` de
+  propósito — não há usuário/senha reais, é um `<select>` de perfil; nunca
+  deve disparar o prompt "salvar senha" do Chrome.
+- Os modais de credencial real (Protheus, PDM) usam `autoComplete="username"`/
+  `"current-password"` semânticos, com um atributo `name` distinto por
+  formulário.
+- Duas armadilhas já mapeadas ao debugar isso: (1) o Chrome guarda
+  credenciais por **origem** (protocolo+host+porta), não por caminho da
+  URL — então separar formulários de login em rotas diferentes do mesmo
+  site não isola nada; (2) a chave de unicidade é `(origem, usuário)`, não
+  "uma senha por site" — reusar o mesmo `name`/usuário em entradas manuais
+  diferentes sobrescreve a entrada salva em vez de criar uma segunda.
+  `autocomplete="off"` também parece suprimir a heurística de "salvar senha"
+  do Chrome (não só o autofill) em fluxos de login via modal numa SPA —
+  diagnosticado empiricamente, não documentado pelo Chrome.
 
 ## `idbStore.ts`
 

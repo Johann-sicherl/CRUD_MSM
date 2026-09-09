@@ -57,4 +57,35 @@ novo caminho de auditoria for adicionado.
 A visibilidade de uma linha de Auditoria (INSERT) para o perfil Gerente Adm
 Comercial está amarrada à fila `pending_target_cost` — ver
 `specs/custeio-financeiro.md` para o fluxo completo de
-`syncPendingTargetCostOnWrite`.
+`syncPendingTargetCostOnWrite`. Consequência direta, **não é bug**: uma
+tabela sem checkbox de custo alvo (ex.: Grupo de Equipamentos) nunca mostra
+uma linha de INSERT para esse perfil — a UI dela não gera pendência de custo
+alvo, então não há gatilho de visibilidade.
+
+## Alterações manuais via SQL Editor nunca entram na auditoria
+
+Rodar uma query direto no SQL Editor do Supabase, fora do app, não passa
+por `record*Audit` — não fica rastro nenhum em `audit_log`. Só escrita feita
+através de uma rota do app gera auditoria. Ver também
+`specs/pdm-protheus-integracao.md` (mesma observação, no contexto de
+correções pontuais de código/revisão feitas fora do app).
+
+## `auditNullAsText` — campo opcional em branco não pode virar `NULL` no SQL de auditoria
+
+Alguns campos precisam que o SQL gerado para o banco oficial nunca grave
+`NULL` num campo opcional deixado em branco — pedido explícito do usuário
+para Cadastro de Equipamentos: "os campos que eu não preencher... não podem
+ser inseridos no Banco de Dados com NULL mas sim N/A." Implementado como
+flag **opt-in no schema** (não hardcoded por tabela), para poder estender a
+outras tabelas sob pedido, sem duplicar lógica:
+
+```ts
+auditNullAsText?: string  // ex.: 'N/A' em equipments
+```
+
+`sqlLiteralForAudit` (`sqlAudit.ts`) troca o literal `NULL` por esse valor
+**só para campos `type: 'text'` em branco**, e só no SQL de INSERT/UPDATE
+gerado (nunca na cláusula WHERE de chave). **O registro real dentro do
+Supabase continua guardando `NULL` normalmente** — isto muda apenas o texto
+do SQL que a Auditoria produz para outra pessoa rodar no banco oficial, não
+o dado que o app grava.
