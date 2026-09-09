@@ -108,13 +108,32 @@ cada linha do CSV é extraído para o arquivo local (`extractRealCosts`)
 coluna **não-financeira** ser sobrescrita por acidente durante o import, não
 a perda do valor de custo.
 
-## "Custo Imputado" reaproveita o multi-select existente
+## "✓ Custo Imputado" — sinalizar 'novo' → 'em_alteracao', em lote
 
-A ação em massa "Custo Imputado" (Custos Gerais VMI) foi construída para
-reaproveitar o checkbox de multi-seleção que `DataTable` já tinha, com um
-botão "Alterar para Custo Imputado" — pedido explícito do usuário, para não
-introduzir uma ação linha a linha redundante com um mecanismo que já
-existia.
+Botão exclusivo do perfil Gerente Adm Comercial (nunca aparece pro Admin):
+PATCH em `/api/pending-target-cost/[code]` com `{ status: 'em_alteracao' }`
+pra cada código selecionado que ainda esteja em `'novo'` — sai de "Somente
+Novos", entra em "Em Alteração de Custeio", até o Admin confirmar
+oficialmente via Atualizador Global. **Não grava nenhum valor de custo** —
+é só a sinalização "já imputei o custo desse código" (o valor em si é
+editado direto na linha, ou pelo bulk de custo abaixo).
+
+Existe em dois lugares, cada um com sua própria seleção/estado, mas o mesmo
+PATCH por trás:
+- `custos-gerais-vmi/page.tsx` (`handleMarkImputed`) — cross-tabela, por
+  código Protheus (o multi-select ali é por `CostRow.code`, não por `id`).
+- `DataTable.tsx` (`handleBulkSignalCostImputed`) — dentro da própria tabela
+  (Cadastro de Componentes/Equipamentos/Grupo de Equipamentos), reaproveita
+  o checkbox de multi-seleção que "Excluir"/"Alterar selecionados" já usam
+  (`selectedIds`, por `row.id`) — pedido explícito do usuário, pra não
+  precisar marcar um código de cada vez pelo link "✓ Custo Imputado" que já
+  existia por linha (`handleSignalCostImputed`). O botão em lote só conta
+  (e só envia PATCH para) os selecionados que ainda estão em `'novo'` —
+  os demais são ignorados silenciosamente, sem erro.
+
+Não confundir com o bulk **de valor** abaixo (`CostBulkEditModal`) — são
+ações independentes: uma grava `cost_std`, a outra só move o status da
+fila.
 
 ## Dashboard — card "Em Custeio"
 

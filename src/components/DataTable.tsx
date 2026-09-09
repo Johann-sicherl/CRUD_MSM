@@ -342,6 +342,51 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     setSignalingCode(null)
   }
 
+  // Versão em lote de handleSignalCostImputed, pro botão "✓ Custo Imputado
+  // (N Selecionados)" — reaproveita o checkbox de multi-seleção que
+  // Excluir/Alterar já usam (pedido explícito do usuário, pra não precisar
+  // marcar um código por vez). Mesmo PATCH, mesmo mecanismo de
+  // custos-gerais-vmi/page.tsx (handleMarkImputed) — só os selecionados que
+  // ainda estão em 'novo' contam; o resto é ignorado silenciosamente.
+  const [bulkSignalingImputed, setBulkSignalingImputed] = useState(false)
+  const selectedNovoCodes = useMemo(() => {
+    if (!usesTargetCostPending || appUser.isAdmin || selectedIds.size === 0 || !pendingTargetCost) return []
+    const codes: string[] = []
+    for (const row of pageData?.data ?? []) {
+      if (!selectedIds.has(String(row.id))) continue
+      const code = String(row.protheus_code ?? '').trim().toUpperCase()
+      if (code && pendingTargetCost[code]?.status === 'novo') codes.push(code)
+    }
+    return codes
+  }, [usesTargetCostPending, appUser.isAdmin, selectedIds, pendingTargetCost, pageData])
+
+  const handleBulkSignalCostImputed = async () => {
+    if (selectedNovoCodes.length === 0 || bulkSignalingImputed) return
+    setBulkSignalingImputed(true)
+    let ok = 0, fail = 0
+    for (const code of selectedNovoCodes) {
+      try {
+        const res = await fetch(`/api/pending-target-cost/${encodeURIComponent(code)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'em_alteracao' }),
+        })
+        if (res.ok) {
+          ok++
+          setPendingTargetCost(prev => ({ ...(prev ?? {}), [code]: { status: 'em_alteracao' } }))
+        } else fail++
+      } catch { fail++ }
+    }
+    setBulkSignalingImputed(false)
+    setSelectedIds(new Set())
+    showToast(
+      fail === 0
+        ? `${ok} código${ok !== 1 ? 's' : ''} marcado${ok !== 1 ? 's' : ''} como Custo Imputado`
+        : `${ok} marcado${ok !== 1 ? 's' : ''}, ${fail} com erro`,
+      fail > 0,
+    )
+  }
+
   useEffect(() => {
     const fieldsWithLookup = listFields.filter(f => f.lookupFrom)
     if (fieldsWithLookup.length === 0) return
@@ -845,6 +890,22 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
         ) : (
           <span className="text-xs text-outline">Conecte ao Protheus (barra lateral) para ver o status ATIVO/BLOQUEADO</span>
         )
+      )}
+      {/* "Custo Imputado" em lote — Gerente Adm Comercial, mesmo botão de
+          custos-gerais-vmi/page.tsx, agora também aqui pra não precisar
+          marcar um código por vez. Só conta quem está selecionado E ainda
+          em 'novo' (selectedNovoCodes) — aparece sempre que há seleção,
+          mesmo que nenhum selecionado esteja elegível, pra dar feedback
+          claro (botão desabilitado com "0"). */}
+      {usesTargetCostPending && !appUser.isAdmin && selectedIds.size > 0 && (
+        <button
+          onClick={handleBulkSignalCostImputed}
+          disabled={bulkSignalingImputed || selectedNovoCodes.length === 0}
+          title={selectedNovoCodes.length === 0 ? 'Nenhum dos selecionados está em Somente Novos' : `Marcar ${selectedNovoCodes.length} código(s) como Custo Imputado`}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-500 transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {bulkSignalingImputed ? 'Atualizando…' : `✓ Custo Imputado (${selectedNovoCodes.length})`}
+        </button>
       )}
       {/* Edição/exclusão em massa mexem em qualquer campo/registro — ficam
           de fora pra quem não tem canCreateDelete (ver Configuração de
