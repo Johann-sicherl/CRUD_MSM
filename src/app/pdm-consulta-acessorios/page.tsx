@@ -379,11 +379,11 @@ export default function PdmConsultaAcessoriosPage() {
     else copyTsv(result.headers, result.rowData)
   }
 
-  if (!user.isAdmin) {
+  if (!user.isAdmin && !user.canConnectPdm) {
     return (
       <div className="p-8">
         <div className="bg-error-container/20 border border-error/30 text-error rounded-lg px-5 py-4 text-sm">
-          Acesso restrito a administradores.
+          Acesso restrito a quem tem permissão de conexão ao PDM (ver Configuração de Usuários).
         </div>
       </div>
     )

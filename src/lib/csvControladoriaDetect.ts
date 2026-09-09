@@ -51,6 +51,16 @@ export function findHeaderForField(field: Field, headerByLower: Map<string, stri
   return headerByLower.get(field.name.toLowerCase()) ?? headerByLower.get(field.label.toLowerCase())
 }
 
+// Normalização de chave de negócio compartilhada entre a rota server-side
+// (/api/global-update-controladoria/[table]/route.ts) e a janela de revisão
+// client-side (ControladoriaImportReviewModal) — as duas precisam casar uma
+// linha do arquivo com o mesmo id de banco, senão a revisão mostraria uma
+// coisa e o POST final faria outra.
+export function normalizeControladoriaKey(keyField: Field, value: unknown): string {
+  const s = String(value ?? '').trim()
+  return keyField.type === 'text' ? s.toUpperCase() : s
+}
+
 export interface ControladoriaDetection {
   tableName: string
   schema: TableSchema

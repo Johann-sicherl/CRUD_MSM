@@ -36,18 +36,18 @@ do projeto durante o desenvolvimento; não tratar como autenticação real.
 ## Telas fora do sistema de módulos
 
 `/pdm-consulta-acessorios` e `/configuracao-usuarios` são **deliberadamente**
-mantidas fora do sistema de `visibleModules`/`MODULES` — o acesso a elas é
-gated direto em `isAdmin`, não por uma entrada em `modules.ts`. Isso significa
-que adicionar uma tabela/tela ao `MODULES` array não cobre essas duas telas;
-qualquer alteração de acesso a elas precisa mexer na checagem `isAdmin`
-diretamente no componente/rota.
+mantidas fora do sistema de `visibleModules`/`MODULES` — o acesso a elas
+não é uma entrada em `modules.ts`, é uma checagem própria no componente/rota
+(`isAdmin` para `/configuracao-usuarios`; `isAdmin || canConnectPdm` para
+`/pdm-consulta-acessorios`, ver seção de conexão a PDM/Protheus abaixo).
+Isso significa que adicionar uma tabela/tela ao `MODULES` array não cobre
+essas duas telas.
 
-Além do guard `isAdmin` dentro da própria página, o **link** para essas
-páginas fica hardcoded direto no render de `Sidebar.tsx` (não gerado a
-partir de `MODULES`/`visibleModules`) — defesa em profundidade
-deliberada: mesmo um erro de configuração no checklist de "módulos
-visíveis" de um perfil não pode fazer esse link aparecer para quem não é
-admin.
+Além do guard dentro da própria página, o **link** para essas páginas fica
+hardcoded direto no render de `Sidebar.tsx` (não gerado a partir de
+`MODULES`/`visibleModules`) — defesa em profundidade deliberada: mesmo um
+erro de configuração no checklist de "módulos visíveis" de um perfil não
+pode fazer esse link aparecer para quem não tem a permissão.
 
 ## "+Novo Registro" (criação em lote) escondido do Gerente Adm Comercial
 
@@ -72,16 +72,40 @@ procurar.
 ## Ordem de nesting dos providers é estrutural
 
 `ClientLayout.tsx`: `<AppAuthProvider><ProtheusAuthProvider><PdmAuthProvider>...`
-— `PdmAuthProvider` chama `useProtheusAuth()` e `useAppAuth()` internamente,
-então precisa ficar como descendente dos dois. Trocar a ordem quebra esses
-hooks com "must be used within Provider".
+— `ProtheusAuthProvider` chama `useAppAuth()` internamente (pra decidir
+`canConnectProtheus`), e `PdmAuthProvider` chama `useProtheusAuth()` e
+`useAppAuth()` internamente — os dois precisam ficar como descendentes de
+`AppAuthProvider`, e `PdmAuthProvider` também de `ProtheusAuthProvider`.
+Trocar a ordem quebra esses hooks com "must be used within Provider".
 
-## Tela de Consulta PDM é admin-only
+## Conexão a PDM e a Protheus — permissão por perfil (`canConnectPdm`/`canConnectProtheus`)
 
-"Consulta PDM x Banco MSM" (credenciais do PDM/Vault + comparação PDM vs.
-Supabase, ver `specs/pdm-protheus-integracao.md`) nunca deve ficar visível,
-nem solicitar credencial, para o perfil Gerente Adm Comercial — só para
-Administrador.
+Duas colunas booleanas em `user_profiles` (`msm_add_connection_permissions.sql`),
+configuráveis por perfil em "Configuração de Usuários" — Administrador
+sempre pode conectar aos dois, independente destas colunas (mesmo padrão de
+`canCreateDelete`/`visibleModules`: `isAdmin` ignora tudo abaixo dele).
+
+- **PDM** (`canConnectPdm`): controla o pop-up de conexão (`pdmAuthContext.tsx`),
+  o link/botão na Sidebar e o acesso à tela "Consulta PDM x Banco MSM"
+  (`/pdm-consulta-acessorios`) — os três checam
+  `user.isAdmin || user.canConnectPdm`. Default `false` pra perfil não-admin
+  (**histórico**: antes desta permissão existir, PDM era hardcoded
+  admin-only; o default preserva esse comportamento pra quem já está
+  cadastrado — Admin libera caso a caso a partir de agora).
+- **Protheus** (`canConnectProtheus`): controla o pop-up de conexão
+  (`protheusAuthContext.tsx`, que agora chama `useAppAuth()` internamente —
+  por isso precisa ficar descendente de `AppAuthProvider`, ver nesting dos
+  providers abaixo) e o botão correspondente na Sidebar. Default `true` pra
+  qualquer perfil (**histórico**: antes desta permissão existir, Protheus
+  nunca teve gate nenhum — todo perfil conectava livremente; o default
+  preserva isso, e o Admin passa a poder revogar caso a caso a partir de
+  agora).
+
+Nenhuma das duas gates as telas que só **consultam** Protheus depois de já
+conectado (`analisador-estruturas`, `busca-avancada-acessorios`,
+`DependentItemsModal`, o status ATIVO/BLOQUEADO em `DataTable`) — essas já
+são gated normalmente por `visibleModules`; sem `creds`, elas simplesmente
+mostram "conecte ao Protheus" e não fazem nada, igual a hoje.
 
 ## Controladoria/Fiscal/Precificação (perfil Gerente Adm Comercial)
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { useAppAuth } from './appAuthContext'
 
 // Single, app-wide Protheus connection prompt — shown once when the app is
 // entered, instead of every individual screen (Busc. Itens Série Estrut.,
@@ -10,6 +11,12 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 // here, nothing in localStorage/cookies) and are sent per request exactly
 // as before — this only centralizes WHERE they're collected, not how
 // they're used or stored.
+//
+// Disponível pra Administrador sempre, e pra qualquer outro perfil com
+// canConnectProtheus ligado em Configuração de Usuários (ver
+// userProfileStore.ts) — antes desta permissão existir, todo perfil sempre
+// podia conectar; o default da coluna no banco preserva esse comportamento
+// pra quem já está cadastrado (ver msm_add_connection_permissions.sql).
 
 export interface ProtheusCreds { user: string; password: string }
 
@@ -29,8 +36,10 @@ export function useProtheusAuth(): ProtheusAuthValue {
 }
 
 export function ProtheusAuthProvider({ children }: { children: ReactNode }) {
+  const { user } = useAppAuth()
+  const canConnect = user.isAdmin || user.canConnectProtheus
   const [creds, setCreds] = useState<ProtheusCreds | null>(null)
-  const [promptOpen, setPromptOpen] = useState(true)
+  const [promptOpen, setPromptOpen] = useState(canConnect)
 
   const connect = useCallback((user: string, password: string) => {
     setCreds({ user, password })
@@ -42,7 +51,7 @@ export function ProtheusAuthProvider({ children }: { children: ReactNode }) {
   return (
     <ProtheusAuthContext.Provider value={{ creds, connect, disconnect, openPrompt }}>
       {children}
-      {promptOpen && (
+      {canConnect && promptOpen && (
         <ProtheusLoginModal onClose={() => setPromptOpen(false)} onConnect={connect} />
       )}
     </ProtheusAuthContext.Provider>

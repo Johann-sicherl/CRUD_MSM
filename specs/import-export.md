@@ -47,6 +47,24 @@ Existem **três mecanismos distintos** de import — não confundir:
   `specs/permissoes-e-perfis.md`).
 - Processamento das linhas é **sequencial**, de propósito (dados financeiros
   em massa — ver `specs/custeio-financeiro.md`).
+- O botão "↑ Importar Custos" dentro de `DataTable.tsx` (Cadastro de
+  Componentes/Equipamentos/Grupo de Equipamentos) abre uma **janela de
+  revisão** antes de confirmar (`ControladoriaImportReviewModal.tsx`) — pedido
+  explícito do usuário: mostra, por linha, o valor atual (custo real local,
+  não o sentinela) ao lado do valor do arquivo, deixa **editar qualquer
+  célula** (inclusive a chave de negócio, pra corrigir um código digitado
+  errado) antes de confirmar, e só libera o botão de importar depois que não
+  sobra linha "não encontrada"/duplicada/com valor não numérico. Mesmo
+  espírito do `ImportReviewModal` do Admin (mecanismo (c) abaixo), mas sem
+  reimplementar a escrita: no fim, ainda faz um único POST para esta mesma
+  rota `/api/global-update-controladoria/[table]`, só que com os valores já
+  revisados/corrigidos e rechaveados por `field.name` em vez do cabeçalho
+  cru do arquivo.
+- O import restrito dentro de "Custos Gerais VMI" tem sua própria janela de
+  revisão (`CostImportReviewModal.tsx`), mais simples (só o campo custo,
+  cross-tabela) — **não** foi unificado com `ControladoriaImportReviewModal`
+  de propósito: são fluxos diferentes (um por tabela vs. um cross-tabela por
+  código Protheus).
 
 ## (c) "+Novo Registro > Importar Excel" — fila de insert por tela
 

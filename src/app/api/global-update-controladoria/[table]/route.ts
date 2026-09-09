@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { tables, isControllershipTable, getControllershipPendingFields } from '@/lib/schema'
 import { getAuditKeyFields } from '@/lib/sqlAudit'
-import { findHeaderForField } from '@/lib/csvControladoriaDetect'
+import { findHeaderForField, normalizeControladoriaKey } from '@/lib/csvControladoriaDetect'
 import { getProfileById } from '@/lib/userProfileStore'
 import { updateTableRow } from '@/lib/tableWrite'
 
@@ -54,13 +54,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { data: existingRows, error: fetchError } = await supabaseAdmin.from(table).select(`id, ${keyField.name}`)
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
-  const normalizeKey = (v: unknown) => {
-    const s = String(v ?? '').trim()
-    return keyField.type === 'text' ? s.toUpperCase() : s
-  }
   const idByKey = new Map<string, string>()
   for (const r of (existingRows ?? []) as unknown as Record<string, unknown>[]) {
-    const k = normalizeKey(r[keyField.name])
+    const k = normalizeControladoriaKey(keyField, r[keyField.name])
     if (k) idByKey.set(k, String(r.id))
   }
 
@@ -76,7 +72,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const headerByLower = new Map(Object.keys(row).map(h => [h.trim().toLowerCase(), h]))
     const keyHeader = findHeaderForField(keyField, headerByLower)
     const rawKey = keyHeader ? row[keyHeader] : undefined
-    const normalizedKey = normalizeKey(rawKey)
+    const normalizedKey = normalizeControladoriaKey(keyField, rawKey)
     if (!normalizedKey) { notFound++; continue }
 
     const id = idByKey.get(normalizedKey)

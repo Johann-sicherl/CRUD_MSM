@@ -105,9 +105,9 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               })}
               {/* Consulta PDM x Banco MSM: fora de MODULES/visibleModules de
                   propósito (mesmo tratamento de Configuração de Usuários,
-                  abaixo) — assim nenhuma configuração de perfil consegue
-                  liberar essa tela pra quem não é Administrador. */}
-              {group === 'Consulta Banco de Dados' && appUser.isAdmin && (
+                  abaixo) — só entra pelo canConnectPdm/isAdmin do perfil,
+                  nunca por uma entrada de módulo comum. */}
+              {group === 'Consulta Banco de Dados' && (appUser.isAdmin || appUser.canConnectPdm) && (
                 <Link
                   href="/pdm-consulta-acessorios"
                   prefetch={false}
@@ -157,21 +157,26 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           </div>
           {/* Única conexão ao Protheus da aplicação inteira — usada por todas as
               telas que consultam o banco (verificação de status, buscas de
-              estrutura, nomes de equipamento etc.) */}
-          <button
-            onClick={() => protheusCreds ? disconnectProtheus() : openProtheusPrompt()}
-            title={protheusCreds ? 'Desconectar do Protheus' : 'Conectar ao Protheus'}
-            className={`flex items-center justify-center gap-1.5 px-2 py-1 rounded border text-[9px] font-mono transition-colors ${
-              protheusCreds
-                ? 'text-green-400 border-green-500/30 bg-green-500/10 hover:bg-green-500/20'
-                : 'text-outline border-outline-variant hover:border-primary hover:text-primary'
-            }`}
-          >
-            {protheusCreds ? '✓ Protheus conectado' : '🔌 Conectar ao Protheus'}
-          </button>
-          {/* Conexão ao banco do PDM — só existe pro Administrador, usada
-              exclusivamente pela tela Consulta PDM x Banco MSM. */}
-          {appUser.isAdmin && (
+              estrutura, nomes de equipamento etc.). Visível pra Admin sempre
+              e pra quem tem canConnectProtheus ligado em Configuração de
+              Usuários. */}
+          {(appUser.isAdmin || appUser.canConnectProtheus) && (
+            <button
+              onClick={() => protheusCreds ? disconnectProtheus() : openProtheusPrompt()}
+              title={protheusCreds ? 'Desconectar do Protheus' : 'Conectar ao Protheus'}
+              className={`flex items-center justify-center gap-1.5 px-2 py-1 rounded border text-[9px] font-mono transition-colors ${
+                protheusCreds
+                  ? 'text-green-400 border-green-500/30 bg-green-500/10 hover:bg-green-500/20'
+                  : 'text-outline border-outline-variant hover:border-primary hover:text-primary'
+              }`}
+            >
+              {protheusCreds ? '✓ Protheus conectado' : '🔌 Conectar ao Protheus'}
+            </button>
+          )}
+          {/* Conexão ao banco do PDM — usada exclusivamente pela tela
+              Consulta PDM x Banco MSM. Visível pra Admin sempre e pra quem
+              tem canConnectPdm ligado em Configuração de Usuários. */}
+          {(appUser.isAdmin || appUser.canConnectPdm) && (
             <button
               onClick={() => pdmCreds ? disconnectPdm() : openPdmPrompt()}
               title={pdmCreds ? 'Desconectar do PDM' : 'Conectar ao PDM'}

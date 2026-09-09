@@ -20,6 +20,8 @@ export interface UserProfile {
   canCreateDelete: boolean                       // perfis não-admin: pode inserir/excluir registros (além de editar campos liberados)
   visibleModules: string[]                       // chaves de src/lib/modules.ts
   editableFieldsByTable: Record<string, string[]> // tabela -> nomes de campo editáveis no formulário
+  canConnectPdm: boolean                         // pode abrir o pop-up de conexão ao banco do PDM (tela Consulta PDM x Banco MSM) — ver pdmAuthContext.tsx
+  canConnectProtheus: boolean                    // pode abrir o pop-up de conexão ao banco do Protheus — ver protheusAuthContext.tsx
 }
 
 interface ProfileRow {
@@ -30,6 +32,8 @@ interface ProfileRow {
   can_create_delete: boolean
   visible_modules: string[]
   editable_fields_by_table: Record<string, string[]>
+  can_connect_pdm: boolean
+  can_connect_protheus: boolean
 }
 
 function fromRow(row: ProfileRow): UserProfile {
@@ -40,6 +44,8 @@ function fromRow(row: ProfileRow): UserProfile {
     canCreateDelete: row.can_create_delete,
     visibleModules: row.visible_modules ?? [],
     editableFieldsByTable: row.editable_fields_by_table ?? {},
+    canConnectPdm: row.can_connect_pdm,
+    canConnectProtheus: row.can_connect_protheus,
   }
 }
 
@@ -63,6 +69,8 @@ function hardcodedDefaults(): Omit<ProfileRow, 'password'>[] {
       can_create_delete: true,
       visible_modules: ALL_MODULE_KEYS,
       editable_fields_by_table: {},
+      can_connect_pdm: true,
+      can_connect_protheus: true,
     },
     {
       id: 'gerente-adm-comercial',
@@ -81,6 +89,13 @@ function hardcodedDefaults(): Omit<ProfileRow, 'password'>[] {
           tables[t].fields.filter(f => FORCE_TO_ONE_FIELDS.includes(f.name)).map(f => f.name),
         ])
       ),
+      // PDM continua fechado por padrão (mesmo comportamento de antes desta
+      // permissão existir); Protheus continua aberto por padrão (nunca teve
+      // gate nenhum) — ver comentário do ALTER TABLE em
+      // msm_add_connection_permissions.sql. Admin libera/revoga caso a caso
+      // em Configuração de Usuários.
+      can_connect_pdm: false,
+      can_connect_protheus: true,
     },
   ]
 }
@@ -102,6 +117,10 @@ function seedSource(): Omit<ProfileRow, 'password'>[] {
         can_create_delete: p.canCreateDelete,
         visible_modules: p.visibleModules,
         editable_fields_by_table: p.editableFieldsByTable,
+        // Arquivo legado é de antes destas duas permissões existirem —
+        // mesmos defaults de hardcodedDefaults() pra quem não é admin.
+        can_connect_pdm: p.isAdmin,
+        can_connect_protheus: true,
       }))
     }
   } catch { /* sem arquivo legado — segue com os padrões de sempre */ }
@@ -167,6 +186,8 @@ export async function createProfile(name: string, password: string): Promise<Use
     can_create_delete: false,
     visible_modules: ['dashboard'],
     editable_fields_by_table: {},
+    can_connect_pdm: false,
+    can_connect_protheus: true,
   }
   const { data, error } = await supabaseAdmin.from('user_profiles').insert(row).select().single()
   if (error) throw new Error(error.message)
@@ -193,6 +214,8 @@ export async function updateProfile(
   if (patch.canCreateDelete !== undefined) dbPatch.can_create_delete = patch.canCreateDelete
   if (patch.visibleModules !== undefined) dbPatch.visible_modules = patch.visibleModules
   if (patch.editableFieldsByTable !== undefined) dbPatch.editable_fields_by_table = patch.editableFieldsByTable
+  if (patch.canConnectPdm !== undefined) dbPatch.can_connect_pdm = patch.canConnectPdm
+  if (patch.canConnectProtheus !== undefined) dbPatch.can_connect_protheus = patch.canConnectProtheus
   if (patch.password) {
     if (patch.password.length < 4) throw new Error('Senha deve ter pelo menos 4 caracteres')
     dbPatch.password = patch.password

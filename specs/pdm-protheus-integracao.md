@@ -20,8 +20,10 @@ variável de ambiente, nem em sessão). Cada chamada abre e fecha seu próprio
 Protheus já existente antes desta integração).
 
 A tela "Consulta PDM x Banco MSM" (credenciais + comparação PDM x Supabase)
-é **admin-only** — nunca deve aparecer, nem solicitar credencial, para o
-perfil Gerente Adm Comercial (ver `specs/permissoes-e-perfis.md`).
+é gated por `isAdmin || canConnectPdm` — Administrador sempre, qualquer
+outro perfil só se essa permissão estiver ligada em Configuração de
+Usuários (ver `specs/permissoes-e-perfis.md` para o histórico: era
+hardcoded admin-only antes desta permissão existir).
 
 ## Armadilhas conhecidas da query de BOM (já corrigidas)
 

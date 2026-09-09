@@ -63,6 +63,24 @@ listadas no dropdown de uma coluna excluem o filtro **dela mesma** (para não
 esconder as próprias opções), mas respeitam os filtros já ativos de **todas
 as outras** colunas.
 
+## `ImportReviewModal.tsx` vs `ControladoriaImportReviewModal.tsx` vs `CostImportReviewModal.tsx`
+
+Três janelas de "Auditoria de Importação" com o mesmo padrão visual (tabela
+com célula editável, linha em vermelho quando há problema, botão de
+confirmar desabilitado até tudo ser resolvido) mas escopos diferentes —
+não são a mesma coisa:
+- `ImportReviewModal.tsx` — Admin, "+Novo Registro > Importar Excel"
+  (mecanismo (c), qualquer tabela): valida lookups/unique/select/número
+  contra o banco, permite remover linha, faz um POST por linha (insert).
+- `ControladoriaImportReviewModal.tsx` — perfil restrito, botão "↑ Importar
+  Custos" dentro da própria tabela (mecanismo (b)): casa pela chave de
+  negócio contra o que já está na tela, mostra valor atual (custo real
+  local) x valor do arquivo, edição de célula corrige o valor a enviar; um
+  único POST em lote pra `/api/global-update-controladoria/[table]` com só
+  as linhas alteradas e sem erro.
+- `CostImportReviewModal.tsx` — "Custos Gerais VMI", mais simples (só
+  `cost_std`, cross-tabela por código Protheus, sem célula editável).
+
 ## `BulkEditModal.tsx` vs `CostBulkEditModal.tsx`
 
 Ver `specs/custeio-financeiro.md` — o primeiro é genérico por schema

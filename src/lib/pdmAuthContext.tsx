@@ -7,11 +7,13 @@ import { useAppAuth } from './appAuthContext'
 // Conexão ao banco do PDM — igual à conexão ao Protheus (ver
 // protheusAuthContext.tsx: credenciais só em memória desta aba, nunca em
 // localStorage/cookies, enviadas por requisição), mas com duas diferenças
-// deliberadas: (1) exclusiva do perfil Administrador — o pop-up nunca abre
-// pra outro perfil, e (2) não abre sozinha ao entrar no app: só é oferecida
-// automaticamente logo depois que a conexão ao Protheus é feita (ver
-// PdmAuthProvider abaixo), já que é um banco adicional, só usado pela tela
-// Consulta PDM x Banco MSM.
+// deliberadas: (1) só disponível pra quem tem permissão — Administrador
+// sempre, e qualquer outro perfil com canConnectPdm ligado em Configuração
+// de Usuários (o pop-up nunca abre pra quem não tem nenhum dos dois); e
+// (2) não abre sozinha ao entrar no app: só é oferecida automaticamente
+// logo depois que a conexão ao Protheus é feita (ver PdmAuthProvider
+// abaixo), já que é um banco adicional, só usado pela tela Consulta PDM x
+// Banco MSM.
 
 export interface PdmCreds { user: string; password: string }
 
@@ -33,15 +35,16 @@ export function usePdmAuth(): PdmAuthValue {
 export function PdmAuthProvider({ children }: { children: ReactNode }) {
   const { creds: protheusCreds } = useProtheusAuth()
   const { user } = useAppAuth()
+  const canConnect = user.isAdmin || user.canConnectPdm
   const [creds, setCreds] = useState<PdmCreds | null>(null)
   const [promptOpen, setPromptOpen] = useState(false)
   const offeredRef = useRef(false) // oferece o pop-up automático uma única vez por sessão
 
   useEffect(() => {
-    if (offeredRef.current || !user.isAdmin || !protheusCreds || creds) return
+    if (offeredRef.current || !canConnect || !protheusCreds || creds) return
     offeredRef.current = true
     setPromptOpen(true)
-  }, [protheusCreds, user.isAdmin, creds])
+  }, [protheusCreds, canConnect, creds])
 
   const connect = useCallback((u: string, password: string) => {
     setCreds({ user: u, password })
@@ -53,7 +56,7 @@ export function PdmAuthProvider({ children }: { children: ReactNode }) {
   return (
     <PdmAuthContext.Provider value={{ creds, connect, disconnect, openPrompt }}>
       {children}
-      {user.isAdmin && promptOpen && (
+      {canConnect && promptOpen && (
         <PdmLoginModal onClose={() => setPromptOpen(false)} onConnect={connect} />
       )}
     </PdmAuthContext.Provider>
@@ -80,8 +83,7 @@ function PdmLoginModal({ onClose, onConnect }: {
         >
           <p className="text-sm text-on-surface-variant">
             Informe seu usuário e senha do SQL Server do PDM (base VMI, servidor srvvmis03) — usada pela tela
-            Consulta PDM x Banco MSM, exclusiva do perfil Administrador. Nada fica salvo; cada consulta abre e
-            fecha sua própria conexão.
+            Consulta PDM x Banco MSM. Nada fica salvo; cada consulta abre e fecha sua própria conexão.
           </p>
           <label className="text-xs font-semibold text-on-surface-variant">
             Usuário

@@ -17,6 +17,8 @@ import RollerTableModal from './RollerTableModal'
 import ColumnFilter from './ColumnFilter'
 import ImportReviewModal from './ImportReviewModal'
 import BulkEditModal from './BulkEditModal'
+import ControladoriaImportReviewModal from './ControladoriaImportReviewModal'
+import { normalizeControladoriaKey } from '@/lib/csvControladoriaDetect'
 
 interface Props {
   tableName: string
@@ -184,6 +186,14 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // usada em Atualizador Global > perfil restrito (AtualizadorGlobalControladoria.tsx).
   const controladoriaFileInputRef = useRef<HTMLInputElement>(null)
   const [controladoriaImportLoading, setControladoriaImportLoading] = useState(false)
+  // Dados pra abrir a Auditoria de Importação (ControladoriaImportReviewModal)
+  // antes de confirmar — null = janela fechada.
+  const [controladoriaReview, setControladoriaReview] = useState<{
+    keyField: Field
+    presentFields: Field[]
+    rows: Record<string, string>[]
+    currentByKey: Map<string, Record<string, string>>
+  } | null>(null)
   const [newMenuOpen,   setNewMenuOpen]   = useState(false)
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -674,7 +684,11 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // Import de custos (Controladoria/Fiscal/Precificação) — perfil restrito,
   // ver botão "↑ Importar Custos (Excel)". Nunca cria/apaga linha, só
   // atualiza as colunas financeiras dos códigos já cadastrados; mesma rota
-  // usada em Atualizador Global > perfil restrito.
+  // usada em Atualizador Global > perfil restrito. Abre uma Auditoria de
+  // Importação (ControladoriaImportReviewModal) antes de confirmar — mesmo
+  // espírito do "Importar Excel" do Admin: mostra valor atual x valor do
+  // arquivo, célula editável pra corrigir na hora, só libera o botão de
+  // importar depois que não sobra linha com problema.
   const handleControladoriaImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -692,21 +706,39 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
         )
         return
       }
-      const res = await fetch(`/api/global-update-controladoria/${tableName}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, profileId: appUser.id }),
+      const { keyField, presentFields, headerByLowerName } = detection
+
+      // Rechaveia cada linha do arquivo por field.name (em vez do cabeçalho
+      // cru, que podia ser o nome da coluna ou o rótulo em português) — a
+      // janela de revisão e o POST final não precisam mais saber qual dos
+      // dois veio no arquivo.
+      const normRows = rows.map(row => {
+        const out: Record<string, string> = {}
+        const keyHeader = headerByLowerName.get(keyField.name.toLowerCase())
+        if (keyHeader) out[keyField.name] = row[keyHeader] ?? ''
+        for (const f of presentFields) {
+          const h = headerByLowerName.get(f.name.toLowerCase())
+          if (h) out[f.name] = row[h] ?? ''
+        }
+        return out
       })
-      const json = await res.json()
-      if (!res.ok) { showToast(json.error || 'Falha ao importar', true); return }
-      const parts = [
-        `${json.updated} atualizado${json.updated !== 1 ? 's' : ''}`,
-        json.notFound > 0 ? `${json.notFound} não encontrado(s)` : null,
-        json.errors?.length > 0 ? `${json.errors.length} erro(s)` : null,
-      ].filter(Boolean)
-      showToast(parts.join(' — '), (json.errors?.length ?? 0) > 0)
-      fetchData()
-      fetchLocalCosts()
+
+      // Valor atual de cada código já cadastrado, pra comparação na janela
+      // de revisão — mesma resolução de custo real (local-data) que a
+      // própria tabela já usa pra exibir, nunca o sentinela do Supabase.
+      const currentByKey = new Map<string, Record<string, string>>()
+      for (const existing of pageData?.data ?? []) {
+        const k = normalizeControladoriaKey(keyField, existing[keyField.name])
+        if (!k) continue
+        const values: Record<string, string> = {}
+        for (const f of presentFields) {
+          values[f.name] = getDisplayValue(existing, f.name, f, lookups, listFields, duplicateCountMaps, localCosts, schema, tableName)
+        }
+        currentByKey.set(k, values)
+      }
+
+      setControladoriaReview({ keyField, presentFields, rows: normRows, currentByKey })
+      window.dispatchEvent(new CustomEvent('import-review:open'))
     } catch {
       showToast('Erro ao importar arquivo', true)
     } finally {
@@ -862,7 +894,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           <button
             onClick={() => controladoriaFileInputRef.current?.click()}
             disabled={controladoriaImportLoading}
-            title="Atualiza custo/IPI/margem/comissão dos códigos já cadastrados a partir de uma planilha (CSV ou Excel) — não cria nem apaga registro"
+            title="Abre uma janela de revisão pra atualizar custo/IPI/margem/comissão dos códigos já cadastrados a partir de uma planilha (CSV ou Excel) — não cria nem apaga registro"
             className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
           >
             {controladoriaImportLoading ? '…' : '↑ Importar Custos'}
@@ -1386,6 +1418,31 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             fetchData()
             fetchLocalCosts()
             showToast(`${saved} registro${saved !== 1 ? 's' : ''} importado${saved !== 1 ? 's' : ''} com sucesso!`)
+          }}
+        />
+      )}
+
+      {controladoriaReview && (
+        <ControladoriaImportReviewModal
+          schema={schema}
+          tableName={tableName}
+          keyField={controladoriaReview.keyField}
+          presentFields={controladoriaReview.presentFields}
+          rows={controladoriaReview.rows}
+          currentByKey={controladoriaReview.currentByKey}
+          profileId={appUser.id}
+          onClose={() => { setControladoriaReview(null); window.dispatchEvent(new CustomEvent('import-review:close')) }}
+          onDone={(updated, notFound, errors) => {
+            setControladoriaReview(null)
+            window.dispatchEvent(new CustomEvent('import-review:close'))
+            const parts = [
+              `${updated} atualizado${updated !== 1 ? 's' : ''}`,
+              notFound > 0 ? `${notFound} não encontrado(s)` : null,
+              errors.length > 0 ? `${errors.length} erro(s)` : null,
+            ].filter(Boolean)
+            showToast(parts.join(' — '), errors.length > 0)
+            fetchData()
+            fetchLocalCosts()
           }}
         />
       )}

@@ -12,6 +12,8 @@ interface UserProfile {
   canCreateDelete: boolean
   visibleModules: string[]
   editableFieldsByTable: Record<string, string[]>
+  canConnectPdm: boolean
+  canConnectProtheus: boolean
 }
 
 export default function ConfiguracaoUsuariosPage() {
@@ -250,6 +252,26 @@ export default function ConfiguracaoUsuariosPage() {
                       className="mt-0.5"
                     />
                     <span>Pode criar e excluir registros (nos módulos visíveis abaixo) — além de editar os campos liberados.</span>
+                  </label>
+
+                  <label className="flex items-start gap-2 text-sm text-on-surface cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.canConnectPdm}
+                      onChange={e => setDraft(d => d && { ...d, canConnectPdm: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span>Pode conectar ao banco do PDM (libera o pop-up de conexão e a tela Consulta PDM x Banco MSM).</span>
+                  </label>
+
+                  <label className="flex items-start gap-2 text-sm text-on-surface cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.canConnectProtheus}
+                      onChange={e => setDraft(d => d && { ...d, canConnectProtheus: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span>Pode conectar ao banco do Protheus (libera o pop-up de conexão, usado por todas as telas que consultam o Protheus).</span>
                   </label>
 
                   <section>
