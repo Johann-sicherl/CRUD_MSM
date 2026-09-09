@@ -122,14 +122,18 @@ Existe em dois lugares, cada um com sua própria seleção/estado, mas o mesmo
 PATCH por trás:
 - `custos-gerais-vmi/page.tsx` (`handleMarkImputed`) — cross-tabela, por
   código Protheus (o multi-select ali é por `CostRow.code`, não por `id`).
-- `DataTable.tsx` (`handleBulkSignalCostImputed`) — dentro da própria tabela
-  (Cadastro de Componentes/Equipamentos/Grupo de Equipamentos), reaproveita
-  o checkbox de multi-seleção que "Excluir"/"Alterar selecionados" já usam
-  (`selectedIds`, por `row.id`) — pedido explícito do usuário, pra não
-  precisar marcar um código de cada vez pelo link "✓ Custo Imputado" que já
-  existia por linha (`handleSignalCostImputed`). O botão em lote só conta
-  (e só envia PATCH para) os selecionados que ainda estão em `'novo'` —
-  os demais são ignorados silenciosamente, sem erro.
+- `DataTable.tsx` (`handleBulkSignalCostImputed`) — só em **Cadastro de
+  Componentes** (`tableName === 'accessories'`, `showBulkCostImputado`),
+  pedido explícito do usuário. Reaproveita o checkbox de multi-seleção que
+  "Excluir"/"Alterar selecionados" já usam (`selectedIds`, por `row.id`) —
+  pra não precisar marcar um código de cada vez pelo link "✓ Custo
+  Imputado" que já existia por linha (`handleSignalCostImputed`). O botão em
+  lote só conta (e só envia PATCH para) os selecionados que ainda estão em
+  `'novo'` — os demais são ignorados silenciosamente, sem erro.
+  **Cadastro de Equipamentos** (`standard_equipment_items`) também tem
+  `usesTargetCostPending` e continua com o link por linha, mas **não** tem o
+  botão em lote — decisão deliberada, não esquecimento; se pedirem lá
+  também, replicar o mesmo `showBulkCostImputado` com a tabela certa.
 
 Não confundir com o bulk **de valor** abaixo (`CostBulkEditModal`) — são
 ações independentes: uma grava `cost_std`, a outra só move o status da

@@ -348,9 +348,16 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // marcar um código por vez). Mesmo PATCH, mesmo mecanismo de
   // custos-gerais-vmi/page.tsx (handleMarkImputed) — só os selecionados que
   // ainda estão em 'novo' contam; o resto é ignorado silenciosamente.
+  //
+  // Só em "Cadastro de Componentes" (accessories) — pedido explícito do
+  // usuário foi só pra "itens de componentes"; "Cadastro de Equipamentos"
+  // (standard_equipment_items) também tem usesTargetCostPending e o link
+  // por linha (handleSignalCostImputed) continua igual ali, mas o botão em
+  // lote não deve aparecer lá.
   const [bulkSignalingImputed, setBulkSignalingImputed] = useState(false)
+  const showBulkCostImputado = tableName === 'accessories' && usesTargetCostPending && !appUser.isAdmin
   const selectedNovoCodes = useMemo(() => {
-    if (!usesTargetCostPending || appUser.isAdmin || selectedIds.size === 0 || !pendingTargetCost) return []
+    if (!showBulkCostImputado || selectedIds.size === 0 || !pendingTargetCost) return []
     const codes: string[] = []
     for (const row of pageData?.data ?? []) {
       if (!selectedIds.has(String(row.id))) continue
@@ -358,7 +365,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
       if (code && pendingTargetCost[code]?.status === 'novo') codes.push(code)
     }
     return codes
-  }, [usesTargetCostPending, appUser.isAdmin, selectedIds, pendingTargetCost, pageData])
+  }, [showBulkCostImputado, selectedIds, pendingTargetCost, pageData])
 
   const handleBulkSignalCostImputed = async () => {
     if (selectedNovoCodes.length === 0 || bulkSignalingImputed) return
@@ -897,7 +904,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           em 'novo' (selectedNovoCodes) — aparece sempre que há seleção,
           mesmo que nenhum selecionado esteja elegível, pra dar feedback
           claro (botão desabilitado com "0"). */}
-      {usesTargetCostPending && !appUser.isAdmin && selectedIds.size > 0 && (
+      {showBulkCostImputado && selectedIds.size > 0 && (
         <button
           onClick={handleBulkSignalCostImputed}
           disabled={bulkSignalingImputed || selectedNovoCodes.length === 0}
