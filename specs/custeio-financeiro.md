@@ -104,6 +104,28 @@ Completo/Somente Novos/Em Alteração de Custeio também não depende mais de
 fila `pending_target_cost` não tem nada a ver com ter havido um import CSV
 ou não.
 
+### `pendingTargetCost` precisa ser rebuscado depois de salvar, não só no mount — já causou bug real
+
+Segundo bug do mesmo tipo, achado logo depois do de cima: `pendingTargetCost`
+era buscado só uma vez, num `useEffect` que roda no mount/troca de tabela —
+sem rebuscar depois de um save. Sintoma relatado: Admin cria um registro
+novo em Cadastro de Equipamentos com "Pendente de custo alvo" = Sim, salva,
+e a linha **não** aparece destacada em "Somente Novos" — mas ao trocar de
+perfil e voltar (o que remonta o componente do zero) a linha aparece
+destacada corretamente. Parecia um delay de página; era a fila nunca sendo
+recarregada depois do primeiro fetch, mesmo `fetchData()` já trazendo a
+linha nova da tabela normalmente.
+
+Mesmo padrão de `fetchLocalCosts` (que já tinha esse cuidado, com o mesmo
+comentário explicando o motivo): extraído pra `fetchPendingTargetCost`
+(`useCallback`, no-op se `!usesTargetCostPending`), chamado no mount E em
+**todo** `onSaved`/`onDone` que já chama `fetchLocalCosts()` — edição
+individual, bulk edit, bulk delete, import (Excel e Controladoria), e os
+modais de Não Combináveis/Dependentes/Roletes. Qualquer novo ponto que
+grave em `accessories`/`standard_equipment_items` e já chame `fetchData()`+
+`fetchLocalCosts()` deve chamar `fetchPendingTargetCost()` junto — nunca só
+um dos dois.
+
 ## "Grupo de Equipamentos pendente" ≠ fila de custo alvo
 
 São dois conceitos de pendência **diferentes**, não um bug quando aparecem

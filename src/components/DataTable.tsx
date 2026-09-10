@@ -312,15 +312,25 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
 
   useEffect(() => { fetchLocalCosts() }, [fetchLocalCosts])
 
-  useEffect(() => {
+  // Mesmo motivo/padrão de fetchLocalCosts acima: extraído pra função (não
+  // só um efeito) porque a fila muda a cada save nesta mesma tela — marcar
+  // "Pendente de custo alvo" num registro novo/editado cria uma linha em
+  // pending_target_cost na hora, mas sem rebuscar aqui a linha ficava sem o
+  // destaque amarelo/azul até a tela ser desmontada e remontada de novo
+  // (ex.: trocar de perfil e voltar) — parecia um delay, mas era só a fila
+  // nunca sendo recarregada depois do primeiro fetch. Chamada tanto no
+  // mount quanto em todo onSaved/onDone abaixo, junto com fetchLocalCosts.
+  const fetchPendingTargetCost = useCallback(async () => {
     if (!usesTargetCostPending) return
-    let cancelled = false
-    fetch('/api/pending-target-cost')
-      .then(r => r.ok ? r.json() : {})
-      .then(json => { if (!cancelled) setPendingTargetCost(json) })
-      .catch(() => { if (!cancelled) setPendingTargetCost({}) })
-    return () => { cancelled = true }
-  }, [tableName, usesTargetCostPending])
+    try {
+      const res = await fetch('/api/pending-target-cost')
+      setPendingTargetCost(res.ok ? await res.json() : {})
+    } catch {
+      setPendingTargetCost({})
+    }
+  }, [usesTargetCostPending])
+
+  useEffect(() => { fetchPendingTargetCost() }, [tableName, fetchPendingTargetCost])
 
   // "✓ Custo Imputado" (Gerente Adm Comercial) — move o código de 'novo'
   // pra 'em_alteracao': some de "Somente Novos", entra em "Em Alteração de
@@ -811,6 +821,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
       showToast('Registro excluído com sucesso')
       fetchData()
       fetchLocalCosts()
+      fetchPendingTargetCost()
     } else {
       const err = await res.json()
       showToast(err.error || 'Erro ao excluir', true)
@@ -834,6 +845,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     )
     fetchData()
     fetchLocalCosts()
+    fetchPendingTargetCost()
   }
 
   const showToast = (msg: string, isError = false) => {
@@ -1389,6 +1401,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setSelectedIds(new Set())
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
             showToast(
               fail === 0
                 ? `${ok} registro${ok !== 1 ? 's' : ''} atualizado${ok !== 1 ? 's' : ''} com sucesso`
@@ -1433,6 +1446,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setDepItemsModal(false)
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
             showToast(`${count} registros inseridos!`)
           }}
         />
@@ -1446,6 +1460,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setRollerModal(false)
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
             showToast(`${count} registros inseridos!`)
           }}
         />
@@ -1459,6 +1474,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setNonCombModal(false)
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
             showToast(`${count} registros inseridos!`)
           }}
         />
@@ -1477,6 +1493,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             setEditRecord(null)
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
             showToast(editRecord ? 'Registro atualizado!' : 'Registro criado!')
           }}
         />
@@ -1493,6 +1510,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             window.dispatchEvent(new CustomEvent('import-review:close'))
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
             showToast(`${saved} registro${saved !== 1 ? 's' : ''} importado${saved !== 1 ? 's' : ''} com sucesso!`)
           }}
         />
@@ -1519,6 +1537,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
             showToast(parts.join(' — '), errors.length > 0)
             fetchData()
             fetchLocalCosts()
+            fetchPendingTargetCost()
           }}
         />
       )}
