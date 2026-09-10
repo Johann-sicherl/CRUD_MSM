@@ -33,6 +33,24 @@ direto nesse banco oficial, só gera a instrução para alguém rodar.
   `msm_replace_protheus_code.sql`) — foi adicionado depois de descobrir que
   essa operação bypassava a Auditoria inteiramente.
 
+## `GET /api/audit-log` precisa de `.range()` explícito — cap de 1000 do PostgREST
+
+Bug real já corrigido: a rota (`src/app/api/audit-log/route.ts`) buscava
+`audit_log` sem `.range()`/`.limit()` — sujeita ao cap padrão de 1000 linhas
+do PostgREST (mesma armadilha de `specs/dados-e-schema.md`). O cap é sobre o
+**total** da tabela, não por tabela/status filtrado — então uma pendência
+antiga ficava fora das 1000 linhas mais recentes (`order('created_at',
+{ascending: false})`) sempre que o total de `audit_log` passava de 1000, e
+sumia de qualquer fetch sem filtro (ou com filtro amplo o bastante pra ainda
+passar de 1000). A tela `auditoria/page.tsx` não tem paginação nenhuma — ela
+assume que recebeu a tabela inteira, então tanto a lista quanto "Exportar
+TXTs por tabela/ação" (que exporta exatamente `visibleRows`, o mesmo state
+da lista) ficavam sem essa linha. Sintoma relatado: uma linha pendente
+(`INSERT INTO accessory_groups ...`) aparecia normalmente na tela quando
+filtrada por status "Pendente" (poucas linhas, dentro do cap), mas não saía
+no `.txt` exportado. Corrigido com `.range(0, 24999)`, mesmo padrão já usado
+em `global-update/[table]/compare/route.ts` e `clone-architecture/route.ts`.
+
 ## Convenção: auditoria é best-effort
 
 Toda chamada às funções `record*Audit` é envolta em `try { } catch { /*

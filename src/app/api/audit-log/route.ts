@@ -15,8 +15,15 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get('status')
   const operation = searchParams.get('operation')
 
+  // .range() explícito — sem isso, o cap padrão de 1000 linhas do PostgREST
+  // corta silenciosamente qualquer linha mais antiga assim que audit_log
+  // passa de 1000 registros no total (não por tabela/status — no total).
+  // Bug real: uma pendência de semanas atrás sumia da exportação "TXTs por
+  // tabela/ação" (que usa exatamente esta rota, sem filtro nenhum) mesmo
+  // continuando visível quando filtrada por status — a tela não tem
+  // paginação nenhuma, então ela assume que recebeu tudo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query: any = supabaseAdmin.from('audit_log').select('*').order('created_at', { ascending: false })
+  let query: any = supabaseAdmin.from('audit_log').select('*').order('created_at', { ascending: false }).range(0, 24999)
   if (table) query = query.eq('table_name', table)
   if (status) query = query.eq('status', status)
   if (operation) query = query.eq('operation', operation)
