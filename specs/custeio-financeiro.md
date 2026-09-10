@@ -82,27 +82,41 @@ Custos Sugeridos" do admin e na normalização de chave da rota GET
 `status` da fila, replicar este mapeamento — nunca comparar as strings
 direto.
 
-### `pendingTargetCost`/`pendingKind` em `DataTable.tsx` vale pros dois perfis — já causou bug real
+### `pendingKind` ("Em Alteração de Custeio") vale pros dois perfis — `isNewRow` ("Somente Novos") NÃO — já causou bug real (duas rodadas)
 
-`DataTable.tsx` calcula `pendingKind` (`'novo'`/`'em_alteracao'`/`null`) por
-linha, usado tanto pro destaque amarelo/azul quanto pelas abas "Somente
-Novos"/"Em Alteração de Custeio". Bug já corrigido: tanto o `useEffect` que
-busca `/api/pending-target-cost` quanto o cálculo de `pendingKind` em
-`getBaselineInfo` tinham `&& !appUser.isAdmin` — então pro perfil Admin a
-fila nunca era buscada e `pendingKind` ficava sempre `null`, mesmo a aba
-"Em Alteração de Custeio" aparecendo normalmente pra ele. Resultado: Admin
-aplicava o filtro e sempre via 0 registros, enquanto a Gerente Adm Comercial
-via os registros certos — a UI (título do botão "Mostrar só os registros
-ainda sem custo alvo aprovado pela Comercial") já dava a entender que isso
-deveria valer pros dois perfis, só a implementação não seguia isso.
+`DataTable.tsx` calcula, por linha, `pendingKind` (`'novo'`/`'em_alteracao'`/
+`null`, a fila `pending_target_cost`) e `isNewRow` (o que acende o amarelo e
+alimenta a aba "Somente Novos") em `getBaselineInfo`. As duas coisas **não
+são sinônimos**, e a regra de `isNewRow` é diferente por perfil nas tabelas
+com fila (`accessories`/`standard_equipment_items`, `usesTargetCostPending`):
 
-**O Admin precisa mesmo de "Em Alteração de Custeio"** — é como ele vê o que
-a Comercial já imputou e sinalizou, pronto pra confirmar oficialmente via
-Atualizador Global. Não é uma aba só da Comercial. O grupo de abas
-Completo/Somente Novos/Em Alteração de Custeio também não depende mais de
-`baseline !== null` (retrato de import) pra `usesTargetCostPending` — a
-fila `pending_target_cost` não tem nada a ver com ter havido um import CSV
-ou não.
+- **`pendingKind`** — sempre a fila `pending_target_cost`, igual pros dois
+  perfis. Controla só a aba/destaque "Em Alteração de Custeio" (azul). Bug
+  já corrigido (1ª rodada): tanto o fetch de `/api/pending-target-cost`
+  quanto o cálculo de `pendingKind` tinham `&& !appUser.isAdmin` — pro Admin
+  a fila nunca era buscada, `pendingKind` ficava sempre `null`, e o filtro
+  "Em Alteração de Custeio" sempre dava vazio mesmo com itens de verdade lá.
+  **O Admin precisa mesmo dessa aba** — é como ele vê o que a Comercial já
+  imputou e sinalizou, pronto pra confirmar oficialmente via Atualizador
+  Global.
+- **`isNewRow`** ("Somente Novos", amarelo) — regra **por perfil**, mesmo
+  nessas duas tabelas:
+  - Gerente Adm Comercial: `isNewRow = pendingKind === 'novo'` (o trabalho
+    dela é custear o que ainda não tem custo alvo aprovado).
+  - **Admin: critério clássico de baseline** — linha/célula diferente do
+    último import via Atualizador Global, igual em qualquer outra tabela do
+    app. "Toda alteração que é diferente do carregamento do banco de dados
+    inicial... tudo que é novo entra em Somente Novos" (pedido explícito do
+    usuário, corrigindo a 1ª rodada do fix: eu tinha feito `isNewRow`
+    também virar `pendingKind === 'novo'` pro Admin, o que o impedia de ver
+    como "novo" qualquer edição comum que não passasse pela fila de custo
+    alvo — regressão, não o pedido original).
+
+O grupo de abas Completo/Somente Novos/Em Alteração de Custeio não depende
+de `baseline !== null` pra aparecer em tabelas com `usesTargetCostPending`
+(a fila não tem nada a ver com ter havido um import CSV) — mas o filtro
+"Somente Novos" do Admin em si continua exigindo `baseline !== null` pra
+filtrar algo, exatamente como em qualquer tabela sem fila.
 
 ### `pendingTargetCost` precisa ser rebuscado depois de salvar, não só no mount — já causou bug real
 

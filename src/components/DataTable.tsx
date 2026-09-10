@@ -559,25 +559,35 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // desde o último import).
   const isRestrictedControladoriaView = !appUser.isAdmin && zeroForceFields.length > 0
 
-  // Mesmo critério do destaque amarelo (linha nova / campo alterado desde o
-  // último import, OU pendente de custo real/custo alvo pro perfil
-  // restrito), num só lugar — usado tanto pra pintar a linha/célula quanto
-  // pra filtrar em "Somente Novos"/"Em processo de alteração de custeio".
-  // pendingKind só existe pra accessories/standard_equipment_items
-  // (usesTargetCostPending): 'novo' = Admin marcou o checkbox, aguardando a
-  // Gerente; 'em_alteracao' = Gerente já sinalizou que imputou o custo,
-  // aguardando confirmação oficial via Atualizador Global; null = fora da
-  // fila (nem pendente, nem em alteração). Vale pros dois perfis — o Admin
-  // precisa de "Em Alteração de Custeio" pra saber o que já está pronto pra
-  // confirmar no Atualizador Global. Bug já corrigido: antes só calculava
-  // pendingKind pro perfil restrito (`&& !appUser.isAdmin`), então o Admin
-  // via o botão "Em Alteração de Custeio" normalmente mas o filtro sempre
-  // dava vazio — pendingTargetCost nunca era nem buscado pra ele.
+  // Mesmo critério do destaque amarelo/azul, num só lugar — usado tanto pra
+  // pintar a linha/célula quanto pra filtrar em "Somente Novos"/"Em
+  // Alteração de Custeio". pendingKind só existe pra accessories/
+  // standard_equipment_items (usesTargetCostPending): 'novo' = Admin marcou
+  // o checkbox, aguardando a Gerente; 'em_alteracao' = Gerente já sinalizou
+  // que imputou o custo, aguardando confirmação oficial via Atualizador
+  // Global; null = fora da fila. pendingKind vale pros dois perfis — o
+  // Admin precisa de "Em Alteração de Custeio" pra saber o que já está
+  // pronto pra confirmar no Atualizador Global.
+  //
+  // isNewRow ("Somente Novos"/amarelo), porém, tem regra DIFERENTE por
+  // perfil nessas duas tabelas — não confundir com pendingKind:
+  // - Gerente Adm Comercial: isNewRow = pendingKind === 'novo' (o
+  //   trabalho dela é custear o que ainda não tem custo alvo aprovado).
+  // - Admin: isNewRow = critério clássico de baseline (linha/célula
+  //   diferente do último import via Atualizador Global), IGUAL a qualquer
+  //   outra tabela — "toda alteração que é diferente do carregamento do
+  //   banco de dados inicial", pedido explícito do usuário. Já foi tratado
+  //   por engano como sinônimo de pendingKind === 'novo' (bug corrigido:
+  //   fazia o Admin nunca ver como "novo" uma edição comum, só o que a
+  //   própria fila de custo alvo continha).
   const getBaselineInfo = useCallback((row: Record<string, unknown>) => {
+    let pendingKind: 'novo' | 'em_alteracao' | null = null
     if (usesTargetCostPending) {
       const code = String(row.protheus_code ?? '').trim().toUpperCase()
       const entry = pendingTargetCost?.[code]
-      const pendingKind = entry ? (entry.status === 'em_alteracao' ? 'em_alteracao' : 'novo') : null
+      pendingKind = entry ? (entry.status === 'em_alteracao' ? 'em_alteracao' : 'novo') : null
+    }
+    if (usesTargetCostPending && !appUser.isAdmin) {
       return { isNewRow: pendingKind === 'novo', pendingKind, baselineRow: undefined as Record<string, unknown> | undefined }
     }
     if (isRestrictedControladoriaView) {
@@ -588,8 +598,8 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     const keyIsAmbiguous = !!baseline?.ambiguousKeys.has(key) || liveDuplicateKeys.has(key)
     const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(key)
     const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
-    return { isNewRow, pendingKind: null, baselineRow }
-  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, pendingTargetCost])
+    return { isNewRow, pendingKind, baselineRow }
+  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, appUser.isAdmin, pendingTargetCost])
 
   // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
@@ -882,11 +892,11 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           </button>
           <button
             onClick={() => setViewMode('novos')}
-            title={usesTargetCostPending
+            title={usesTargetCostPending && !appUser.isAdmin
               ? 'Mostrar só os registros ainda sem custo alvo aprovado pela Comercial'
               : isRestrictedControladoriaView
                 ? 'Mostrar só os registros com algum campo de controladoria/fiscal/precificação ainda em 0 (pendente)'
-                : 'Mostrar só os registros criados depois do último import no Atualizador Global'}
+                : 'Mostrar só os registros criados ou alterados desde o último import no Atualizador Global'}
             className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'novos' ? 'bg-amber-500/15 text-amber-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
           >
             Somente Novos
@@ -1240,9 +1250,9 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                     filteredRows.map((row, i) => {
                       const rowId = String(row.id)
                       const isSelected = selectedIds.has(rowId)
-                      // Linha criada depois do último import CSV (não existia no
-                      // retrato) — destaque na linha inteira. Só faz sentido
-                      // quando a tabela já tem baseline (baseline !== null).
+                      // isNewRow (amarelo): depende do perfil/tabela — ver
+                      // comentário de getBaselineInfo acima. pendingKind
+                      // 'em_alteracao' (azul) é sempre a fila de custo alvo.
                       const { isNewRow, pendingKind, baselineRow } = getBaselineInfo(row)
                       return (
                       <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : pendingKind === 'em_alteracao' ? 'bg-blue-500/10' : ''}`}>
