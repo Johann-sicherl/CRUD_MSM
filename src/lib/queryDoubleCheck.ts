@@ -23,6 +23,28 @@ export function isDoubleCheckTable(table: string): table is DoubleCheckTable {
   return DOUBLE_CHECK_TABLE_SET.has(table)
 }
 
+// Ordem de import por dependência de FK (ver msm_query_double_check.sql,
+// passo 2) — pais (equipments/accessory_groups) sempre antes dos filhos que
+// referenciam eles. DOUBLE_CHECK_TABLES acima é só a whitelist (ordem
+// alfabética, não serve pra isso) — rodar o "Gravar em lote" na ordem de
+// seleção do arquivo já causou erro real: standard_equipment_items/
+// roller_tables/relationship_equip_accessory/non_combinable_comps rodaram
+// antes de equipments (o usuário selecionou os arquivos fora de ordem) e
+// todo INSERT deu "violates foreign key constraint ... is not present in
+// table equipments_check", porque a linha pai ainda não existia na cópia
+// _check no momento do INSERT do filho.
+export const DOUBLE_CHECK_IMPORT_ORDER: DoubleCheckTable[] = [
+  'accessory_groups',
+  'equipments',
+  'general_alerts',
+  'accessories',
+  'dependant_items',
+  'non_combinable_comps',
+  'relationship_equip_accessory',
+  'roller_tables',
+  'standard_equipment_items',
+]
+
 // As instruções vêm de src/lib/sqlAudit.ts (buildInsertSQL/buildUpdateSQL/
 // buildDeleteSQL) — sempre no formato "INSERT INTO tabela (...", "UPDATE
 // tabela SET ...", "DELETE FROM tabela WHERE ...", nunca digitadas à mão.

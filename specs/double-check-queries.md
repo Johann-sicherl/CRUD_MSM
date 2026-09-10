@@ -105,6 +105,26 @@ custo nestas queries, pode apenas ignorar no sentinela"** — esta tela só
 precisa saber se as queries rodam, não precisa (e não deve) saber o custo de
 verdade.
 
+## Ordem de import em lote — dependência de FK, não ordem de seleção do arquivo
+
+`DOUBLE_CHECK_TABLES` é só a whitelist, em ordem alfabética — **não** serve
+para decidir em que ordem gravar as tabelas `_check`. Bug real já
+encontrado: o botão "Gravar N tabela(s) em _check" rodava os arquivos na
+ordem em que o usuário os selecionou no seletor de arquivos do navegador;
+como `standard_equipment_items`/`roller_tables`/`relationship_equip_accessory`/
+`non_combinable_comps` têm FK para `equipments_check`, gravá-las antes de
+`equipments_check` estar populada faz todo INSERT falhar com `violates
+foreign key constraint ... is not present in table equipments_check` — a
+linha pai ainda não existe na cópia `_check` no momento do INSERT do filho.
+
+Corrigido com `DOUBLE_CHECK_IMPORT_ORDER` (`src/lib/queryDoubleCheck.ts`) —
+uma ordem topológica explícita do mesmo grafo de FKs de
+`msm_query_double_check.sql` (pais `accessory_groups`/`equipments` primeiro,
+depois os filhos que os referenciam). `CsvSnapshotSection`
+(`duplo-check-queries/page.tsx`, `runAll`) ordena `readyFiles` por esse
+array antes de rodar o `for...of` sequencial — não importa mais em que
+ordem o usuário selecionou os arquivos no picker.
+
 ## Reaproveitamento — nada de caminho de escrita paralelo para o import
 
 `POST /api/global-update-check/[table]` chama a mesma RPC

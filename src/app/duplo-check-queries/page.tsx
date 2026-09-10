@@ -6,7 +6,10 @@ import {
   parseCsvRaw, detectTable,
   type DetectionResult,
 } from '@/lib/csvTableDetect'
-import { DOUBLE_CHECK_TABLES, isDoubleCheckTable, parseSqlStatementsFromText } from '@/lib/queryDoubleCheck'
+import {
+  DOUBLE_CHECK_TABLES, DOUBLE_CHECK_IMPORT_ORDER, isDoubleCheckTable, parseSqlStatementsFromText,
+  type DoubleCheckTable,
+} from '@/lib/queryDoubleCheck'
 import { FORCE_TO_ONE_FIELDS } from '@/lib/schema'
 
 interface UploadedCsv {
@@ -147,7 +150,15 @@ function CsvSnapshotSection({ profileId }: { profileId: string }) {
 
   const runAll = async () => {
     setSendingAll(true)
-    for (const file of readyFiles) await replaceOne(file)
+    // Sempre em ordem de dependência de FK (pai antes de filho), nunca na
+    // ordem em que o usuário selecionou os arquivos — senão um filho pode
+    // rodar antes do pai existir em _check e o INSERT falha por FK (já
+    // aconteceu de verdade, ver DOUBLE_CHECK_IMPORT_ORDER).
+    const ordered = [...readyFiles].sort((a, b) =>
+      DOUBLE_CHECK_IMPORT_ORDER.indexOf(a.detection!.tableName as DoubleCheckTable) -
+      DOUBLE_CHECK_IMPORT_ORDER.indexOf(b.detection!.tableName as DoubleCheckTable)
+    )
+    for (const file of ordered) await replaceOne(file)
     setSendingAll(false)
   }
 
@@ -160,7 +171,9 @@ function CsvSnapshotSection({ profileId }: { profileId: string }) {
           <code>{'<tabela>'}_check</code>, apagando e recriando cada uma (igual à substituição atômica de
           sempre). Colunas financeiras ({FORCE_TO_ONE_FIELDS.join(', ')}) são gravadas como 1 e o valor
           real do CSV é descartado — nunca capturado em lugar nenhum, nem no arquivo local de custos.
-          Tabelas suportadas: {DOUBLE_CHECK_TABLES.join(', ')}.
+          Tabelas suportadas: {DOUBLE_CHECK_TABLES.join(', ')}. O botão &quot;Gravar em lote&quot; grava
+          sempre na ordem certa de dependência (Grupo de Equipamentos/Grupo de Acessórios primeiro),
+          não importa a ordem em que você selecionou os arquivos.
         </p>
       </div>
 
