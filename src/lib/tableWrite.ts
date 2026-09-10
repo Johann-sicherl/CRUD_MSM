@@ -54,8 +54,7 @@ export async function updateTableRow(
   }
 
   try {
-    const protheusCode = String(updateBody.protheus_code ?? beforeRow?.protheus_code ?? '')
-    await syncPendingTargetCostOnWrite(admin, schema, body, protheusCode)
+    await syncPendingTargetCostOnWrite(admin, schema, body, beforeRow)
   } catch { /* best-effort — never block the real operation */ }
 
   return { data: data as Record<string, unknown>, realCostFieldsChanged }

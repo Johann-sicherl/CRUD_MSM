@@ -8,6 +8,7 @@ import type { ProtheusProductStatus } from '@/lib/protheusDb'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { useAppAuth } from '@/lib/appAuthContext'
 import { shouldCompareField, valuesEqual, getRowKey, getCostItemKey, groupRowsByKey } from '@/lib/csvBaseline'
+import { getAuditKeyFields } from '@/lib/sqlAudit'
 
 type LookupMap = Record<string, Record<string, string>>
 import RecordModal from './RecordModal'
@@ -215,13 +216,26 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     () => appUser.isAdmin ? undefined : new Set(appUser.editableFieldsByTable[tableName] ?? []),
     [appUser, tableName]
   )
-  // accessories/standard_equipment_items: "Somente Novos" pro perfil restrito
-  // não olha mais cost_std = 0 (o Admin agora sempre preenche um custo
-  // sugerido) — usa a fila pending_target_cost em vez disso (ver
-  // TARGET_COST_PENDING_FIELD em schema.ts). Outras tabelas com campo de
-  // controladoria (ex.: equipments — IPI, margem, comissões) continuam no
-  // critério antigo "= 0", sem nenhuma mudança.
+  // accessories/standard_equipment_items/equipments: "Somente Novos" da
+  // Gerente Adm Comercial não olha mais cost_std/IPI/margem = 0 (o Admin
+  // agora sempre preenche um valor sugerido) — usa a fila
+  // pending_target_cost em vez disso (ver TARGET_COST_PENDING_FIELD em
+  // schema.ts). Tabelas de Controladoria sem esse campo continuam no
+  // critério antigo "algum campo ainda em 0".
   const usesTargetCostPending = schema.fields.some(f => f.name === TARGET_COST_PENDING_FIELD)
+  // Chave de negócio usada pra casar uma linha com sua entrada em
+  // pending_target_cost — nunca hardcoded "protheus_code": Grupo de
+  // Equipamentos não tem essa coluna, usa legacy_id (ver
+  // pendingTargetCostGuard.ts, mesma resolução usada no servidor).
+  const pendingKeyFieldName = useMemo(
+    () => usesTargetCostPending ? getAuditKeyFields(schema)[0].name : null,
+    [usesTargetCostPending, schema]
+  )
+  // Rótulo do estágio 'em_alteracao' — "Em Alteração de Custeio" por padrão,
+  // mas configurável por tabela (ver TableSchema.targetCostAlterationLabel)
+  // pra tabelas onde "custo" não descreve bem o que está pendente (ex.:
+  // Grupo de Equipamentos — IPI/margem/comissão).
+  const emAlteracaoLabel = schema.targetCostAlterationLabel ?? 'Em Alteração de Custeio'
   // Retrato do último import do Atualizador Global de Tabelas para esta
   // tabela (null = a tabela nunca passou por lá — nesse caso nada é
   // destacado). Usado só para o destaque amarelo de linha/célula.
@@ -336,8 +350,8 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // pra 'em_alteracao': some de "Somente Novos", entra em "Em Alteração de
   // Custeio" até o Atualizador Global confirmar oficialmente via CSV.
   const [signalingCode, setSignalingCode] = useState<string | null>(null)
-  const handleSignalCostImputed = async (protheusCode: string) => {
-    const code = protheusCode.trim().toUpperCase()
+  const handleSignalCostImputed = async (rawKey: string) => {
+    const code = rawKey.trim().toUpperCase()
     if (!code || signalingCode) return
     setSignalingCode(code)
     try {
@@ -582,8 +596,8 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   //   própria fila de custo alvo continha).
   const getBaselineInfo = useCallback((row: Record<string, unknown>) => {
     let pendingKind: 'novo' | 'em_alteracao' | null = null
-    if (usesTargetCostPending) {
-      const code = String(row.protheus_code ?? '').trim().toUpperCase()
+    if (usesTargetCostPending && pendingKeyFieldName) {
+      const code = String(row[pendingKeyFieldName] ?? '').trim().toUpperCase()
       const entry = pendingTargetCost?.[code]
       pendingKind = entry ? (entry.status === 'em_alteracao' ? 'em_alteracao' : 'novo') : null
     }
@@ -599,7 +613,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(key)
     const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
     return { isNewRow, pendingKind, baselineRow }
-  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, appUser.isAdmin, pendingTargetCost])
+  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, pendingKeyFieldName, appUser.isAdmin, pendingTargetCost])
 
   // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
@@ -904,10 +918,10 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           {usesTargetCostPending && (
             <button
               onClick={() => setViewMode('em_alteracao')}
-              title="Mostrar só os registros que a Comercial já sinalizou como custo imputado, aguardando confirmação oficial via Atualizador Global"
+              title={`Mostrar só os registros que a Comercial já sinalizou, aguardando confirmação oficial via Atualizador Global`}
               className={`px-3 py-2 border-l border-outline-variant transition-colors ${viewMode === 'em_alteracao' ? 'bg-blue-500/15 text-blue-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
             >
-              Em Alteração de Custeio
+              {emAlteracaoLabel}
             </button>
           )}
         </div>
@@ -1142,7 +1156,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500/40 border border-blue-500/60" />
-            registro em azul = custo já imputado, aguardando confirmação via Atualizador Global (Em Alteração de Custeio)
+            registro em azul = já imputado, aguardando confirmação via Atualizador Global ({emAlteracaoLabel})
           </div>
         </div>
       )}
@@ -1324,11 +1338,11 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                             de fundo OPACO — uma cor com /alpha deixa o texto das outras colunas
                             transparecer por baixo, dando a impressão de texto sobreposto/fantasma. */}
                         <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary-container group-hover:bg-primary-container' : pendingKind === 'em_alteracao' ? 'bg-blue-950 group-hover:bg-blue-900' : isNewRow ? 'bg-amber-950 group-hover:bg-amber-900' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
-                          {usesTargetCostPending && !appUser.isAdmin && pendingKind === 'novo' && (
+                          {usesTargetCostPending && pendingKeyFieldName && !appUser.isAdmin && pendingKind === 'novo' && (
                             <button
-                              onClick={() => handleSignalCostImputed(String(row.protheus_code ?? ''))}
-                              disabled={signalingCode === String(row.protheus_code ?? '').trim().toUpperCase()}
-                              title="Sinaliza que o custo alvo já foi imputado — sai de Somente Novos e entra em Em Alteração de Custeio até ser confirmado via Atualizador Global"
+                              onClick={() => handleSignalCostImputed(String(row[pendingKeyFieldName] ?? ''))}
+                              disabled={signalingCode === String(row[pendingKeyFieldName] ?? '').trim().toUpperCase()}
+                              title={`Sinaliza que já foi imputado — sai de Somente Novos e entra em ${emAlteracaoLabel} até ser confirmado via Atualizador Global`}
                               className="text-blue-400 hover:text-blue-300 text-xs font-medium mr-3 transition-colors disabled:opacity-50"
                             >
                               ✓ Custo Imputado

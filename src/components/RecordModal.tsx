@@ -174,18 +174,21 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
   // coluna própria — ver TARGET_COST_PENDING_FIELD em schema.ts): o valor
   // não vem de `record` (não existe na tabela real), então buildInitial
   // sempre deixa em branco em modo edição. Busca em pending_target_cost se
-  // este protheus_code está lá (qualquer status) e ajusta o form assim que
-  // chega — sem captura, assume não marcado.
+  // a chave de negócio desta linha está lá (qualquer status) e ajusta o
+  // form assim que chega — sem captura, assume não marcado. Chave via
+  // getAuditKeyFields (não hardcoded "protheus_code" — Grupo de
+  // Equipamentos não tem essa coluna, usa legacy_id).
   useEffect(() => {
     if (!isEdit || !record) return
     const pendingField = editableFields.find(f => f.name === TARGET_COST_PENDING_FIELD)
     if (!pendingField) return
     let cancelled = false
+    const keyField = getAuditKeyFields(schema)[0]
     fetch('/api/pending-target-cost')
       .then(r => r.ok ? r.json() : {})
       .then((byCode: Record<string, { status: string }>) => {
         if (cancelled) return
-        const code = String(record.protheus_code ?? '').trim().toUpperCase()
+        const code = String(record[keyField.name] ?? '').trim().toUpperCase()
         const flagged = !!byCode[code]
         setForm(prev => ({ ...prev, [TARGET_COST_PENDING_FIELD]: flagged ? 'true' : 'false' }))
       })

@@ -103,6 +103,7 @@ export interface TableSchema {
   protheusStatusCheckField?: string  // field whose value is checked against the Protheus product master (SB1010) status (ATIVO/BLOQUEADO) — adds a view-only flag column (and, once connected, an extra "Exportar dados" column)
   listSortBy?: string[]      // client-side tie-break sort applied on top of the server's `orderBy` — one field name per level, ascending numeric. Used for fields the DB alone can't order by (e.g. a value resolved through another table), see DataTable.tsx
   copyToClipboard?: boolean  // show a "Copiar Dados" button next to "Exportar dados" — copies the same visible rows as tab-separated text, to paste directly into a spreadsheet without downloading a file
+  targetCostAlterationLabel?: string  // label for the pending_target_cost 'em_alteracao' stage (tab button, tooltips, legend) on tables that have TARGET_COST_PENDING_FIELD — defaults to 'Em Alteração de Custeio' (DataTable.tsx) when absent; overridden per table when the "custo alvo" wording doesn't fit what's actually pending (e.g. Grupo de Equipamentos: IPI/margem/comissão, não um custo único)
 }
 
 // Financial multiplier fields that the Atualizador Global de Tabelas MSM always
@@ -186,6 +187,14 @@ export const tables: Record<string, TableSchema> = {
     compactHeader: true,
     bulkEdit: true,
     auditQueries: true,
+    // "Em Alteração de Custeio" não descreve bem o que pende aqui (IPI/
+    // margem/comissão de um grupo, não um custo único de item) — mesmo
+    // mecanismo de pending_target_cost de Cadastro de Componentes/
+    // Equipamentos, só com rótulo próprio pro estágio 'em_alteracao'
+    // (ver DataTable.tsx/targetCostAlterationLabel). A chave usada na fila
+    // é legacy_id (não tem protheus_code aqui — ver getAuditKeyFields e
+    // pendingTargetCostGuard.ts, que já resolvem a chave certa por tabela).
+    targetCostAlterationLabel: 'Em alteração pela Controladoria',
     fields: [
       { name: 'id',              label: 'ID',                  type: 'uuid',    nullable: false, isPk: true, isReadonly: true },
       { name: 'legacy_id',       label: 'ID Leg.',             type: 'number',  nullable: false, autoIncrement: true, isReadonly: true, showInList: true, listFilterType: 'text' },
@@ -200,6 +209,7 @@ export const tables: Record<string, TableSchema> = {
       { name: 'labor_cost_rate',     label: 'M.O. (%)',        type: 'decimal', nullable: false, defaultValue: 0, showInList: true, listFilterType: 'text' },
       { name: 'warranty_rate',       label: 'Garantia (%)',    type: 'decimal', nullable: false, defaultValue: 0, showInList: true, listFilterType: 'text' },
       { name: 'parts_provision_rate',label: 'Prov. Peças (%)', type: 'decimal', nullable: false, defaultValue: 0, showInList: true, listFilterType: 'text' },
+      { name: TARGET_COST_PENDING_FIELD, label: 'Pendente de custo alvo (Comercial)', type: 'boolean', nullable: false, defaultValue: false, hideInList: true, virtual: true },
       { name: 'created_at', label: 'Criado em',     type: 'timestamp', nullable: false, isReadonly: true },
       { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
     ],

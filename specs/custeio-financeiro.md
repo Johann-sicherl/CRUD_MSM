@@ -154,22 +154,89 @@ grave em `accessories`/`standard_equipment_items` e já chame `fetchData()`+
 `fetchLocalCosts()` deve chamar `fetchPendingTargetCost()` junto — nunca só
 um dos dois.
 
-## "Grupo de Equipamentos pendente" ≠ fila de custo alvo
+## "Pendência de Controladoria" (campo zerado) ≠ fila de custo alvo — mas Grupo de Equipamentos agora tem as duas
 
 São dois conceitos de pendência **diferentes**, não um bug quando aparecem
 divergentes:
 - **Pendência de Controladoria** — qualquer tabela com
   `isControllershipTable` que ainda tenha um campo financeiro zerado (sinal
-  de "ainda não custeado" — ver `getControllershipPendingFields`). Isso
-  inclui Grupo de Equipamentos.
+  de "ainda não custeado" — ver `getControllershipPendingFields`). Continua
+  existindo em qualquer tabela de Controladoria, independente da fila
+  abaixo.
 - **Fila de custo alvo** (`pending_target_cost`, `TARGET_COST_PENDING_FIELD`)
-  — só existe onde há o checkbox correspondente, hoje apenas Cadastro de
-  Componentes e Cadastro de Equipamentos. Grupo de Equipamentos não tem esse
-  checkbox e por isso nunca aparece nessa fila especificamente.
+  — só existe onde há o checkbox correspondente. **Histórico**: até esta
+  sessão, só Cadastro de Componentes (`accessories`) e Cadastro de
+  Equipamentos (`standard_equipment_items`) tinham esse checkbox — Grupo de
+  Equipamentos (`equipments`) ficava de fora, só com a pendência de
+  Controladoria simples. Pedido explícito do usuário: replicar o mesmo
+  mecanismo (checkbox + "✓ Custo Imputado" por linha + aba/destaque azul)
+  também em Grupo de Equipamentos — ver "'Em alteração pela Controladoria'"
+  abaixo. As duas pendências continuam sendo conceitos diferentes mesmo lá:
+  um campo (ex.: IPI) pode estar zerado (Controladoria) sem o código estar
+  necessariamente na fila, e vice-versa.
 
 Se um usuário perguntar "por que não estou vendo todas as pendências", a
 resposta normalmente é que ele está confundindo as duas listas — não que
 há um bug de contagem.
+
+## Grupo de Equipamentos (`equipments`) na fila de custo alvo — chave é `legacy_id`, não `protheus_code`
+
+`equipments` foi adicionado como terceira tabela com `TARGET_COST_PENDING_FIELD`
+(mesmo checkbox/link por linha/PATCH `'novo'` → `'em_alteracao'` de
+`accessories`/`standard_equipment_items`), mas com uma diferença estrutural
+importante: **`equipments` não tem coluna `protheus_code`** — a chave dele é
+`legacy_id` (número). A tabela `pending_target_cost` continua tendo só a
+coluna `protheus_code` (não foi renomeada) — pra `equipments`, o valor
+gravado ali é o `legacy_id` como texto (ex.: `"30"`), não um código Protheus
+de verdade.
+
+Isso já tinha causado (e foi corrigido) uma classe de bug real antes de
+`equipments` entrar na fila — qualquer lugar que hardcodava `row.protheus_code`/
+`record.protheus_code` pra montar a chave da fila simplesmente não
+funcionava pra essa tabela (dava sempre string vazia, nunca casava nada).
+Corrigido usando `getAuditKeyFields(schema)[0]` (a mesma resolução de chave
+de negócio já usada em toda auditoria/comparação de baseline) em vez de
+assumir `protheus_code`, nos quatro lugares que precisavam disso:
+- `pendingTargetCostGuard.ts` (`syncPendingTargetCostOnWrite` — agora recebe
+  a linha inteira, não mais uma string de código já extraída pelo chamador —
+  e `clearPendingTargetCostOnDelete`).
+- Os call sites em `/api/[table]/route.ts` (POST) e `tableWrite.ts` (PUT) —
+  passam `insertBody`/`beforeRow` em vez de montar `String(x.protheus_code)`.
+- `DataTable.tsx` (`getBaselineInfo`, botão "✓ Custo Imputado" por linha) —
+  `pendingKeyFieldName = getAuditKeyFields(schema)[0].name`, usado em vez de
+  `row.protheus_code` direto.
+- `RecordModal.tsx` (prefill do checkbox ao reabrir um registro em edição)
+  — mesma correção, `record[keyField.name]` em vez de `record.protheus_code`.
+
+**Qualquer tabela nova** que ganhe `TARGET_COST_PENDING_FIELD` no futuro
+precisa que esses quatro pontos já funcionem automaticamente (todos já usam
+`getAuditKeyFields`, nenhum mais hardcoda `protheus_code`) — não é preciso
+tocar em nada além do próprio schema da tabela.
+
+**Limitação conhecida, fora do escopo desta mudança**: os cartões "Em
+Custeio" do Dashboard (`/api/dashboard/custeio-comercial`,
+`/api/dashboard/pending-controladoria`) ainda assumem explicitamente que
+`pending_target_cost` só tem código de `accessories`/`standard_equipment_items`
+— não contam entradas de `equipments` na fila. Se o usuário quiser que
+`equipments` também apareça nesses cartões, isso exige uma mudança separada
+nessas duas rotas (não implementado ainda).
+
+## "Em alteração pela Controladoria" — rótulo próprio do estágio 'em_alteracao' por tabela
+
+`TableSchema.targetCostAlterationLabel?: string` — rótulo do estágio
+`'em_alteracao'` (aba, tooltips, legenda) pra tabelas com
+`TARGET_COST_PENDING_FIELD`. Default (quando ausente) é `'Em Alteração de
+Custeio'` (`DataTable.tsx`, `emAlteracaoLabel = schema.targetCostAlterationLabel
+?? 'Em Alteração de Custeio'`) — `accessories`/`standard_equipment_items`
+não definem esse campo, então continuam com o rótulo padrão.
+
+`equipments` define `targetCostAlterationLabel: 'Em alteração pela
+Controladoria'` — pedido explícito do usuário: "custo alvo"/"custo
+imputado" não descreve bem o que pende ali (IPI, margem, comissões — não um
+único valor de custo). O checkbox continua com o mesmo rótulo de sempre
+("Pendente de custo alvo (Comercial)") — só o estágio `'em_alteracao'` (a
+aba/destaque azul) foi renomeado; o usuário só pediu pra trocar esse nome
+específico, não o resto do vocabulário do fluxo.
 
 ## Captura do custo real acontece antes do forçamento a sentinela
 

@@ -190,7 +190,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    await syncPendingTargetCostOnWrite(supabaseAdmin, schema, body, String(insertBody.protheus_code ?? ''))
+    await syncPendingTargetCostOnWrite(supabaseAdmin, schema, body, insertBody)
   } catch { /* best-effort — never block the real operation */ }
 
   return NextResponse.json(data, { status: 201 })
