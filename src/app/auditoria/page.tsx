@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { tables, FORCE_TO_ONE_FIELDS, isControllershipTable } from '@/lib/schema'
+import { tables, FORCE_TO_ONE_FIELDS, isControllershipTable, TARGET_COST_PENDING_FIELD } from '@/lib/schema'
 import { diffChangedFields, buildInsertSQL, sqlLiteral } from '@/lib/sqlAudit'
 import { costBucketFor, getCostItemKey } from '@/lib/csvBaseline'
 import { useAppAuth } from '@/lib/appAuthContext'
@@ -74,11 +74,31 @@ function isRelevantForRestrictedProfile(row: AuditRow, editableFields: string[],
 // engenharia do que também é de controladoria/custo/precificação). Une todos
 // os perfis não-admin em vez de fixar em "Gerente Adm Comercial" por nome —
 // hoje é só ela, mas continua certo se outro perfil restrito for criado.
+//
+// Diferença deliberada de isRelevantForRestrictedProfile (usada sem
+// alteração nenhuma pra tela do próprio perfil restrito, que precisa
+// continuar vendo TODAS as próprias edições): aqui, num UPDATE numa tabela
+// com fila de custo alvo (accessories/standard_equipment_items —
+// usesTargetCostPending), só conta como "da Comercial" se o código ainda
+// estiver na fila pending_target_cost NESTE MOMENTO (`status` 'novo' ou
+// 'em_alteracao' — mesmo conceito, só fases diferentes do mesmo fluxo,
+// pendingCodes já une as duas). Pedido explícito do usuário: um cost_std
+// editado fora da fila (ex.: pela própria Engenharia, ou de um código que
+// já saiu da fila) não é mais "da Comercial" — ela mesma já pode imputar e
+// alterar por conta própria os que ainda estão na fila, então a Engenharia
+// só precisa exportar o que sobra.
 function isRelevantToAnyRestrictedProfile(row: AuditRow, restrictedProfiles: UserProfile[], pendingCodes: Set<string> | null): boolean {
-  return restrictedProfiles.some(p =>
-    p.visibleModules.includes(row.table_name) &&
-    isRelevantForRestrictedProfile(row, p.editableFieldsByTable[row.table_name] ?? [], pendingCodes)
-  )
+  const schema = tables[row.table_name]
+  const usesTargetCostPending = !!schema?.fields.some(f => f.name === TARGET_COST_PENDING_FIELD)
+
+  return restrictedProfiles.some(p => {
+    if (!p.visibleModules.includes(row.table_name)) return false
+    if (!isRelevantForRestrictedProfile(row, p.editableFieldsByTable[row.table_name] ?? [], pendingCodes)) return false
+    if (row.operation === 'update' && usesTargetCostPending) {
+      return !!pendingCodes?.has(row.record_key_value.trim().toUpperCase())
+    }
+    return true
+  })
 }
 
 const OPERATION_LABELS: Record<AuditRow['operation'], string> = {
@@ -580,7 +600,7 @@ export default function AuditoriaPage() {
                 className="w-full text-left px-4 py-3 bg-surface-container-low border border-outline-variant rounded hover:border-primary transition-colors"
               >
                 <span className="block text-sm font-semibold text-on-surface">Somente Engenharia</span>
-                <span className="block text-xs text-outline mt-0.5">Exclui o que também é de controladoria/custo/precificação (Gerente Adm Comercial)</span>
+                <span className="block text-xs text-outline mt-0.5">Exclui campos de controladoria/custo/precificação, exceto custo de componente/equipamento com código ainda na fila de custo alvo (Pendente/Em Alteração) — esses a própria Comercial resolve</span>
               </button>
               <button
                 onClick={() => handleExportChoice(false)}

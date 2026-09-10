@@ -62,6 +62,49 @@ tabela sem checkbox de custo alvo (ex.: Grupo de Equipamentos) nunca mostra
 uma linha de INSERT para esse perfil — a UI dela não gera pendência de custo
 alvo, então não há gatilho de visibilidade.
 
+## "Exportar TXTs por tabela/ação" — recorte "Somente Engenharia"
+
+Botão só pro Admin (perfil restrito já enxerga só a própria fatia e exporta
+direto, sem escolher recorte). Ao clicar, oferece duas opções:
+- **Completa** — todas as queries visíveis agora, sem separar por perfil.
+- **Somente Engenharia** — exclui as linhas que são "da Comercial"
+  (`isRelevantToAnyRestrictedProfile`, `auditoria/page.tsx`), pra ela
+  exportar essas separadamente pela própria tela dela.
+
+Critério de "é da Comercial" (não é uma regra só de nome de tabela — ver
+`specs/dados-e-schema.md`/`SHARED_ITEM_COST_TABLES` pra não confundir com
+outra lista parecida):
+- **DELETE**: nunca é dela — exclusão fica restrita a quem tem acesso
+  total, então sempre entra no export da Engenharia.
+- **INSERT**: só é dela se o código estiver na fila `pending_target_cost`
+  (`pendingCodes`, buscado sem filtro de status — `/api/pending-target-cost`
+  devolve tudo).
+- **UPDATE**: só é dela se (a) o campo alterado estiver em
+  `editableFieldsByTable` do perfil pra aquela tabela **E**, nas tabelas com
+  fila de custo alvo (`accessories`/`standard_equipment_items`,
+  `usesTargetCostPending`), (b) o código **ainda estiver na fila agora**
+  (`pendingCodes`, status `'novo'` OU `'em_alteracao'` — as duas contam
+  igual: são fases do mesmo fluxo, não dois conceitos diferentes). Fora da
+  fila, mesmo sendo um campo que ela pode editar (ex.: `cost_std` alterado
+  direto pela Engenharia, sem passar pelo checkbox de pendência), a query
+  conta como da Engenharia. Pedido explícito do usuário: "eu consigo
+  imputar o custo e alterar por conta própria" — ela só precisa das que
+  ainda estão na fila; o resto é a Engenharia quem exporta e roda.
+- Tabelas de Controladoria **sem** fila de custo alvo (ex.: `equipments`/
+  Grupo de Equipamentos) não entram nessa checagem extra — lá o critério
+  continua sendo só o campo alterado, sem noção de "fila" nenhuma (ver
+  `specs/custeio-financeiro.md`, "Grupo de Equipamentos pendente" ≠ fila de
+  custo alvo).
+
+**Cuidado ao mexer aqui**: `isRelevantForRestrictedProfile` (a função base)
+é reusada sem alteração pra montar a própria tela do perfil restrito
+(`visibleRows`, quando `!appUser.isAdmin`) — ela **tem** que continuar
+mostrando todas as edições que a Comercial fez, mesmo em código fora da
+fila. O gate extra de "está na fila agora" só é aplicado dentro de
+`isRelevantToAnyRestrictedProfile`, usada exclusivamente pro recorte
+"Somente Engenharia" — nunca extrair essa checagem pra dentro da função
+base, ou a própria Comercial para de ver o que ela mesma editou.
+
 ## Alterações manuais via SQL Editor nunca entram na auditoria
 
 Rodar uma query direto no SQL Editor do Supabase, fora do app, não passa
