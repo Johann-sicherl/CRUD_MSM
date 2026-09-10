@@ -82,6 +82,28 @@ Custos Sugeridos" do admin e na normalização de chave da rota GET
 `status` da fila, replicar este mapeamento — nunca comparar as strings
 direto.
 
+### `pendingTargetCost`/`pendingKind` em `DataTable.tsx` vale pros dois perfis — já causou bug real
+
+`DataTable.tsx` calcula `pendingKind` (`'novo'`/`'em_alteracao'`/`null`) por
+linha, usado tanto pro destaque amarelo/azul quanto pelas abas "Somente
+Novos"/"Em Alteração de Custeio". Bug já corrigido: tanto o `useEffect` que
+busca `/api/pending-target-cost` quanto o cálculo de `pendingKind` em
+`getBaselineInfo` tinham `&& !appUser.isAdmin` — então pro perfil Admin a
+fila nunca era buscada e `pendingKind` ficava sempre `null`, mesmo a aba
+"Em Alteração de Custeio" aparecendo normalmente pra ele. Resultado: Admin
+aplicava o filtro e sempre via 0 registros, enquanto a Gerente Adm Comercial
+via os registros certos — a UI (título do botão "Mostrar só os registros
+ainda sem custo alvo aprovado pela Comercial") já dava a entender que isso
+deveria valer pros dois perfis, só a implementação não seguia isso.
+
+**O Admin precisa mesmo de "Em Alteração de Custeio"** — é como ele vê o que
+a Comercial já imputou e sinalizou, pronto pra confirmar oficialmente via
+Atualizador Global. Não é uma aba só da Comercial. O grupo de abas
+Completo/Somente Novos/Em Alteração de Custeio também não depende mais de
+`baseline !== null` (retrato de import) pra `usesTargetCostPending` — a
+fila `pending_target_cost` não tem nada a ver com ter havido um import CSV
+ou não.
+
 ## "Grupo de Equipamentos pendente" ≠ fila de custo alvo
 
 São dois conceitos de pendência **diferentes**, não um bug quando aparecem

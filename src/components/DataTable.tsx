@@ -236,9 +236,10 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // caso em que a busca nem dispara e fica null pra sempre).
   const [localCosts, setLocalCosts] = useState<Record<string, { label: string; values: Record<string, number | null>; updatedAt: string }> | null>(null)
   // Fila de aprovação de custo alvo (accessories/standard_equipment_items,
-  // perfil restrito) — protheus_code -> status ('novo' | 'em_alteracao').
-  // null = ainda carregando (ou tabela sem esse campo/perfil admin, caso em
-  // que a busca nem dispara e fica null pra sempre).
+  // Admin também precisa disto — "Em Alteração de Custeio" é como ela vê o
+  // que a Comercial já sinalizou, pronto pra confirmar via Atualizador
+  // Global. protheus_code -> status ('novo' | 'em_alteracao'). null = ainda
+  // carregando (ou tabela sem esse campo, caso em que a busca nem dispara).
   const [pendingTargetCost, setPendingTargetCost] = useState<Record<string, { status: string }> | null>(null)
 
   const listFields = useMemo(() => getListFields(tableName), [tableName])
@@ -312,14 +313,14 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   useEffect(() => { fetchLocalCosts() }, [fetchLocalCosts])
 
   useEffect(() => {
-    if (!usesTargetCostPending || appUser.isAdmin) return
+    if (!usesTargetCostPending) return
     let cancelled = false
     fetch('/api/pending-target-cost')
       .then(r => r.ok ? r.json() : {})
       .then(json => { if (!cancelled) setPendingTargetCost(json) })
       .catch(() => { if (!cancelled) setPendingTargetCost({}) })
     return () => { cancelled = true }
-  }, [tableName, usesTargetCostPending, appUser.isAdmin])
+  }, [tableName, usesTargetCostPending])
 
   // "✓ Custo Imputado" (Gerente Adm Comercial) — move o código de 'novo'
   // pra 'em_alteracao': some de "Somente Novos", entra em "Em Alteração de
@@ -556,9 +557,14 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // (usesTargetCostPending): 'novo' = Admin marcou o checkbox, aguardando a
   // Gerente; 'em_alteracao' = Gerente já sinalizou que imputou o custo,
   // aguardando confirmação oficial via Atualizador Global; null = fora da
-  // fila (nem pendente, nem em alteração).
+  // fila (nem pendente, nem em alteração). Vale pros dois perfis — o Admin
+  // precisa de "Em Alteração de Custeio" pra saber o que já está pronto pra
+  // confirmar no Atualizador Global. Bug já corrigido: antes só calculava
+  // pendingKind pro perfil restrito (`&& !appUser.isAdmin`), então o Admin
+  // via o botão "Em Alteração de Custeio" normalmente mas o filtro sempre
+  // dava vazio — pendingTargetCost nunca era nem buscado pra ele.
   const getBaselineInfo = useCallback((row: Record<string, unknown>) => {
-    if (usesTargetCostPending && !appUser.isAdmin) {
+    if (usesTargetCostPending) {
       const code = String(row.protheus_code ?? '').trim().toUpperCase()
       const entry = pendingTargetCost?.[code]
       const pendingKind = entry ? (entry.status === 'em_alteracao' ? 'em_alteracao' : 'novo') : null
@@ -573,7 +579,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     const baselineRow = keyIsAmbiguous ? undefined : baseline?.byKey.get(key)
     const isNewRow = baseline !== null && !keyIsAmbiguous && !baselineRow
     return { isNewRow, pendingKind: null, baselineRow }
-  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, appUser.isAdmin, pendingTargetCost])
+  }, [baseline, liveDuplicateKeys, schema, isRestrictedControladoriaView, zeroForceFields, usesTargetCostPending, pendingTargetCost])
 
   // Rows that pass ALL active column filters (e "Somente Novos", se ligado)
   const filteredRows = useMemo(() => {
@@ -848,10 +854,12 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     <div className="flex items-center gap-2 flex-wrap justify-end">
       {/* Completo/Somente Novos: perfil restrito com colunas de controladoria/
           fiscal/precificação vê o filtro sempre (pendente de custo real não
-          depende de import CSV nenhum); perfil admin só quando há um retrato
-          de import pra comparar — some junto com o destaque amarelo quando
-          não há um. */}
-      {(isRestrictedControladoriaView || baseline !== null) && (
+          depende de import CSV nenhum); tabela com fila de custo alvo
+          (usesTargetCostPending) também vê sempre, pros dois perfis (não
+          depende de baseline nenhum, é a fila pending_target_cost); perfil
+          admin nas demais tabelas só quando há um retrato de import pra
+          comparar — some junto com o destaque amarelo quando não há um. */}
+      {(isRestrictedControladoriaView || usesTargetCostPending || baseline !== null) && (
         <div className="flex items-center rounded border border-outline-variant overflow-hidden text-xs font-medium shrink-0">
           <button
             onClick={() => setViewMode('completo')}
