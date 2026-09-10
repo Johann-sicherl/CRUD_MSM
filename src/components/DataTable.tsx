@@ -1255,7 +1255,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                       // 'em_alteracao' (azul) é sempre a fila de custo alvo.
                       const { isNewRow, pendingKind, baselineRow } = getBaselineInfo(row)
                       return (
-                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : isNewRow ? 'bg-amber-500/10' : pendingKind === 'em_alteracao' ? 'bg-blue-500/10' : ''}`}>
+                      <tr key={rowId || i} className={`hover:bg-surface-container-high transition-colors group ${isSelected ? 'bg-primary/5' : pendingKind === 'em_alteracao' ? 'bg-blue-500/10' : isNewRow ? 'bg-amber-500/10' : ''}`}>
                         <td className="px-3 py-3 w-8">
                           <input
                             type="checkbox"
@@ -1323,7 +1323,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                         {/* sticky (fica por cima do conteúdo da linha ao rolar horizontal) precisa
                             de fundo OPACO — uma cor com /alpha deixa o texto das outras colunas
                             transparecer por baixo, dando a impressão de texto sobreposto/fantasma. */}
-                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary-container group-hover:bg-primary-container' : isNewRow ? 'bg-amber-950 group-hover:bg-amber-900' : pendingKind === 'em_alteracao' ? 'bg-blue-950 group-hover:bg-blue-900' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
+                        <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary-container group-hover:bg-primary-container' : pendingKind === 'em_alteracao' ? 'bg-blue-950 group-hover:bg-blue-900' : isNewRow ? 'bg-amber-950 group-hover:bg-amber-900' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
                           {usesTargetCostPending && !appUser.isAdmin && pendingKind === 'novo' && (
                             <button
                               onClick={() => handleSignalCostImputed(String(row.protheus_code ?? ''))}

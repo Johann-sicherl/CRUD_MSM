@@ -118,6 +118,20 @@ de `baseline !== null` pra aparecer em tabelas com `usesTargetCostPending`
 "Somente Novos" do Admin em si continua exigindo `baseline !== null` pra
 filtrar algo, exatamente como em qualquer tabela sem fila.
 
+### Cor da linha quando `isNewRow` e `pendingKind === 'em_alteracao'` são os dois verdade — azul vence
+
+Como os dois sinais acima são independentes (pro Admin), uma linha pode ser
+as duas coisas ao mesmo tempo: diferente do último import (`isNewRow`) **e**
+já com custo imputado pela Comercial (`pendingKind === 'em_alteracao'`).
+Bug já corrigido: a cor da linha/da célula sticky de Ação priorizava amarelo
+(`isNewRow`) sobre azul — então, dentro do próprio filtro "Em Alteração de
+Custeio" (onde toda linha visível já é `em_alteracao` por definição do
+filtro), algumas apareciam amarelas, inconsistente com a aba em que o
+usuário estava. Corrigido invertendo a prioridade: `pendingKind ===
+'em_alteracao'` (azul) vence `isNewRow` (amarelo) sempre que os dois forem
+verdade — replicar essa ordem (azul antes de amarelo) em qualquer lugar novo
+que pinte linha/célula com os dois sinais.
+
 ### `pendingTargetCost` precisa ser rebuscado depois de salvar, não só no mount — já causou bug real
 
 Segundo bug do mesmo tipo, achado logo depois do de cima: `pendingTargetCost`
