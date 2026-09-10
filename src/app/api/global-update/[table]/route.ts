@@ -5,6 +5,7 @@ import { convertCsvRows } from '@/lib/globalUpdateConvert'
 import { extractRealCosts } from '@/lib/localCostExtract'
 import { replaceTableCosts } from '@/lib/localCostStore'
 import { getProfileById } from '@/lib/userProfileStore'
+import { getAuditKeyFields } from '@/lib/sqlAudit'
 
 type RouteParams = { params: { table: string } }
 
@@ -87,8 +88,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // resposta de sucesso do import.
   if (schema.fields.some(f => f.name === TARGET_COST_PENDING_FIELD)) {
     try {
+      // Nunca hardcoded "protheus_code" — Grupo de Equipamentos (equipments)
+      // não tem essa coluna, usa legacy_id (ver getAuditKeyFields).
+      const keyField = getAuditKeyFields(schema)[0]
       const codes = Array.from(new Set(
-        insertRows.map(r => String(r.protheus_code ?? '').trim().toUpperCase()).filter(Boolean)
+        insertRows.map(r => String(r[keyField.name] ?? '').trim().toUpperCase()).filter(Boolean)
       ))
       if (codes.length > 0) {
         await supabaseAdmin.from('pending_target_cost').delete().in('protheus_code', codes)

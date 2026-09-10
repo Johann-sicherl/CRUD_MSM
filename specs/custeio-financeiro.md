@@ -213,6 +213,14 @@ precisa que esses quatro pontos já funcionem automaticamente (todos já usam
 `getAuditKeyFields`, nenhum mais hardcoda `protheus_code`) — não é preciso
 tocar em nada além do próprio schema da tabela.
 
+**Quinta ocorrência do mesmo bug, achada depois**: `/api/global-update/[table]/route.ts`
+(a limpeza da fila de custo alvo depois de uma reimportação completa pelo
+Atualizador Global) também hardcodava `r.protheus_code` para montar os
+códigos a remover de `pending_target_cost` — mesma classe de bug dos quatro
+pontos acima, só que descoberta depois, durante o trabalho no módulo
+Double-check de Queries (`specs/double-check-queries.md`). Corrigido do
+mesmo jeito: `getAuditKeyFields(schema)[0]` em vez de `protheus_code` fixo.
+
 **Limitação conhecida, fora do escopo desta mudança**: os cartões "Em
 Custeio" do Dashboard (`/api/dashboard/custeio-comercial`,
 `/api/dashboard/pending-controladoria`) ainda assumem explicitamente que

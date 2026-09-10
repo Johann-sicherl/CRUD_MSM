@@ -139,6 +139,21 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               >
                 <span className="truncate">Configuração de Usuários</span>
               </Link>
+              {/* Double-check de Queries: fora de MODULES/visibleModules de
+                  propósito, mesmo tratamento de Configuração de Usuários
+                  acima — ferramenta sensível, admin-only sempre, nunca
+                  configurável por perfil. */}
+              <Link
+                href="/duplo-check-queries"
+                prefetch={false}
+                className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                  pathname === '/duplo-check-queries'
+                    ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                }`}
+              >
+                <span className="truncate">Double-check de Queries</span>
+              </Link>
             </div>
           )}
         </nav>

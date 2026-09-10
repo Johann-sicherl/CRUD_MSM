@@ -45,6 +45,7 @@ Next.js 14 (App Router) + TypeScript + Supabase, ferramenta administrativa inter
 - Ao trabalhar em explorador de relações, clonagem estrutural, análise de estruturas, busca de acessórios, depurador Solic. Comercial ou classificação de equipamentos: leia @specs/telas-auxiliares.md
 - Ao trabalhar em RecordModal, DataTable, filtros de coluna, modais de edição em massa, tema/zoom: leia @specs/ui-componentes.md
 - Ao trabalhar em scripts SQL da raiz: leia @specs/sql-migrations.md
+- Ao trabalhar no módulo Double-check de Queries (tabelas `_check`, simulação de SQL da Auditoria): leia @specs/double-check-queries.md
 
 # Compact instructions
 
