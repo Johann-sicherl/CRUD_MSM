@@ -3,6 +3,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 type RouteParams = { params: { id: string } }
 
+// PUT/DELETE não são alvo do Data Cache do Next.js, mas força mesmo assim
+// (mesmo padrão de global-update/[table]/compare/route.ts) — consistência
+// com o GET de audit-log/route.ts, que precisa disso de verdade.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 const VALID_STATUSES = ['pending', 'exported', 'applied']
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
