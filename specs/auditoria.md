@@ -51,6 +51,21 @@ filtrada por status "Pendente" (poucas linhas, dentro do cap), mas não saía
 no `.txt` exportado. Corrigido com `.range(0, 24999)`, mesmo padrão já usado
 em `global-update/[table]/compare/route.ts` e `clone-architecture/route.ts`.
 
+## "Exportar TXTs por tabela/ação" precisa de pausa entre downloads — limite do navegador
+
+Bug real já corrigido, achado logo depois do fix do `.range()` acima:
+`runTxtExport` (`auditoria/page.tsx`) dispara um download (`<a>.click()`) por
+grupo (tabela, ação), num loop. Disparar mais de ~10 downloads automáticos
+em sequência, sem pausa nenhuma entre eles, faz o Chrome (e a maioria dos
+navegadores) bloquear silenciosamente os downloads seguintes — sem erro
+nenhum no JS, o arquivo simplesmente nunca aparece na pasta de Downloads.
+Sintoma relatado: um export de 14 grupos (tabela, ação) só entregava os
+primeiros ~10 — sempre faltavam os mesmos grupos (os que vinham depois na
+ordem de `created_at desc` usada pela query). Corrigido com uma pausa de
+400ms entre cada download (`sleep`/`setTimeout`, `runTxtExport` agora
+`async`) — não é estético, é o workaround padrão pra esse limite do
+navegador.
+
 ## Convenção: auditoria é best-effort
 
 Toda chamada às funções `record*Audit` é envolta em `try { } catch { /*

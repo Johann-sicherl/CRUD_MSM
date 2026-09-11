@@ -392,16 +392,29 @@ export default function AuditoriaPage() {
     navigator.clipboard.writeText(buildSqlText(visibleRows)).then(() => showToast(`${visibleRows.length} quer${visibleRows.length !== 1 ? 'ies' : 'y'} copiada${visibleRows.length !== 1 ? 's' : ''}`))
   }
 
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
   // Um .txt por (tabela, ação) do conjunto de linhas dado — todos com o
   // mesmo instante de exportação no nome, cada um baixado separadamente
   // (o navegador manda pra pasta padrão de Downloads). rowsToExport já vem
   // de visibleRows, que já tem o valor real substituído — nunca no
   // Supabase, que continua com 1.
-  const runTxtExport = (rowsToExport: AuditRow[]) => {
+  //
+  // O intervalo entre downloads é proposital, não estético: disparar mais de
+  // ~10 downloads automáticos em sequência, sem pausa, faz o Chrome (e a
+  // maioria dos navegadores) bloquear silenciosamente os downloads
+  // seguintes — sem erro nenhum no JS, o arquivo simplesmente nunca aparece
+  // na pasta de Downloads. Bug real já causado por isso: um export de 14
+  // grupos (tabela, ação) só entregava os primeiros ~10, sempre os mesmos
+  // grupos faltando (os que vinham depois na ordem de created_at desc).
+  const runTxtExport = async (rowsToExport: AuditRow[]) => {
     const groups = groupRowsForExport(rowsToExport)
     if (groups.size === 0) { showToast('Nenhuma query pra exportar nesse recorte', true); return }
     const now = new Date()
+    let first = true
     for (const groupRows of groups.values()) {
+      if (!first) await sleep(400)
+      first = false
       const filename = buildExportFilename(now, groupRows[0].operation, groupRows[0].table_name, groupRows.length, appUser.name)
       triggerDownload(buildSqlText(groupRows), filename, 'text/plain')
     }
