@@ -95,6 +95,30 @@ tabela sem checkbox de custo alvo (ex.: Grupo de Equipamentos) nunca mostra
 uma linha de INSERT para esse perfil — a UI dela não gera pendência de custo
 alvo, então não há gatilho de visibilidade.
 
+## Filtro de tela "Queries de Engenharia" / "Queries de Controladoria"
+
+Terceiro filtro na barra (junto de "Todas as tabelas"/"Todos os status"),
+só visível pro Admin — perfil restrito já enxerga só a própria fatia
+(`visibleRows` já filtra pra ele), esse filtro não faz sentido lá. Mesmo
+critério de "é da Comercial" já usado no recorte "Somente Engenharia" da
+exportação (`isRelevantToAnyRestrictedProfile`, ver seção abaixo), só que
+aplicado direto na listagem (`scopedRows`, derivado de `visibleRows`), não
+só na hora de exportar — pedido explícito do usuário: "mais um tipo de
+filtro, Queries de Engenharia e Queries de Controladoria ou sem filtro".
+
+`scopedRows` é o que a tabela renderiza, o que "Copiar todas ({N})" conta/
+copia, o checkbox "selecionar tudo" seleciona, e o que "Exportar TXTs por
+tabela/ação" usa como base — inclusive o próprio recorte Completa/Somente
+Engenharia da exportação passa a operar **em cima** do filtro de tela já
+ativo (se a tela já estiver filtrada em "Queries de Engenharia" e o admin
+escolher "Somente Engenharia" na exportação, o resultado é o mesmo
+subconjunto; se a tela estiver em "Queries de Controladoria" e o admin
+escolher "Somente Engenharia" na exportação, o resultado é vazio — os dois
+filtros são mutuamente exclusivos nesse caso, comportamento esperado, não
+bug). `selectedRows`/`selectedIds` também passaram a derivar de
+`scopedRows`, não mais de `visibleRows`, para o "selecionar tudo" e a
+exportação/exclusão em lote corresponderem exatamente ao que está na tela.
+
 ## "Exportar TXTs por tabela/ação" — recorte "Somente Engenharia"
 
 Botão só pro Admin (perfil restrito já enxerga só a própria fatia e exporta

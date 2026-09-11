@@ -236,6 +236,11 @@ export default function AuditoriaPage() {
   const [error, setError] = useState('')
   const [tableFilter, setTableFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  // Só pro admin — mesmo critério de "é da Comercial" do recorte de export
+  // (isRelevantToAnyRestrictedProfile), só que como filtro de tela em vez de
+  // escolha só na hora de exportar. Perfil restrito já enxerga só a própria
+  // fatia (visibleRows já filtra pra ele), esse filtro não faz sentido lá.
+  const [profileScopeFilter, setProfileScopeFilter] = useState<'' | 'engenharia' | 'controladoria'>('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   // Só usado pelo admin, pra saber o que "Somente Engenharia" precisa excluir
@@ -339,7 +344,20 @@ export default function AuditoriaPage() {
     })
   }, [rows, localCosts, appUser, pendingTargetCostCodes])
 
-  const selectedRows = visibleRows.filter(r => selectedIds.has(r.id))
+  // Filtro de tela "Queries de Engenharia"/"Queries de Controladoria" — usa
+  // o mesmo critério de isRelevantToAnyRestrictedProfile do recorte
+  // "Somente Engenharia" da exportação (ver mais abaixo), só que aplicado
+  // direto na listagem, não só na hora de exportar. Sem filtro (''), mostra
+  // tudo — igual a hoje.
+  const scopedRows = useMemo(() => {
+    if (!appUser.isAdmin || !profileScopeFilter) return visibleRows
+    return visibleRows.filter(r => {
+      const isControladoria = isRelevantToAnyRestrictedProfile(r, restrictedProfiles, pendingTargetCostCodes)
+      return profileScopeFilter === 'controladoria' ? isControladoria : !isControladoria
+    })
+  }, [visibleRows, profileScopeFilter, appUser.isAdmin, restrictedProfiles, pendingTargetCostCodes])
+
+  const selectedRows = scopedRows.filter(r => selectedIds.has(r.id))
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -388,8 +406,8 @@ export default function AuditoriaPage() {
   }
 
   const handleCopyAll = () => {
-    if (visibleRows.length === 0) return
-    navigator.clipboard.writeText(buildSqlText(visibleRows)).then(() => showToast(`${visibleRows.length} quer${visibleRows.length !== 1 ? 'ies' : 'y'} copiada${visibleRows.length !== 1 ? 's' : ''}`))
+    if (scopedRows.length === 0) return
+    navigator.clipboard.writeText(buildSqlText(scopedRows)).then(() => showToast(`${scopedRows.length} quer${scopedRows.length !== 1 ? 'ies' : 'y'} copiada${scopedRows.length !== 1 ? 's' : ''}`))
   }
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -422,19 +440,22 @@ export default function AuditoriaPage() {
   }
 
   // Só o admin (Engenharia) escolhe o recorte — perfil restrito já enxerga
-  // só a própria fatia, então exporta direto, sem pergunta.
+  // só a própria fatia, então exporta direto, sem pergunta. Em cima do que
+  // já estiver filtrado na tela (scopedRows) — se o filtro "Queries de
+  // Engenharia"/"Queries de Controladoria" já estiver ativo, o recorte da
+  // exportação se aplica sobre esse subconjunto, não sobre tudo de novo.
   const handleExportTxtByTableAction = () => {
-    if (visibleRows.length === 0) return
+    if (scopedRows.length === 0) return
     if (appUser.isAdmin) { setExportChoiceOpen(true); return }
-    runTxtExport(visibleRows)
+    runTxtExport(scopedRows)
   }
 
   const handleExportChoice = (onlyEngenharia: boolean) => {
     setExportChoiceOpen(false)
     runTxtExport(
       onlyEngenharia
-        ? visibleRows.filter(r => !isRelevantToAnyRestrictedProfile(r, restrictedProfiles, pendingTargetCostCodes))
-        : visibleRows
+        ? scopedRows.filter(r => !isRelevantToAnyRestrictedProfile(r, restrictedProfiles, pendingTargetCostCodes))
+        : scopedRows
     )
   }
 
@@ -472,16 +493,27 @@ export default function AuditoriaPage() {
               <option value="exported">Exportado</option>
               <option value="applied">Aplicado</option>
             </select>
+            {appUser.isAdmin && (
+              <select
+                value={profileScopeFilter}
+                onChange={e => setProfileScopeFilter(e.target.value as typeof profileScopeFilter)}
+                className="px-3 py-2 text-sm bg-surface-container border border-outline-variant rounded text-on-surface-variant"
+              >
+                <option value="">Todos os perfis</option>
+                <option value="engenharia">Queries de Engenharia</option>
+                <option value="controladoria">Queries de Controladoria</option>
+              </select>
+            )}
             <button
               onClick={handleCopyAll}
-              disabled={visibleRows.length === 0}
+              disabled={scopedRows.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              ⧉ Copiar todas ({visibleRows.length})
+              ⧉ Copiar todas ({scopedRows.length})
             </button>
             <button
               onClick={handleExportTxtByTableAction}
-              disabled={visibleRows.length === 0}
+              disabled={scopedRows.length === 0}
               title="Um arquivo .txt por tabela + ação, com as queries daquele grupo"
               className="flex items-center gap-1.5 px-4 py-2 bg-surface-container border border-outline-variant rounded text-sm text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -527,8 +559,8 @@ export default function AuditoriaPage() {
                   <input
                     type="checkbox"
                     className="accent-primary"
-                    checked={visibleRows.length > 0 && visibleRows.every(r => selectedIds.has(r.id))}
-                    onChange={e => setSelectedIds(e.target.checked ? new Set(visibleRows.map(r => r.id)) : new Set())}
+                    checked={scopedRows.length > 0 && scopedRows.every(r => selectedIds.has(r.id))}
+                    onChange={e => setSelectedIds(e.target.checked ? new Set(scopedRows.map(r => r.id)) : new Set())}
                   />
                 </th>
                 <th className="px-4 py-3 text-left text-[10px] font-semibold text-outline uppercase tracking-[0.12em] font-mono">Tabela</th>
@@ -540,10 +572,10 @@ export default function AuditoriaPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
-              {visibleRows.length === 0 ? (
+              {scopedRows.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-12 text-center text-outline text-sm">Nenhuma query pendente</td></tr>
               ) : (
-                visibleRows.map(row => (
+                scopedRows.map(row => (
                   <Fragment key={row.id}>
                     <tr className="hover:bg-surface-container-high transition-colors">
                       <td className="px-3 py-3">
