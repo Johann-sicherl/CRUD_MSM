@@ -52,3 +52,25 @@ buscas grandes.
 consulta ao banco Protheus (via `mssql`, mesma base de `pdmDb.ts` — ver
 `specs/pdm-protheus-integracao.md`) para localizar itens de série/estruturas
 e acessórios diretamente na base oficial, fora do Supabase.
+
+### Busc. Itens Série Estrut. Protheus — aviso de "varredura concluída"
+
+Os três pontos de entrada em lote (`handlePickGroup` — grupo inteiro,
+`handlePickAll` — "Analisar TODOS", Busca Reversa por prefixo) rodam
+`runDbStructureAnalysis` **sequencialmente**, um round-trip ao Protheus por
+código — pode levar bastante tempo numa lista grande, sem nenhum jeito de
+saber, só olhando a tela, se a varredura já terminou. Pedido explícito do
+usuário: "preciso de pelo menos um pop-up, ou aviso dizendo que a Varredura
+foi concluída com sucesso... não tenho a visibilidade se está completo ou
+não".
+
+Implementado com `runBulkScan` (`analisador-estruturas/page.tsx`) — wrapper
+comum aos três pontos de entrada, que roda o loop sequencial e mostra um
+toast no final ("Varredura concluída: N equipamento(s) analisado(s), M com
+erro"), mesmo padrão visual de toast já usado em `auditoria/page.tsx`
+(`fixed bottom-6 right-6`, 5s). `runDbStructureAnalysis` foi alterado pra
+devolver `'done' | 'error'` (nunca lança exceção — já capturava tudo
+internamente) só pra `runBulkScan` conseguir contar sucesso/erro no aviso
+final. Busca de um único código (`handlePickCode`) não tem toast — o pedido
+foi especificamente sobre a varredura em lote, onde a demora e a falta de
+feedback realmente incomodam.

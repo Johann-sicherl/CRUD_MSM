@@ -707,6 +707,17 @@ export default function AnalisadorEstruturasPage() {
   // a small loading state on its button while the request is in flight.
   const [exportingId, setExportingId] = useState<string | null>(null)
 
+  // Varredura em lote (grupo inteiro / "Analisar TODOS" / Busca Reversa) —
+  // cada código roda sequencialmente contra o Protheus (um round-trip por
+  // código), o que pode levar bastante tempo pra uma lista grande, sem
+  // nenhum jeito de saber, só olhando a tela, se já terminou ou ainda está
+  // rodando. Pedido explícito do usuário: um aviso claro de "concluído".
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
+  const showToast = (msg: string, isError = false) => {
+    setToast({ msg, isError })
+    setTimeout(() => setToast(null), 5000)
+  }
+
   // Restore previously analyzed files when returning to this page. Uses
   // IndexedDB instead of sessionStorage — a big Busca Reversa/"Analisar
   // TODOS" run can easily exceed sessionStorage's ~5-10MB per-tab quota,
@@ -880,7 +891,7 @@ export default function AnalisadorEstruturasPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const runDbStructureAnalysis = async (protheusCode: string, creds: { user: string; password: string }) => {
+  const runDbStructureAnalysis = async (protheusCode: string, creds: { user: string; password: string }): Promise<'done' | 'error'> => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
     setFiles(prev => [...prev, { id, name: `Banco · ${protheusCode}`, protheusCode, source: 'db', status: 'analyzing' }])
     setExpandedId(prevId => prevId ?? id)
@@ -894,7 +905,7 @@ export default function AnalisadorEstruturasPage() {
       const codesJson = await codesRes.json()
       if (!codesRes.ok) {
         setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: codesJson.error || 'Falha ao consultar o banco Protheus' } : f))
-        return
+        return 'error'
       }
       setFiles(prev => prev.map(f => f.id === id ? {
         ...f,
@@ -910,7 +921,7 @@ export default function AnalisadorEstruturasPage() {
       const json = await res.json()
       if (!res.ok) {
         setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: json.error || 'Falha ao analisar' } : f))
-        return
+        return 'error'
       }
       setFiles(prev => prev.map(f => f.id === id ? {
         ...f,
@@ -919,9 +930,30 @@ export default function AnalisadorEstruturasPage() {
         codesAnalyzed: json.codesAnalyzed,
         properties: json.properties,
       } : f))
+      return 'done'
     } catch {
       setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: 'Erro de comunicação com o banco Protheus' } : f))
+      return 'error'
     }
+  }
+
+  // Roda a varredura sequencial (um round-trip por código) e avisa no final
+  // — usado por todo ponto de entrada em lote (grupo inteiro, "Analisar
+  // TODOS", Busca Reversa). Cada runDbStructureAnalysis já nunca lança
+  // exceção (sempre captura e devolve 'error'), então o loop sempre termina
+  // e o aviso sempre aparece, mesmo com falhas no meio do caminho.
+  const runBulkScan = async (codes: string[], creds: { user: string; password: string }) => {
+    let ok = 0
+    let err = 0
+    for (const code of codes) {
+      const result = await runDbStructureAnalysis(code, creds)
+      if (result === 'done') ok++
+      else err++
+    }
+    showToast(
+      `Varredura concluída: ${ok} equipamento${ok !== 1 ? 's' : ''} analisado${ok !== 1 ? 's' : ''}${err > 0 ? `, ${err} com erro` : ''}`,
+      err > 0 && ok === 0,
+    )
   }
 
   const handlePickCode = (code: string) => {
@@ -933,30 +965,18 @@ export default function AnalisadorEstruturasPage() {
     setPickerOpen(false)
     if (!dbCreds) return
     const codesInGroup = groupCodes.filter(c => c.legacyEquipmentId === legacyId)
-    ;(async () => {
-      for (const c of codesInGroup) {
-        await runDbStructureAnalysis(c.code, dbCreds)
-      }
-    })()
+    runBulkScan(codesInGroup.map(c => c.code), dbCreds)
   }
 
   const handlePickAll = () => {
     setPickerOpen(false)
     if (!dbCreds) return
-    ;(async () => {
-      for (const c of groupCodes) {
-        await runDbStructureAnalysis(c.code, dbCreds)
-      }
-    })()
+    runBulkScan(groupCodes.map(c => c.code), dbCreds)
   }
 
   const handleAnalyzeCodes = (codes: string[]) => {
     if (!dbCreds) return
-    ;(async () => {
-      for (const code of codes) {
-        await runDbStructureAnalysis(code, dbCreds)
-      }
-    })()
+    runBulkScan(codes, dbCreds)
   }
 
   const removeFile = (id: string) => {
@@ -1446,6 +1466,16 @@ export default function AnalisadorEstruturasPage() {
             </div>
             )
           })}
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg text-sm animate-fade-in border ${
+          toast.isError
+            ? 'bg-error-container border-error/30 text-on-error-container'
+            : 'bg-surface-container-highest border-outline-variant text-on-surface'
+        }`}>
+          {toast.isError ? '✕' : '✓'} {toast.msg}
         </div>
       )}
     </div>
