@@ -537,110 +537,13 @@ export const tables: Record<string, TableSchema> = {
     ],
   },
 
-  // ── TRANSACIONAL (oculto da UI) ───────────────────────────────────────────
-
-  quotes: {
-    label: 'Propostas',
-    description: 'Propostas comerciais geradas pelo configurador',
-    domain: 'transacional',
-    hasTimestamps: true,
-    orderBy: 'created_at DESC',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'external_id', label: 'ID Externo (Zoho CRM)', type: 'text', nullable: true },
-      { name: 'deal_external_id', label: 'ID Deal (Zoho)', type: 'text', nullable: true },
-      { name: 'status', label: 'Status', type: 'select', nullable: false, defaultValue: 'draft', options: ['draft', 'sent', 'approved', 'rejected'] },
-      { name: 'raw_quote', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
-      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
-    ],
-  },
-
-  machines: {
-    label: 'Máquinas',
-    description: 'Máquinas configuradas dentro de uma proposta',
-    domain: 'transacional',
-    hasTimestamps: true,
-    orderBy: 'created_at DESC',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'quote_id', label: 'ID Proposta', type: 'uuid', nullable: false },
-      { name: 'equipment_id', label: 'ID Equipamento', type: 'uuid', nullable: false },
-      { name: 'raw_standard_equip_item', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'price', label: 'Preço (R$)', type: 'decimal', nullable: true },
-      { name: 'suggested_price', label: 'Preço Sugerido JSON', type: 'jsonb', nullable: true },
-      { name: 'selling_price', label: 'Preço de Venda JSON', type: 'jsonb', nullable: true },
-      { name: 'created_at', label: 'Criado em', type: 'timestamp', nullable: false, isReadonly: true },
-      { name: 'updated_at', label: 'Atualizado em', type: 'timestamp', nullable: false, isReadonly: true },
-    ],
-  },
-
-  machine_accessories: {
-    label: 'Acessórios da Máquina',
-    description: 'Acessórios adicionados a cada máquina na proposta',
-    domain: 'transacional',
-    hasTimestamps: false,
-    orderBy: 'machine_id',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'machine_id', label: 'ID Máquina', type: 'uuid', nullable: false },
-      { name: 'accessory_id', label: 'ID Acessório', type: 'uuid', nullable: false },
-      { name: 'raw_accessory', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'quantity', label: 'Quantidade', type: 'decimal', nullable: false, defaultValue: 1 },
-      { name: 'position', label: 'Posição', type: 'select', nullable: true, options: ['input', 'output', 'side', 'top'] },
-      { name: 'customized', label: 'Customizado?', type: 'boolean', nullable: false, defaultValue: false },
-      { name: 'exported', label: 'Exportado?', type: 'boolean', nullable: false, defaultValue: false },
-      { name: 'origin', label: 'Origem', type: 'select', nullable: false, options: ['user', 'combination', 'rule'] },
-      { name: 'observations',   label: 'Observações',           type: 'textarea', nullable: true },
-      { name: 'price',          label: 'Preço (R$)',             type: 'decimal',  nullable: true },
-      { name: 'item_id',        label: 'ID Item',               type: 'text',     nullable: true },
-      { name: 'parent_item_id', label: 'ID Item Pai',           type: 'text',     nullable: true },
-      { name: 'suggested_price',label: 'Preço Sugerido (JSON)', type: 'jsonb',    nullable: true },
-      { name: 'selling_price',  label: 'Preço de Venda (JSON)', type: 'jsonb',    nullable: true },
-    ],
-  },
-
-  machine_dependant_items: {
-    label: 'Itens Dep. da Máquina',
-    description: 'Itens dependentes calculados para cada máquina',
-    domain: 'transacional',
-    hasTimestamps: false,
-    orderBy: 'machine_id',
-    fields: [
-      { name: 'id', label: 'ID', type: 'uuid', nullable: false, isPk: true, isReadonly: true },
-      { name: 'machine_id', label: 'ID Máquina', type: 'uuid', nullable: false },
-      { name: 'dependant_item_id', label: 'ID Item Dep.', type: 'uuid', nullable: false },
-      { name: 'raw_dependant_item', label: 'Snapshot JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'quantity', label: 'Quantidade', type: 'number', nullable: false, defaultValue: 1 },
-      { name: 'price', label: 'Preço (R$)', type: 'decimal', nullable: true },
-      { name: 'suggested_price', label: 'Preço Sugerido JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
-      { name: 'selling_price', label: 'Preço de Venda JSON', type: 'jsonb', nullable: false, defaultValue: '{}' },
-    ],
-  },
-
-  // ── PLATAFORMA ────────────────────────────────────────────────────────────
-
-  users: {
-    label: 'Usuários',
-    description: 'Contas de acesso ao sistema',
-    domain: 'plataforma',
-    hasTimestamps: true,
-    orderBy: 'created_at DESC',
-    columnFilters: true,
-    fields: [
-      { name: 'id',          label: 'ID',         type: 'uuid',      nullable: false, isPk: true, isReadonly: true },
-      { name: 'email',       label: 'E-mail',      type: 'text',      nullable: false, showInList: true, listFilterType: 'text' },
-      { name: 'first_name',  label: 'Nome',        type: 'text',      nullable: false, showInList: true },
-      { name: 'last_name',   label: 'Sobrenome',   type: 'text',      nullable: true,  showInList: true },
-      { name: 'password',    label: 'Senha',       type: 'password',  nullable: false },
-      { name: 'role',        label: 'Perfil',      type: 'select',    nullable: false, defaultValue: 'user', options: ['admin', 'user'], showInList: true },
-      { name: 'active',      label: 'Ativo?',      type: 'boolean',   nullable: false, defaultValue: true,  showInList: true },
-      { name: 'deleted',     label: 'Excluído?',   type: 'boolean',   nullable: true,  defaultValue: false },
-      { name: 'last_login',  label: 'Último login',type: 'timestamp', nullable: true,  isReadonly: true },
-      { name: 'created_at',  label: 'Criado em',   type: 'timestamp', nullable: false, isReadonly: true },
-      { name: 'updated_at',  label: 'Atualizado em',type: 'timestamp',nullable: false, isReadonly: true },
-    ],
-  },
+  // Histórico: este schema já teve entradas transacional/plataforma
+  // (quotes, machines, machine_accessories, machine_dependant_items, users)
+  // — tabelas de um "configurador" comercial separado (Zoho CRM) que só
+  // compartilha o mesmo Supabase, sem relação nenhuma com o catálogo de
+  // engenharia do MSM/VMI. Confirmado com o dono do projeto (não é da
+  // alçada dele) e removidas — nenhum arquivo do app as referenciava fora
+  // deste próprio schema.ts.
 
 }
 
