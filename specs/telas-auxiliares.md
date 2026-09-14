@@ -214,6 +214,37 @@ devolve exatamente o que ele calculou. Continua **só propondo, nunca
 gravando** — a aba de pergunta é só leitura, igual à análise completa; toda
 gravação real continua passando pelo fluxo normal do app.
 
+**Bug real já corrigido: "zero achado" não pode significar "coerente" quando
+o identificador nem foi checado.** Achado pelo próprio usuário rodando a
+pergunta "VERIFIQUE TODA ÁRVORE DE RELACIONAMENTO DO EQUIPAMENTO 6040 SV ID
+12, SE ESTÁ COERENTE..." — a extração de equipamento pegava o primeiro
+número depois da palavra "equipamento" (`6040`, parte do nome comercial do
+produto), não o `12` depois de "ID" (o `legacy_id` de verdade). O filtro
+então recortava achados por `equipamento: "6040"`, não achava nada, e a
+resposta dizia "não encontrei nenhum achado — nada pendente", dando falsa
+sensação de "coerente" sem ter checado o equipamento certo. Dois fixes em
+`productIntelligenceNlu.ts`:
+1. `ID_RE` (`/\bid\s*.../`) tem prioridade sobre o número solto depois de
+   "equipamento"/"grupo" quando a pergunta menciona esse assunto — "ID N"
+   explícito é mais confiável que um número qualquer perto da palavra.
+2. `findUnknownEntities(ctx, parsed)` — checa se cada código/equipamento/
+   grupo citado existe de verdade em algum lugar (não só na tabela "dona":
+   toda coluna de referência nas 9 tabelas + o cadastro Protheus, porque um
+   código pode estar em uso na engenharia sem existir no Protheus — isso é
+   literalmente o que R001 detecta, não pode contar como "desconhecido").
+   Quando algum identificador citado não existe em lugar nenhum,
+   `buildAskAnswer` antepõe um aviso explícito (`⚠ Não encontrei ...`) e,
+   se **nenhum** dos identificadores citados existir, troca a mensagem
+   inteira por "não rodei a checagem de verdade... isso NÃO significa
+   'coerente'" em vez de implicar que está tudo certo.
+2ª correção na mesma rodada: `KEYWORD_RULES` de R001 eram frases fixas
+demais (`'nao cadastrado no protheus'`) — não batiam em "não estão
+cadastrados" (plural, ordem de palavras diferente). Ampliado pro stem
+`'nao cadastrad'`/`'nao esta(o) cadastrad'`. Não chegou a quebrar nada
+sozinho (sem palavra-chave nenhuma reconhecida, o fallback já roda as 14
+regras, R001 incluído) mas a resposta ficava menos transparente sobre qual
+regra endereçava a pergunta.
+
 Isso não fecha a porta a um LLM de verdade no futuro (a hipótese original
 citada abaixo, em itálico, fica como histórico) — mas a decisão vigente,
 pedida explicitamente pelo usuário, é que a Camada B **é** este motor

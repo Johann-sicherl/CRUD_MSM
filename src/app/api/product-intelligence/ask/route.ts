@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildProductIntelligenceContext } from '@/lib/productIntelligenceContext'
 import { runProductIntelligence, REGRAS_DISPONIVEIS } from '@/lib/productIntelligence'
-import { parseProductQuestion, filterAchadosByEntities, buildAskAnswer } from '@/lib/productIntelligenceNlu'
+import { parseProductQuestion, filterAchadosByEntities, findUnknownEntities, buildAskAnswer } from '@/lib/productIntelligenceNlu'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -44,9 +44,10 @@ export async function POST(request: NextRequest) {
     const regrasRodadas = parsed.regras.length > 0 ? parsed.regras : REGRAS_DISPONIVEIS.map(r => r.codigo)
     const achadosBrutos = runProductIntelligence(ctx, parsed.regras.length > 0 ? parsed.regras : undefined)
     const achados = filterAchadosByEntities(achadosBrutos, parsed)
-    const resposta = buildAskAnswer(parsed, achados, regrasRodadas)
+    const unknown = findUnknownEntities(ctx, parsed)
+    const resposta = buildAskAnswer(parsed, achados, regrasRodadas, unknown)
 
-    return NextResponse.json({ resposta, achados, parsed, regrasRodadas })
+    return NextResponse.json({ resposta, achados, parsed, regrasRodadas, unknown })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao consultar o banco Protheus'
     return NextResponse.json({ error: message }, { status: 502 })
