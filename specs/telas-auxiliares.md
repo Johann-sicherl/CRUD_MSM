@@ -120,6 +120,56 @@ de `profileId` na rota (`/api/product-intelligence`): a própria credencial
 Protheus, fornecida por requisição e nunca persistida, já é o controle de
 acesso pro lado externo — mesmo padrão de `protheus-estrutura/route.ts`.
 
+#### R080/R081/R090 — regras a partir da estrutura Protheus ao vivo
+
+Pedido explícito do usuário, adicionadas depois da primeira versão (não
+existiam no script Python original) — diferente das 11 regras anteriores,
+estas mineram/comparam contra a estrutura Protheus **ao vivo**, não só o
+cadastro interno entre si:
+
+- **R080 (analogia)** — co-ocorrência de itens dentro da hierarquia
+  26.xx → 27.13 → nível 3 (mesma consulta de Busc. Avanç. Acessórios
+  Protheus, `listAccessoryHierarchy`, prefixos padrão `['26']`/`['27.13']`)
+  — quando dois códigos aparecem juntos em quase toda estrutura onde
+  qualquer um dos dois aparece (`MIN_COOCCURRENCE_CONFIDENCE = 0.9`, nos
+  dois sentidos, com piso de amostra `MIN_COOCCURRENCE_SUPPORT = 3` pra não
+  disparar em cima de 1-2 ocorrências) e ainda não estão registrados como
+  par em `dependant_items`, vira uma pergunta ("candidato real a item
+  dependente, ou coincidência de pedidos?"). Estatística, não
+  determinística — por isso severidade sempre `pergunta`, nunca acusação.
+- **R081 (dependência)** — pra cada variante de equipamento
+  (`standard_equipment_items.protheus_code`), compara os códigos de
+  embalagem (`PACKAGING_PREFIXES = ['27.11']`, convenção já vista nesta
+  base — `accessory_groups` legacy_id 22 = "EMBALAGEM") vistos na estrutura
+  Protheus ao vivo (reusa `bomByVariantCode`, já calculado, zero query
+  extra) contra o que está cadastrado em `dependant_items` pra aquele
+  `legacy_equipment_id`. Diverge (falta ou sobra) → achado `alto`, com
+  sugestão de cadastrar ou remover explícita.
+- **R090 (itens-de-série)** — reaproveita o motor de comparação de Busc.
+  Itens Série Estrut. Protheus (`computeStructurePropertyResults`, extraído
+  pra `src/lib/structurePropertyMatch.ts` e reusado também por
+  `/api/analisador-estruturas/route.ts`, que antes tinha essa lógica
+  duplicada inline) em vez de reinventar uma comparação de texto livre da
+  descrição Protheus — casar por código via Parâmetros de Estrutura é mais
+  confiável que casar por palavra dentro de B1_DESC (escrita por humano,
+  não estruturada). Só os status `mismatch`/`duplicate` viram achado — o
+  status `missing` é omitido de propósito: numa varredura em lote do
+  catálogo inteiro, "missing" é o normal pra qualquer propriedade que não
+  se aplica àquele tipo de equipamento (ex.: propriedade de correia num
+  equipamento sem correia), geraria ruído enorme; a ferramenta interativa
+  (um equipamento por vez, com contexto) é onde "missing" faz sentido
+  revisar caso a caso.
+
+**Camada B, ainda não implementada**: o usuário descreveu o objetivo final
+como uma janela de prompt livre ("me diga todos os erros de lógica...")
+onde uma IA de verdade interpretaria a pergunta e proporia o cenário
+completo de cadastro (ex.: "cadastre este componente em Acessórios, associe
+esta embalagem a este equipamento..."). Isso é categoricamente diferente do
+motor de regras fixas acima — precisa de uma chamada real a um LLM,
+revertendo a decisão inicial de "sem LLM real" — e ainda não foi
+implementado; a decisão de escopo já tomada é que, quando essa camada
+existir, ela **só propõe**, nunca grava nada sozinha.
+
 ### Busc. Itens Série Estrut. Protheus — aviso de "varredura concluída"
 
 Os três pontos de entrada em lote (`handlePickGroup` — grupo inteiro,

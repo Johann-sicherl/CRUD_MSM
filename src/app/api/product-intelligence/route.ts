@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { listProductInfo, fetchStructureCodes } from '@/lib/protheusDb'
+import { listProductInfo, fetchStructureCodes, listAccessoryHierarchy } from '@/lib/protheusDb'
+import { readStructurePropertyRules } from '@/lib/structurePropertyRules'
 import {
   runProductIntelligence, type ProductIntelligenceContext, type ProductIntelligenceTables,
 } from '@/lib/productIntelligence'
+
+// Mesmos prefixos padrão de Busc. Avanç. Acessórios Protheus
+// (busca-avancada-acessorios/page.tsx, DEFAULT_HEADER_PREFIXES/
+// DEFAULT_NIVEL2_PREFIXES) — usados só por R080 (co-ocorrência).
+const HIERARCHY_HEADER_PREFIXES = ['26']
+const HIERARCHY_NIVEL2_PREFIXES = ['27.13']
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -61,7 +68,17 @@ export async function POST(request: NextRequest) {
     )
     const bomByVariantCode = new Map(bomEntries)
 
-    const ctx: ProductIntelligenceContext = { tables, protheusInfo, bomByVariantCode }
+    // Mesma hierarquia 26.xx → 27.13 → nível 3 de Busc. Avanç. Acessórios
+    // Protheus (reuso direto, bate no mesmo cache de estrutura já quente) —
+    // usada só por R080 (co-ocorrência entre itens de nível 3).
+    const accessoryHierarchyGroups = await listAccessoryHierarchy(
+      HIERARCHY_HEADER_PREFIXES, HIERARCHY_NIVEL2_PREFIXES, creds,
+    )
+    const structurePropertyRules = readStructurePropertyRules()
+
+    const ctx: ProductIntelligenceContext = {
+      tables, protheusInfo, bomByVariantCode, accessoryHierarchyGroups, structurePropertyRules,
+    }
     const achados = runProductIntelligence(ctx, apenas)
 
     const resumo: Record<string, number> = {}

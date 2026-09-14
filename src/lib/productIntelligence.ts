@@ -1,4 +1,6 @@
-import type { ProtheusProductInfo } from './protheusDb'
+import type { ProtheusProductInfo, AccessoryHierarchyGroup } from './protheusDb'
+import type { StructurePropertyRule } from './structurePropertyRules'
+import { computeStructurePropertyResults } from './structurePropertyMatch'
 
 // Motor de regras de "Inteligência do Produto" — confronta as 9 tabelas de
 // engenharia (accessories, accessory_groups, dependant_items, equipments,
@@ -26,6 +28,19 @@ import type { ProtheusProductInfo } from './protheusDb'
 //    nenhuma pra general_alerts (conferido em msm_foreign_keys.sql), e o
 //    Atualizador Global não valida esse campo — o script original não
 //    cobria esse caso.
+//
+// R080/R081/R090 vieram depois, pedido explícito do usuário, e não existiam
+// no script original — mineram/comparam contra a estrutura Protheus AO VIVO
+// (não só o cadastro interno):
+// - R080: co-ocorrência de itens dentro da hierarquia 26.xx/27.13 (mesma
+//   consulta de Busc. Avanç. Acessórios Protheus) — candidato a item
+//   dependente ainda não cadastrado.
+// - R081: embalagem (27.11.xxxxx) vista na estrutura Protheus de um
+//   equipamento divergindo do que está cadastrado em dependant_items.
+// - R090: reaproveita o motor de comparação de Busc. Itens Série Estrut.
+//   Protheus (computeStructurePropertyResults, extraído pra
+//   structurePropertyMatch.ts) em vez de reinventar comparação de texto de
+//   descrição — decisão deliberada de não duplicar essa lógica.
 
 export const SEVERIDADES = ['critico', 'alto', 'medio', 'baixo', 'pergunta'] as const
 export type Severidade = typeof SEVERIDADES[number]
@@ -64,6 +79,14 @@ export interface ProductIntelligenceContext {
   // Chave: protheus_code (de standard_equipment_items) normalizado; valor:
   // todo componente (recursivo) da estrutura Protheus daquele código.
   bomByVariantCode: Map<string, Set<string>>
+  // Hierarquia 26.xx → nível 2 (27.13 etc.) → nível 3, ao vivo do Protheus —
+  // mesma consulta/hierarquia de Busc. Avanç. Acessórios Protheus
+  // (listAccessoryHierarchy, prefixos padrão ['26']/['27.13']). Usada só por
+  // R080 (co-ocorrência).
+  accessoryHierarchyGroups: AccessoryHierarchyGroup[]
+  // Regras de Parâmetros de Estrutura — usadas só por R090 (reuso do motor
+  // de mismatch de Busc. Itens Série Estrut. Protheus).
+  structurePropertyRules: StructurePropertyRule[]
 }
 
 const norm = (v: unknown) => String(v ?? '').trim()
@@ -566,6 +589,140 @@ regra('R060', 'analogia', ctx => {
           pergunta: 'Ausência intencional ou opcional esquecido neste equipamento?',
         })
       }
+    }
+  }
+  return achados
+})
+
+// ─── Regras a partir da estrutura Protheus ao vivo (não só do cadastro) ─
+// Diferente de tudo acima: estas três não comparam duas fontes internas
+// entre si — mineram padrão real da estrutura Protheus (hierarquia
+// 26.xx/27.13 e BOM de cada equipamento) e cruzam contra o que já está
+// cadastrado, pra sugerir cadastro que ainda não existe ou já ficou
+// desatualizado. Pedido explícito do usuário, com exemplos concretos:
+// "esse acessório sempre saiu com esse outro" (R080) e "essa embalagem
+// está diferente do item dependente no banco de dados local" (R081).
+
+// Prefixo de embalagem — convenção já vista nesta base (accessory_groups
+// legacy_id 22 = "EMBALAGEM", accessories com protheus_code 27.11.xxxxx).
+// Lista, não valor único, pra dar pra estender a outras famílias sem tocar
+// na lógica da regra.
+const PACKAGING_PREFIXES = ['27.11']
+
+// R080 é estatística, não determinística — precisa de um piso mínimo de
+// amostra (senão "co-ocorreu 1 de 1 vez" vira falso positivo garantido) e
+// de confiança alta nos dois sentidos (A quase sempre com B E B quase
+// sempre com A) — um acessório genérico que entra em quase todo pedido
+// junto de tudo não deve virar "candidato a dependência" só porque aparece
+// muito, se ele não for tão exclusivo do outro lado do par.
+const MIN_COOCCURRENCE_SUPPORT = 3
+const MIN_COOCCURRENCE_CONFIDENCE = 0.9
+
+regra('R080', 'analogia', ctx => {
+  const achados: Achado[] = []
+  const grupos = ctx.accessoryHierarchyGroups
+    .map(g => Array.from(new Set(g.rows.filter(r => r.nivel === 3).map(r => normUp(r.codigo)))))
+    .filter(codes => codes.length >= 2)
+
+  const suporte = new Map<string, number>()
+  const coOcorrencia = new Map<string, number>() // "A|B" com A<B
+  for (const codes of grupos) {
+    for (const c of codes) suporte.set(c, (suporte.get(c) || 0) + 1)
+    for (let i = 0; i < codes.length; i++) {
+      for (let j = i + 1; j < codes.length; j++) {
+        const [a, b] = [codes[i], codes[j]].sort()
+        const k = `${a}|${b}`
+        coOcorrencia.set(k, (coOcorrencia.get(k) || 0) + 1)
+      }
+    }
+  }
+
+  const dependenciasConhecidas = new Set(
+    ctx.tables.dependant_items.map(r => `${normUp(r.protheus_code)}|${normUp(r.protheus_item_code)}`)
+  )
+
+  for (const [par, conjuntas] of coOcorrencia) {
+    const [a, b] = par.split('|')
+    const suporteA = suporte.get(a) || 0
+    const suporteB = suporte.get(b) || 0
+    if (suporteA < MIN_COOCCURRENCE_SUPPORT || suporteB < MIN_COOCCURRENCE_SUPPORT) continue
+    if (conjuntas / suporteA < MIN_COOCCURRENCE_CONFIDENCE || conjuntas / suporteB < MIN_COOCCURRENCE_CONFIDENCE) continue
+    if (dependenciasConhecidas.has(`${a}|${b}`) || dependenciasConhecidas.has(`${b}|${a}`)) continue
+    achados.push({
+      regra: 'R080', severidade: 'pergunta', categoria: 'analogia', entidade: 'dependant_items',
+      chave: { codigoA: a, codigoB: b },
+      mensagem: `${a} e ${b} saíram juntos em ${conjuntas} de até ${Math.max(suporteA, suporteB)} estruturas Protheus (26.xx/27.13) — nunca registrados como dependência um do outro.`,
+      evidencia: { descricaoA: descricao(ctx, a), descricaoB: descricao(ctx, b), coOcorrencias: conjuntas, suporteA, suporteB },
+      pergunta: 'É um candidato real a item dependente, ou coincidência de pedidos que sempre pediram os dois juntos?',
+    })
+  }
+  return achados
+})
+
+regra('R081', 'dependencia', ctx => {
+  const achados: Achado[] = []
+  for (const eqItem of ctx.tables.standard_equipment_items) {
+    const eq = norm(eqItem.legacy_equipment_id)
+    const variante = normUp(eqItem.protheus_code)
+    const bom = ctx.bomByVariantCode.get(variante)
+    if (!bom) continue
+
+    const emProtheus = new Set(Array.from(bom).filter(c => PACKAGING_PREFIXES.some(p => c.startsWith(p))))
+    const emCadastroLocal = new Set(
+      ctx.tables.dependant_items
+        .filter(r => norm(r.legacy_equipment_id) === eq)
+        .map(r => normUp(r.protheus_item_code))
+        .filter(c => PACKAGING_PREFIXES.some(p => c.startsWith(p)))
+    )
+    if (emProtheus.size === 0 && emCadastroLocal.size === 0) continue
+
+    const faltamNoLocal = Array.from(emProtheus).filter(c => !emCadastroLocal.has(c)).sort()
+    const sobramNoLocal = Array.from(emCadastroLocal).filter(c => !emProtheus.has(c)).sort()
+    if (faltamNoLocal.length === 0 && sobramNoLocal.length === 0) continue
+
+    achados.push({
+      regra: 'R081', severidade: 'alto', categoria: 'dependencia', entidade: 'dependant_items',
+      chave: { equipamento: eq, codigo: variante },
+      mensagem: `Embalagem da estrutura Protheus diverge do item dependente cadastrado para ${variante}.`,
+      evidencia: { naEstruturaProtheus: Array.from(emProtheus).sort(), noCadastroLocal: Array.from(emCadastroLocal).sort() },
+      sugestao: faltamNoLocal.length > 0
+        ? `Cadastrar ${faltamNoLocal.join(', ')} como item dependente.`
+        : `Revisar/remover ${sobramNoLocal.join(', ')} do cadastro — não aparece mais na estrutura Protheus.`,
+    })
+  }
+  return achados
+})
+
+// Reaproveita o mesmo motor de comparação de Busc. Itens Série Estrut.
+// Protheus (computeStructurePropertyResults) em vez de reinventar uma
+// comparação de texto livre de descrição — mais confiável, porque casa por
+// código (via Parâmetros de Estrutura), não por palavra dentro de B1_DESC.
+// Só "mismatch"/"duplicate" viram achado aqui: "missing" é normal pra
+// propriedade que não se aplica àquele tipo de equipamento (ex.: correia
+// num equipamento sem correia) — incluir "missing" numa varredura em lote
+// do catálogo inteiro geraria ruído enorme; a ferramenta interativa (um
+// equipamento por vez, com contexto) já mostra "missing" onde faz sentido.
+regra('R090', 'itens-de-serie', ctx => {
+  const achados: Achado[] = []
+  for (const eqItem of ctx.tables.standard_equipment_items) {
+    const variante = normUp(eqItem.protheus_code)
+    const bom = ctx.bomByVariantCode.get(variante)
+    if (!bom) continue
+    const results = computeStructurePropertyResults(bom, eqItem, ctx.structurePropertyRules)
+    for (const r of results) {
+      if (r.status !== 'mismatch' && r.status !== 'duplicate') continue
+      achados.push({
+        regra: 'R090', severidade: r.status === 'mismatch' ? 'alto' : 'medio', categoria: 'itens-de-serie',
+        entidade: 'standard_equipment_items',
+        chave: { equipamento: norm(eqItem.legacy_equipment_id), codigo: variante, campo: r.field },
+        mensagem: r.status === 'mismatch'
+          ? `${r.field}: a estrutura Protheus indica '${r.computedValue}', mas o banco tem '${r.dbValue ?? '(vazio)'}'.`
+          : `${r.field}: códigos conflitantes na estrutura Protheus indicam valores diferentes (${r.matched.map(m => `${m.code}→${m.value}`).join(', ')}).`,
+        evidencia: { matched: r.matched, computedValue: r.computedValue, dbValue: r.dbValue },
+        sugestao: r.status === 'mismatch'
+          ? 'Corrigir o valor cadastrado ou revisar o código na estrutura.'
+          : 'Revisar Parâmetros de Estrutura — dois códigos apontando valores diferentes para a mesma propriedade.',
+      })
     }
   }
   return achados
