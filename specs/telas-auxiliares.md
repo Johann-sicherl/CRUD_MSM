@@ -245,6 +245,43 @@ sozinho (sem palavra-chave nenhuma reconhecida, o fallback já roda as 14
 regras, R001 incluído) mas a resposta ficava menos transparente sobre qual
 regra endereçava a pergunta.
 
+#### Filtro estruturado — elimina a ambiguidade de parsing na raiz
+
+Depois do bug acima, pedido explícito do usuário ("implementa a opção 2"
+— ver a conversa: perguntei se ele queria eu ampliar o vocabulário de
+palavras-chave, jogo de gato e rato, ou adicionar controles estruturados
+que eliminam a ambiguidade de vez; ele escolheu a segunda): a aba
+"Pergunte à IA" ganhou seletores estruturados **ao lado** do texto livre,
+não como substituto — o texto livre continua existindo como atalho, mas o
+filtro estruturado, quando preenchido, tem prioridade total e **ignora** o
+texto livre por completo (nunca mistura os dois na mesma requisição).
+
+- UI (`inteligencia-produto/page.tsx`): `<select>` de Equipamento e de
+  Grupo alimentados pela lista real do banco (`GET /api/equipments` e
+  `GET /api/accessory_groups`, o mesmo endpoint genérico de listagem que
+  toda tela de tabela já usa — `.range()`/`limit=25000` explícito, mesma
+  convenção de sempre), campo de texto pro código Protheus (sem regex
+  nenhuma — o valor vai direto, sem ambiguidade de "onde começa/termina o
+  código"), e checkboxes das 20 ocorrências de regra (as 14 regras, com
+  R002/R003/R081/R090 etc. listadas por código — nenhuma marcada = roda
+  todas). `REGRAS_INFO` é uma lista **hardcoded** no componente cliente
+  (rótulo curto por regra) — deliberado, pra não importar
+  `productIntelligence.ts` (motor completo, com `computeStructurePropertyResults`
+  etc.) pro bundle client-side só pra pegar uma lista de códigos.
+- `POST /api/product-intelligence/ask` passou a aceitar `filtro: {
+  equipamento?, grupo?, codigo?, regras?: string[] }` além de `pergunta`.
+  Quando `filtro` tem qualquer campo preenchido, o servidor monta o
+  `ParsedProductQuestion` **direto** a partir dele (`reconhecida: true`
+  sempre, porque veio de seleção explícita — não há "não reconhecido"
+  possível aqui) e **nunca** chama `parseProductQuestion` — o parser
+  heurístico só roda quando não há filtro estruturado nenhum. `regras`
+  do corpo é validado contra `REGRAS_DISPONIVEIS` (só aceita código de
+  regra real, ignora qualquer string que não seja uma das 14).
+- Efeito prático: perguntar de novo sobre "equipamento 6040 SV ID 12"
+  escolhendo "12" no `<select>` de Equipamento elimina de raiz a classe de
+  bug documentada acima — não existe mais "número errado extraído do
+  texto", porque não há extração nenhuma nesse caminho.
+
 Isso não fecha a porta a um LLM de verdade no futuro (a hipótese original
 citada abaixo, em itálico, fica como histórico) — mas a decisão vigente,
 pedida explicitamente pelo usuário, é que a Camada B **é** este motor

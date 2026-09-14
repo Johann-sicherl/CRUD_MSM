@@ -1,10 +1,40 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import type { Achado, Severidade } from '@/lib/productIntelligence'
 import type { ParsedProductQuestion } from '@/lib/productIntelligenceNlu'
 import { tables } from '@/lib/schema'
+
+interface EquipmentOption { legacy_id: number; name: string; commercial_name: string }
+interface GroupOption { legacy_id: number; name: string }
+
+// Rótulo curto por regra pro checklist da aba "Pergunte à IA" — mesmos 20
+// códigos de REGRAS_DISPONIVEIS (productIntelligence.ts), só que descritos
+// aqui (não importados) pra não puxar o motor de regras inteiro pro bundle
+// client-side; ver specs/telas-auxiliares.md pro detalhe de cada regra.
+const REGRAS_INFO: { codigo: string; categoria: string; label: string }[] = [
+  { codigo: 'R001', categoria: 'Integridade', label: 'Código não existe no Protheus' },
+  { codigo: 'R002', categoria: 'Integridade', label: 'Equipamento referenciado mas ausente' },
+  { codigo: 'R003', categoria: 'Integridade', label: 'Grupo referenciado mas ausente' },
+  { codigo: 'R070', categoria: 'Integridade', label: 'Alerta referenciado mas ausente' },
+  { codigo: 'R010', categoria: 'Estado', label: 'Bloqueado no Protheus mas ativo na oferta' },
+  { codigo: 'R011', categoria: 'Estado', label: 'Inativo no catálogo mas ativo na oferta' },
+  { codigo: 'R012', categoria: 'Estado', label: 'Revisão mais nova disponível' },
+  { codigo: 'R020', categoria: 'Duplicidade', label: 'Chave duplicada (equipamento + código)' },
+  { codigo: 'R021', categoria: 'Duplicidade', label: 'Opcional já está na estrutura padrão' },
+  { codigo: 'R030', categoria: 'Dependência', label: 'Dependência esperada não declarada' },
+  { codigo: 'R031', categoria: 'Dependência', label: 'Dependência para código não ofertado' },
+  { codigo: 'R081', categoria: 'Dependência', label: 'Embalagem diverge entre Protheus e cadastro' },
+  { codigo: 'R040', categoria: 'Incompatibilidade', label: 'Exclusão não recíproca' },
+  { codigo: 'R041', categoria: 'Incompatibilidade', label: 'Incompatibilidade com item não ofertado' },
+  { codigo: 'R050', categoria: 'Completude', label: 'Equipamento sem nenhuma configuração' },
+  { codigo: 'R051', categoria: 'Completude', label: 'Mesa de roletes incompleta' },
+  { codigo: 'R052', categoria: 'Completude', label: 'Cadastrado mas nunca ofertado' },
+  { codigo: 'R060', categoria: 'Analogia', label: 'Divergência dentro da família de equipamentos' },
+  { codigo: 'R080', categoria: 'Analogia', label: 'Códigos que sempre saem juntos (co-ocorrência)' },
+  { codigo: 'R090', categoria: 'Itens de série', label: 'Especificação técnica diverge da estrutura' },
+]
 
 const SEVERIDADE_ORDER: Severidade[] = ['critico', 'alto', 'medio', 'baixo', 'pergunta']
 
@@ -93,15 +123,69 @@ export default function InteligenciaProdutoPage() {
   const [askParsed, setAskParsed] = useState<ParsedProductQuestion | null>(null)
   const [askRegras, setAskRegras] = useState<string[]>([])
 
+  // Filtro estruturado (recomendado) — seletores alimentados pela lista real
+  // do banco, sem ambiguidade de parsing de texto nenhuma. Adicionado depois
+  // de um bug real: texto livre sobre "EQUIPAMENTO 6040 SV ID 12" extraía o
+  // número errado e a resposta parecia "coerente" sem ter checado nada —
+  // ver specs/telas-auxiliares.md.
+  const [equipamentosList, setEquipamentosList] = useState<EquipmentOption[]>([])
+  const [gruposList, setGruposList] = useState<GroupOption[]>([])
+  const [filtroEquipamento, setFiltroEquipamento] = useState('')
+  const [filtroGrupo, setFiltroGrupo] = useState('')
+  const [filtroCodigo, setFiltroCodigo] = useState('')
+  const [filtroRegras, setFiltroRegras] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      fetch('/api/equipments?limit=25000').then(r => r.json()),
+      fetch('/api/accessory_groups?limit=25000').then(r => r.json()),
+    ]).then(([eq, gr]) => {
+      if (cancelled) return
+      setEquipamentosList((eq.data || []) as EquipmentOption[])
+      setGruposList((gr.data || []) as GroupOption[])
+    }).catch(() => { /* listas de apoio — falha aqui não impede o modo texto livre */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const toggleFiltroRegra = (codigo: string) => {
+    setFiltroRegras(prev => {
+      const next = new Set(prev)
+      if (next.has(codigo)) next.delete(codigo)
+      else next.add(codigo)
+      return next
+    })
+  }
+
+  const limparFiltro = () => {
+    setFiltroEquipamento('')
+    setFiltroGrupo('')
+    setFiltroCodigo('')
+    setFiltroRegras(new Set())
+  }
+
+  const filtroAtivo = !!(filtroEquipamento || filtroGrupo || filtroCodigo.trim() || filtroRegras.size > 0)
+
   const runAsk = async () => {
-    if (!dbCreds || !pergunta.trim()) return
+    if (!dbCreds) return
+    if (!filtroAtivo && !pergunta.trim()) return
     setAskLoading(true)
     setAskError('')
     try {
       const res = await fetch('/api/product-intelligence/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, pergunta }),
+        body: JSON.stringify({
+          user: dbCreds.user,
+          password: dbCreds.password,
+          pergunta: filtroAtivo ? '' : pergunta,
+          filtro: filtroAtivo ? {
+            equipamento: filtroEquipamento || undefined,
+            grupo: filtroGrupo || undefined,
+            codigo: filtroCodigo.trim() || undefined,
+            regras: filtroRegras.size > 0 ? Array.from(filtroRegras) : undefined,
+          } : undefined,
+        }),
       })
       const json = await res.json()
       if (!res.ok) { setAskError(json.error || 'Falha ao consultar'); return }
@@ -195,28 +279,101 @@ export default function InteligenciaProdutoPage() {
         <div className="flex flex-col gap-5">
           <div className="bg-surface-container border border-outline-variant rounded-lg px-5 py-4">
             <p className="text-sm text-on-surface-variant leading-relaxed">
-              IA interna (sem chamada a nenhum serviço externo): interpreta sua pergunta por palavras-chave e
-              código/equipamento/grupo citados, roda de verdade a(s) regra(s) correspondente(s) do motor acima
-              e responde só com o que ela encontrou — nunca inventa um achado. Ver{' '}
-              <span className="font-mono">specs/contexto-negocio-inteligencia-produto.md</span> pra o mapa completo
-              de regras e vocabulário reconhecido.
+              IA interna (sem chamada a nenhum serviço externo): escolha um equipamento/grupo/código e/ou uma
+              regra abaixo (recomendado — sem ambiguidade nenhuma) ou digite uma pergunta em texto livre (atalho
+              heurístico, pode não reconhecer toda forma de perguntar). Ela roda de verdade a(s) regra(s)
+              correspondente(s) do motor acima e responde só com o que encontrou — nunca inventa um achado. Ver{' '}
+              <span className="font-mono">specs/contexto-negocio-inteligencia-produto.md</span> pra o mapa completo.
             </p>
           </div>
 
           {dbCreds ? (
-            <div className="flex flex-col gap-2">
-              <textarea
-                value={pergunta}
-                onChange={e => setPergunta(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !askLoading) { e.preventDefault(); runAsk() } }}
-                placeholder='Ex.: "o equipamento 30 tem algum item bloqueado?", "27.11.01234 tem duplicidade?", "quais itens sempre saem juntos e não estão cadastrados como dependência?"'
-                rows={3}
-                className="w-full px-3 py-2.5 text-sm bg-surface-container border border-outline-variant rounded-lg text-on-surface resize-none"
-              />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 bg-surface-container border border-outline-variant rounded-lg px-4 py-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-on-surface uppercase tracking-wide">Filtro estruturado (recomendado)</span>
+                  {filtroAtivo && (
+                    <button onClick={limparFiltro} className="text-xs text-outline hover:text-error transition-colors">
+                      ✕ Limpar filtro
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-outline mb-1">Equipamento (legacy_id)</label>
+                    <select
+                      value={filtroEquipamento}
+                      onChange={e => setFiltroEquipamento(e.target.value)}
+                      className="w-full px-2.5 py-2 text-sm bg-surface border border-outline-variant rounded text-on-surface"
+                    >
+                      <option value="">— Todos —</option>
+                      {equipamentosList.map(eq => (
+                        <option key={eq.legacy_id} value={String(eq.legacy_id)}>
+                          {eq.legacy_id} — {eq.commercial_name || eq.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-outline mb-1">Grupo (legacy_id)</label>
+                    <select
+                      value={filtroGrupo}
+                      onChange={e => setFiltroGrupo(e.target.value)}
+                      className="w-full px-2.5 py-2 text-sm bg-surface border border-outline-variant rounded text-on-surface"
+                    >
+                      <option value="">— Todos —</option>
+                      {gruposList.map(g => (
+                        <option key={g.legacy_id} value={String(g.legacy_id)}>{g.legacy_id} — {g.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-outline mb-1">Código Protheus</label>
+                    <input
+                      value={filtroCodigo}
+                      onChange={e => setFiltroCodigo(e.target.value)}
+                      placeholder="ex.: 27.11.01234"
+                      className="w-full px-2.5 py-2 text-sm bg-surface border border-outline-variant rounded text-on-surface font-mono"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-outline mb-1.5">Regras (nenhuma marcada = todas as 14)</label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {REGRAS_INFO.map(r => (
+                      <label key={r.codigo} className="flex items-center gap-1.5 text-xs text-on-surface-variant cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filtroRegras.has(r.codigo)}
+                          onChange={() => toggleFiltroRegra(r.codigo)}
+                          className="cursor-pointer"
+                        />
+                        <span className="font-mono font-bold">{r.codigo}</span> {r.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[11px] text-outline">
+                  Ou pergunta em texto livre {filtroAtivo && '(ignorado enquanto o filtro estruturado acima estiver preenchido)'}
+                </label>
+                <textarea
+                  value={pergunta}
+                  onChange={e => setPergunta(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !askLoading) { e.preventDefault(); runAsk() } }}
+                  disabled={filtroAtivo}
+                  placeholder='Ex.: "o equipamento 30 tem algum item bloqueado?", "27.11.01234 tem duplicidade?"'
+                  rows={2}
+                  className="w-full px-3 py-2.5 text-sm bg-surface-container border border-outline-variant rounded-lg text-on-surface resize-none disabled:opacity-40"
+                />
+              </div>
+
               <div>
                 <button
                   onClick={runAsk}
-                  disabled={askLoading || !pergunta.trim()}
+                  disabled={askLoading || (!filtroAtivo && !pergunta.trim())}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:shadow-neon transition-all disabled:opacity-50"
                 >
                   {askLoading ? 'Consultando…' : 'Perguntar'}
