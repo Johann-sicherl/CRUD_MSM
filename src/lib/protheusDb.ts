@@ -165,6 +165,13 @@ export type ProtheusProductStatus = 'ATIVO' | 'BLOQUEADO'
 export interface ProtheusProductInfo {
   status: ProtheusProductStatus
   description: string | null
+  // Código sem sufixo de revisão (LEFT(B1_COD, 11) — mesma convenção de
+  // msm_replace_protheus_code.sql: "34.01.10040.01" → "34.01.10040") e a
+  // revisão atual (B1_REVATU) — usados só por Inteligência do Produto
+  // (detecção de revisão desatualizada na engenharia), o resto do app nunca
+  // precisou desses dois campos antes.
+  codSemRev: string
+  revisao: string | null
 }
 
 interface ProductInfoCache {
@@ -230,12 +237,18 @@ async function loadProductInfoCache(creds: ProtheusCredentials): Promise<Product
       `)
 
       const infoByCode = new Map<string, ProtheusProductInfo>()
-      for (const row of result.recordset as { COD_PRODUTO: unknown; STD_BLOQ: unknown; DESCRICAO_PRODUTO: unknown }[]) {
+      for (const row of result.recordset as { COD_PRODUTO: unknown; STD_BLOQ: unknown; DESCRICAO_PRODUTO: unknown; COD_SEM_REV: unknown; REVISAO: unknown }[]) {
         const code = String(row.COD_PRODUTO ?? '').trim().toUpperCase()
         const status = String(row.STD_BLOQ ?? '').trim().toUpperCase()
         if (!code || (status !== 'ATIVO' && status !== 'BLOQUEADO')) continue
         const description = String(row.DESCRICAO_PRODUTO ?? '').trim()
-        infoByCode.set(code, { status: status as ProtheusProductStatus, description: description || null })
+        const revisao = String(row.REVISAO ?? '').trim()
+        infoByCode.set(code, {
+          status: status as ProtheusProductStatus,
+          description: description || null,
+          codSemRev: String(row.COD_SEM_REV ?? '').trim().toUpperCase(),
+          revisao: revisao || null,
+        })
       }
 
       productInfoCache = { infoByCode, fetchedAt: Date.now() }
@@ -260,6 +273,18 @@ export async function listProductStatuses(creds: ProtheusCredentials): Promise<M
   const statusByCode = new Map<string, ProtheusProductStatus>()
   for (const [code, info] of infoByCode) statusByCode.set(code, info.status)
   return statusByCode
+}
+
+/**
+ * Mapa completo (status, descrição, código sem revisão, revisão) de todo
+ * produto cadastrado no Protheus — usado por Inteligência do Produto pra
+ * checar em memória, sem round trip por código, se um código da engenharia
+ * existe/está bloqueado/tem revisão mais nova. Mesmo cache de
+ * listProductStatuses/getProductDescription (30min), sem custo extra.
+ */
+export async function listProductInfo(creds: ProtheusCredentials): Promise<Map<string, ProtheusProductInfo>> {
+  const { infoByCode } = await loadProductInfoCache(creds)
+  return infoByCode
 }
 
 /**

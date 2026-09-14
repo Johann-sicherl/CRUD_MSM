@@ -33,6 +33,7 @@ export const MODULES: ModuleDef[] = [
 
   { key: 'analisador-estruturas',        label: 'Busc. Itens Série Estrut. Protheus', href: '/analisador-estruturas',        group: 'Consulta Banco de Dados' },
   { key: 'busca-avancada-acessorios',    label: 'Busc. Avanc. Acessórios Protheus',   href: '/busca-avancada-acessorios',    group: 'Consulta Banco de Dados' },
+  { key: 'inteligencia-produto',         label: 'Inteligência do Produto',            href: '/inteligencia-produto',         group: 'Consulta Banco de Dados' },
 
   { key: 'options',               label: 'Lista Itens de Série',   href: '/options',               group: 'Parâmetros' },
   { key: 'parametros-estrutura',  label: 'Param. Itens de Série',  href: '/parametros-estrutura',  group: 'Parâmetros' },
