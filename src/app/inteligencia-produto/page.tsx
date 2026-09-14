@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import type { Achado, Severidade } from '@/lib/productIntelligence'
+import type { ParsedProductQuestion } from '@/lib/productIntelligenceNlu'
 import { tables } from '@/lib/schema'
 
 const SEVERIDADE_ORDER: Severidade[] = ['critico', 'alto', 'medio', 'baixo', 'pergunta']
@@ -76,12 +77,44 @@ function buildNarrativeSummary(achados: Achado[], resumo: Record<string, number>
 
 export default function InteligenciaProdutoPage() {
   const { creds: dbCreds } = useProtheusAuth()
+  const [tab, setTab] = useState<'analise' | 'pergunte'>('analise')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [achados, setAchados] = useState<Achado[] | null>(null)
   const [resumo, setResumo] = useState<Record<string, number>>({})
   const [severidadeFilter, setSeveridadeFilter] = useState<Severidade | ''>('')
   const [entidadeFilter, setEntidadeFilter] = useState('')
+
+  const [pergunta, setPergunta] = useState('')
+  const [askLoading, setAskLoading] = useState(false)
+  const [askError, setAskError] = useState('')
+  const [askResposta, setAskResposta] = useState('')
+  const [askAchados, setAskAchados] = useState<Achado[] | null>(null)
+  const [askParsed, setAskParsed] = useState<ParsedProductQuestion | null>(null)
+  const [askRegras, setAskRegras] = useState<string[]>([])
+
+  const runAsk = async () => {
+    if (!dbCreds || !pergunta.trim()) return
+    setAskLoading(true)
+    setAskError('')
+    try {
+      const res = await fetch('/api/product-intelligence/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, pergunta }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setAskError(json.error || 'Falha ao consultar'); return }
+      setAskResposta(json.resposta || '')
+      setAskAchados(json.achados as Achado[])
+      setAskParsed(json.parsed || null)
+      setAskRegras(json.regrasRodadas || [])
+    } catch {
+      setAskError('Erro de comunicação com o banco Protheus')
+    } finally {
+      setAskLoading(false)
+    }
+  }
 
   const runAnalysis = async () => {
     if (!dbCreds) return
@@ -144,6 +177,85 @@ export default function InteligenciaProdutoPage() {
         </p>
       </div>
 
+      <div className="mb-6 flex items-center gap-1 border-b border-outline-variant">
+        {(['analise', 'pergunte'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              tab === t ? 'border-primary text-on-surface' : 'border-transparent text-outline hover:text-on-surface-variant'
+            }`}
+          >
+            {t === 'analise' ? '🧠 Análise completa' : '💬 Pergunte à IA'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'pergunte' && (
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface-container border border-outline-variant rounded-lg px-5 py-4">
+            <p className="text-sm text-on-surface-variant leading-relaxed">
+              IA interna (sem chamada a nenhum serviço externo): interpreta sua pergunta por palavras-chave e
+              código/equipamento/grupo citados, roda de verdade a(s) regra(s) correspondente(s) do motor acima
+              e responde só com o que ela encontrou — nunca inventa um achado. Ver{' '}
+              <span className="font-mono">specs/contexto-negocio-inteligencia-produto.md</span> pra o mapa completo
+              de regras e vocabulário reconhecido.
+            </p>
+          </div>
+
+          {dbCreds ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={pergunta}
+                onChange={e => setPergunta(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !askLoading) { e.preventDefault(); runAsk() } }}
+                placeholder='Ex.: "o equipamento 30 tem algum item bloqueado?", "27.11.01234 tem duplicidade?", "quais itens sempre saem juntos e não estão cadastrados como dependência?"'
+                rows={3}
+                className="w-full px-3 py-2.5 text-sm bg-surface-container border border-outline-variant rounded-lg text-on-surface resize-none"
+              />
+              <div>
+                <button
+                  onClick={runAsk}
+                  disabled={askLoading || !pergunta.trim()}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:shadow-neon transition-all disabled:opacity-50"
+                >
+                  {askLoading ? 'Consultando…' : 'Perguntar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-outline">Conecte ao Protheus (barra lateral) para perguntar.</p>
+          )}
+
+          {askError && (
+            <div className="bg-error-container/20 border border-error/30 text-error rounded-lg px-4 py-3 text-sm">
+              ⚠ {askError}
+            </div>
+          )}
+
+          {askResposta && (
+            <div className="flex flex-col gap-4">
+              <div className="bg-surface-container border border-outline-variant rounded-lg px-5 py-4">
+                <p className="text-sm text-on-surface leading-relaxed">{askResposta}</p>
+                {askParsed?.reconhecida && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {askRegras.map(r => (
+                      <span key={r} className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/10 text-on-surface-variant">{r}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {askAchados && askAchados.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {askAchados.map((a, i) => <AchadoCard key={`${a.regra}-${i}`} achado={a} />)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'analise' && (<>
       <div className="mb-6 flex items-center gap-3 flex-wrap">
         {dbCreds ? (
           <button
@@ -220,6 +332,7 @@ export default function InteligenciaProdutoPage() {
           ))}
         </div>
       )}
+      </>)}
     </div>
   )
 }

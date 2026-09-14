@@ -162,17 +162,28 @@ dessas 14 regras deve ser respondida rodando a regra de verdade (ou
 reaproveitando um achado já calculado), nunca "adivinhando" um padrão a
 partir do próprio raciocínio do modelo. O motor de regras é a fonte de
 verdade determinística; a IA só traduz linguagem natural pra ele e de
-volta.
+volta — literal na implementação atual, não só um princípio abstrato: ver
+`src/lib/productIntelligenceNlu.ts` e a seção 6 abaixo.
 
 ## 6. Limites da Camada B — decisão já tomada, não revisitar sem pedido explícito
 
-- **Só propõe, nunca grava.** Quando implementada, a Camada B pode dizer
-  "cadastre este componente em Acessórios, associe esta embalagem a este
-  equipamento" — mas a gravação real sempre passa pelo fluxo normal do app
-  (formulário revisado por humano), nunca escrita direta disparada pela IA.
-- **Sem chamada real a LLM ainda** — decisão registrada, pode mudar quando
-  a Camada B for de fato desenhada, mas até lá o motor de regras (Camada 1
-  + 2) é 100% determinístico, sem custo de API.
+A Camada B está implementada (`/inteligencia-produto`, aba "Pergunte à IA" —
+ver `specs/telas-auxiliares.md`). Decisão final do usuário sobre a
+natureza dela, que substitui a hipótese anterior deste documento: **nenhuma
+conexão com IA externa, nunca** — nem Anthropic, nem OpenAI, nem qualquer
+outro provedor. A "IA" é um parser heurístico de pergunta em português
+(`src/lib/productIntelligenceNlu.ts`) que decide quais das 14 regras rodar
+de verdade (nunca inventa achado) — 100% determinístico, sem custo de API,
+sem chave nova.
+
+- **Só propõe, nunca grava.** A aba de pergunta é só leitura — mesma
+  garantia da análise completa. Toda gravação real continua passando pelo
+  fluxo normal do app (formulário revisado por humano), nunca escrita
+  direta disparada pela IA.
+- **Sem chamada real a LLM — decisão definitiva**, não "ainda": mesmo se
+  o vocabulário reconhecido pelo parser heurístico crescer no futuro, a
+  arquitetura continua sendo tradução de linguagem natural → motor de
+  regras determinístico, nunca uma chamada de API a um modelo externo.
 - **Nunca expõe custo real** — os 10 campos financeiros nunca saem do
   sentinela (`0`/`1`) em nenhuma resposta, de regra ou de IA. O valor real
   mora só em `local-data/`, fora do Git e fora de qualquer prompt.

@@ -160,15 +160,70 @@ cadastro interno entre si:
   (um equipamento por vez, com contexto) é onde "missing" faz sentido
   revisar caso a caso.
 
-**Camada B, ainda não implementada**: o usuário descreveu o objetivo final
-como uma janela de prompt livre ("me diga todos os erros de lógica...")
-onde uma IA de verdade interpretaria a pergunta e proporia o cenário
-completo de cadastro (ex.: "cadastre este componente em Acessórios, associe
-esta embalagem a este equipamento..."). Isso é categoricamente diferente do
-motor de regras fixas acima — precisa de uma chamada real a um LLM,
-revertendo a decisão inicial de "sem LLM real" — e ainda não foi
-implementado; a decisão de escopo já tomada é que, quando essa camada
-existir, ela **só propõe**, nunca grava nada sozinha.
+### Camada B (`/inteligencia-produto`, aba "Pergunte à IA") — IA interna, sem LLM real
+
+Implementada com uma decisão explícita e definitiva do usuário, que
+reverteu a hipótese original ("precisa de LLM real") levantada quando a
+Camada B ainda era só descrita, não implementada: **nenhuma conexão com
+nenhum serviço de IA externo, nunca** — nem Anthropic, nem OpenAI, nem
+qualquer outro provedor, nenhuma chave de API nova. A "IA" é inteiramente
+interna e determinística.
+
+- `src/lib/productIntelligenceNlu.ts` — parser heurístico de pergunta em
+  português, mesmo espírito de `solicComercialParser.ts` (sem gramática
+  formal, sem tentar cobrir 100% das formas de perguntar):
+  - `parseProductQuestion(texto)` — extrai código(s) Protheus
+    (`\d{2}\.\d{2}\.\d{4,6}(\.\d{2})?`), `equipamento <n>`/`grupo <n>`
+    (regex ancorada na palavra, pra não confundir número de equipamento com
+    qualquer número solto no texto), e casa palavras-chave (sem acento,
+    minúsculo) contra uma tabela `KEYWORD_RULES` que mapeia assunto → um ou
+    mais dos códigos das 14 regras (ex.: "bloquead"/"bloqueio" → R010+R011,
+    "duplic"/"repetid" → R020+R021, "sempre sai junto"/"co-ocorrencia" →
+    R080). Pergunta sem nenhum código/equipamento/grupo/palavra-chave
+    reconhecida vira `reconhecida: false` — resposta fixa pedindo pra
+    reformular, nunca uma tentativa de resposta às cegas.
+  - `filterAchadosByEntities(achados, parsed)` — filtra os achados já
+    calculados pelos valores citados na pergunta, olhando em qualquer campo
+    de `achado.chave` (cada regra nomeia a própria chave diferente:
+    `codigo`, `codigoA`/`codigoB`, `equipamento`, `grupo`...).
+  - `buildAskAnswer(parsed, achados, regrasRodadas)` — monta a frase de
+    resposta citando exatamente as regras rodadas e o escopo entendido;
+    nunca lista achado que o motor não gerou.
+- `src/lib/productIntelligenceContext.ts` — `buildProductIntelligenceContext(creds)`,
+  extraído de dentro de `/api/product-intelligence/route.ts` (que passou a
+  só chamá-lo) especificamente pra ser reusado também pela rota nova abaixo,
+  sem duplicar a montagem do contexto (9 tabelas + cadastro/estrutura
+  Protheus ao vivo).
+- `POST /api/product-intelligence/ask` — recebe `{ user, password, pergunta }`
+  (mesma credencial Protheus por requisição de sempre, nunca persistida).
+  Pergunta não reconhecida responde direto, sem round-trip nenhum ao
+  Protheus. Reconhecida: monta o contexto, roda só as regras detectadas
+  (ou as 14, se a pergunta citou um código/equipamento/grupo mas nenhum
+  assunto específico), filtra por entidade citada, devolve
+  `{ resposta, achados, parsed, regrasRodadas }`.
+- UI: `inteligencia-produto/page.tsx` ganhou abas ("🧠 Análise completa" /
+  "💬 Pergunte à IA") — a aba nova tem um `textarea` de pergunta livre, o
+  card de resposta (texto + chips das regras rodadas) e a lista de achados
+  reaproveitando o mesmo `AchadoCard` da análise completa.
+
+**Regra de ouro, já documentada em
+`specs/contexto-negocio-inteligencia-produto.md`**: a IA nunca inventa
+achado — ela só traduz linguagem natural pra um recorte do motor de regras
+determinístico (quais regras rodar, sobre qual código/equipamento/grupo) e
+devolve exatamente o que ele calculou. Continua **só propondo, nunca
+gravando** — a aba de pergunta é só leitura, igual à análise completa; toda
+gravação real continua passando pelo fluxo normal do app.
+
+Isso não fecha a porta a um LLM de verdade no futuro (a hipótese original
+citada abaixo, em itálico, fica como histórico) — mas a decisão vigente,
+pedida explicitamente pelo usuário, é que a Camada B **é** este motor
+heurístico interno, não um LLM.
+
+*Histórico (hipótese original, superada pela decisão acima): o usuário
+descreveu o objetivo final como uma janela de prompt livre onde uma IA de
+verdade interpretaria a pergunta e proporia o cenário completo de cadastro
+(ex.: "cadastre este componente em Acessórios, associe esta embalagem a
+este equipamento..."), o que exigiria uma chamada real a um LLM.*
 
 ### Busc. Itens Série Estrut. Protheus — aviso de "varredura concluída"
 
