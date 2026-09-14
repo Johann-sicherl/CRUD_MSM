@@ -282,6 +282,44 @@ texto livre por completo (nunca mistura os dois na mesma requisição).
   bug documentada acima — não existe mais "número errado extraído do
   texto", porque não há extração nenhuma nesse caminho.
 
+**Redesign da UI do filtro estruturado — primeira versão não era usável**
+(feedback direto do usuário: "TUDO ISSO NÃO ESTÁ NEM UM POUCO INTUITIVO NEM
+UTILIZAVEL", sobre uma parede de 20 checkboxes soltos). Corrigido: os 3
+campos (Equipamento/Grupo/Código) continuam sempre visíveis, mas a lista de
+regras foi escondida atrás de um toggle "Por padrão verifica tudo (14
+regras) · escolher regras específicas ▾" — a maioria das perguntas não
+precisa escolher regra nenhuma. Quando aberta, as regras viram botões-pílula
+compactos (só o código, agrupados por categoria com rótulo à esquerda —
+Integridade/Estado/Duplicidade/Dependência/Incompatibilidade/Completude/
+Analogia/Itens de série) em vez de checkbox+frase longa por linha.
+
+**Bug real já corrigido: R080 não tinha "equipamento" na própria chave —
+filtrar por equipamento zerava sempre o resultado, mesmo com achado
+existindo.** Achado pelo usuário perguntando (texto livre) "TEM ALGUM
+ACESSÓRIO DO EQUIPAMENTO 12... EM ALGUMA ESTRUTURA DE COMEÇO 26 OU
+27.13?" — resposta "nada encontrado", mas por dois motivos empilhados:
+1. **Keyword miss**: a frase não bateu em nenhum stem de R080
+   (`'sempre sai junto'`/`'co-ocorrencia'`/...) — só bateu no stem de R001
+   (`'nao esta cadastrad'`, de "não está cadastrado"), então só R001 rodou;
+   R080 (a regra certa pra essa pergunta) nunca chegou a rodar. Confirma na
+   prática por que o filtro estruturado (acima) é o caminho recomendado —
+   selecionar o equipamento + clicar no botão R080 elimina esse tipo de
+   miss de vez.
+2. **Bug de verdade, corrigido**: mesmo se R080 tivesse rodado,
+   `achado.chave` de R080 só tinha `codigoA`/`codigoB` — nenhum campo de
+   equipamento (fez sentido na hora: um par de código pode atravessar
+   vários pedidos/equipamentos diferentes, não é "de" um equipamento só).
+   Qualquer filtro por equipamento (via `filterAchadosByEntities`) excluía
+   **todo** achado de R080, mesmo os relevantes pro equipamento perguntado.
+   Corrigido em `productIntelligence.ts`: `mapaEquipamentosPorCodigo(ctx)`
+   mapeia cada código pra todo equipamento associado (via
+   `relationship_equip_accessory`/`standard_equipment_items`), e R080 passou
+   a gravar `chave.equipamentosRelacionados` (string com vírgula, pode ter
+   mais de um equipamento). `filterAchadosByEntities`
+   (`productIntelligenceNlu.ts`) passou a também dividir por vírgula ao
+   comparar cada valor de `chave` — necessário porque esse é o primeiro
+   campo de chave com mais de um valor possível.
+
 Isso não fecha a porta a um LLM de verdade no futuro (a hipótese original
 citada abaixo, em itálico, fica como histórico) — mas a decisão vigente,
 pedida explicitamente pelo usuário, é que a Camada B **é** este motor

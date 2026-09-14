@@ -95,17 +95,24 @@ export function parseProductQuestion(raw: string): ParsedProductQuestion {
 // campo de achado.chave (codigo/codigoA/codigoB/equipamento/grupo/...),
 // porque cada regra nomeia a própria chave diferente. Sem filtro nenhum
 // citado (só regra, ou nada), devolve tudo sem recortar.
+//
+// Alguns campos guardam mais de um valor separado por vírgula (ex.:
+// R080.chave.equipamentosRelacionados — um par de códigos pode estar
+// associado a mais de um equipamento) — cada parte é checada
+// separadamente, não só a string inteira.
 export function filterAchadosByEntities(achados: Achado[], parsed: ParsedProductQuestion): Achado[] {
   const wantAny = parsed.codigos.length > 0 || parsed.equipamentos.length > 0 || parsed.grupos.length > 0
   if (!wantAny) return achados
   const codigosSet = new Set(parsed.codigos)
   const equipSet = new Set(parsed.equipamentos)
   const grupoSet = new Set(parsed.grupos)
+  const bate = (s: string) => !!s && (codigosSet.has(s.toUpperCase()) || equipSet.has(s) || grupoSet.has(s))
   return achados.filter(a =>
     Object.values(a.chave).some(v => {
       const s = String(v ?? '').trim()
       if (!s) return false
-      return codigosSet.has(s.toUpperCase()) || equipSet.has(s) || grupoSet.has(s)
+      if (bate(s)) return true
+      return s.includes(',') && s.split(',').some(part => bate(part.trim()))
     })
   )
 }

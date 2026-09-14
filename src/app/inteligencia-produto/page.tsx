@@ -36,6 +36,11 @@ const REGRAS_INFO: { codigo: string; categoria: string; label: string }[] = [
   { codigo: 'R090', categoria: 'Itens de série', label: 'Especificação técnica diverge da estrutura' },
 ]
 
+const REGRAS_POR_CATEGORIA = REGRAS_INFO.reduce<Record<string, typeof REGRAS_INFO>>((acc, r) => {
+  (acc[r.categoria] ??= []).push(r)
+  return acc
+}, {})
+
 const SEVERIDADE_ORDER: Severidade[] = ['critico', 'alto', 'medio', 'baixo', 'pergunta']
 
 const SEVERIDADE_LABELS: Record<Severidade, string> = {
@@ -134,6 +139,7 @@ export default function InteligenciaProdutoPage() {
   const [filtroGrupo, setFiltroGrupo] = useState('')
   const [filtroCodigo, setFiltroCodigo] = useState('')
   const [filtroRegras, setFiltroRegras] = useState<Set<string>>(new Set())
+  const [mostrarRegras, setMostrarRegras] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -291,16 +297,16 @@ export default function InteligenciaProdutoPage() {
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3 bg-surface-container border border-outline-variant rounded-lg px-4 py-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-on-surface uppercase tracking-wide">Filtro estruturado (recomendado)</span>
+                  <span className="text-sm font-semibold text-on-surface">O que você quer verificar?</span>
                   {filtroAtivo && (
                     <button onClick={limparFiltro} className="text-xs text-outline hover:text-error transition-colors">
-                      ✕ Limpar filtro
+                      ✕ Limpar
                     </button>
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[11px] text-outline mb-1">Equipamento (legacy_id)</label>
+                    <label className="block text-[11px] text-outline mb-1">Equipamento</label>
                     <select
                       value={filtroEquipamento}
                       onChange={e => setFiltroEquipamento(e.target.value)}
@@ -315,7 +321,7 @@ export default function InteligenciaProdutoPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] text-outline mb-1">Grupo (legacy_id)</label>
+                    <label className="block text-[11px] text-outline mb-1">Grupo</label>
                     <select
                       value={filtroGrupo}
                       onChange={e => setFiltroGrupo(e.target.value)}
@@ -337,21 +343,55 @@ export default function InteligenciaProdutoPage() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] text-outline mb-1.5">Regras (nenhuma marcada = todas as 14)</label>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                    {REGRAS_INFO.map(r => (
-                      <label key={r.codigo} className="flex items-center gap-1.5 text-xs text-on-surface-variant cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filtroRegras.has(r.codigo)}
-                          onChange={() => toggleFiltroRegra(r.codigo)}
-                          className="cursor-pointer"
-                        />
-                        <span className="font-mono font-bold">{r.codigo}</span> {r.label}
-                      </label>
-                    ))}
-                  </div>
+
+                <div className="pt-1 border-t border-outline-variant/60">
+                  {!mostrarRegras ? (
+                    <button
+                      onClick={() => setMostrarRegras(true)}
+                      className="text-xs text-outline hover:text-on-surface-variant transition-colors mt-2"
+                    >
+                      Por padrão verifica tudo (14 regras) · escolher regras específicas ▾
+                    </button>
+                  ) : (
+                    <div className="mt-2 flex flex-col gap-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-outline">
+                          {filtroRegras.size === 0 ? 'Verificando todas as 14 regras' : `${filtroRegras.size} regra(s) selecionada(s)`}
+                        </span>
+                        <button
+                          onClick={() => { setFiltroRegras(new Set()); setMostrarRegras(false) }}
+                          className="text-xs text-outline hover:text-on-surface-variant transition-colors"
+                        >
+                          ▴ recolher
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {Object.entries(REGRAS_POR_CATEGORIA).map(([categoria, regras]) => (
+                          <div key={categoria} className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-on-surface-variant w-[110px] shrink-0">{categoria}</span>
+                            {regras.map(r => {
+                              const ativo = filtroRegras.has(r.codigo)
+                              return (
+                                <button
+                                  key={r.codigo}
+                                  type="button"
+                                  title={r.label}
+                                  onClick={() => toggleFiltroRegra(r.codigo)}
+                                  className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                                    ativo
+                                      ? 'bg-primary text-on-primary border-primary'
+                                      : 'bg-surface border-outline-variant text-on-surface-variant hover:border-outline'
+                                  }`}
+                                >
+                                  {r.codigo}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

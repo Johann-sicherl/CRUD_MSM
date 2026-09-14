@@ -618,11 +618,34 @@ const PACKAGING_PREFIXES = ['27.11']
 const MIN_COOCCURRENCE_SUPPORT = 3
 const MIN_COOCCURRENCE_CONFIDENCE = 0.9
 
+// Um código de nível 3 (26.xx/27.13) pode estar associado a mais de um
+// equipamento (ofertado como opcional em vários, ou ser a própria variante
+// de standard_equipment_items) — mapeado uma vez aqui pra achado carregar
+// `equipamentosRelacionados` em chave.chave e permitir filtro por
+// equipamento na Camada B (productIntelligenceNlu.ts/filterAchadosByEntities).
+// Sem isso, achado real já causou falso "nada encontrado": R080 não tem
+// noção nativa de "equipamento" (é par de código, pode atravessar vários
+// pedidos/equipamentos diferentes) — filtrar por equipamento sem essa
+// chave zerava sempre o resultado, mesmo com achado de verdade existindo.
+function mapaEquipamentosPorCodigo(ctx: ProductIntelligenceContext): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>()
+  const add = (code: string, eq: string) => {
+    if (!code || !eq) return
+    const set = map.get(code)
+    if (set) set.add(eq)
+    else map.set(code, new Set([eq]))
+  }
+  for (const r of ctx.tables.relationship_equip_accessory) add(normUp(r.protheus_code), norm(r.legacy_equipment_id))
+  for (const r of ctx.tables.standard_equipment_items) add(normUp(r.protheus_code), norm(r.legacy_equipment_id))
+  return map
+}
+
 regra('R080', 'analogia', ctx => {
   const achados: Achado[] = []
   const grupos = ctx.accessoryHierarchyGroups
     .map(g => Array.from(new Set(g.rows.filter(r => r.nivel === 3).map(r => normUp(r.codigo)))))
     .filter(codes => codes.length >= 2)
+  const codeToEquip = mapaEquipamentosPorCodigo(ctx)
 
   const suporte = new Map<string, number>()
   const coOcorrencia = new Map<string, number>() // "A|B" com A<B
@@ -648,9 +671,12 @@ regra('R080', 'analogia', ctx => {
     if (suporteA < MIN_COOCCURRENCE_SUPPORT || suporteB < MIN_COOCCURRENCE_SUPPORT) continue
     if (conjuntas / suporteA < MIN_COOCCURRENCE_CONFIDENCE || conjuntas / suporteB < MIN_COOCCURRENCE_CONFIDENCE) continue
     if (dependenciasConhecidas.has(`${a}|${b}`) || dependenciasConhecidas.has(`${b}|${a}`)) continue
+    const equipamentosRelacionados = Array.from(new Set([
+      ...(codeToEquip.get(a) || []), ...(codeToEquip.get(b) || []),
+    ])).sort()
     achados.push({
       regra: 'R080', severidade: 'pergunta', categoria: 'analogia', entidade: 'dependant_items',
-      chave: { codigoA: a, codigoB: b },
+      chave: { codigoA: a, codigoB: b, equipamentosRelacionados: equipamentosRelacionados.join(',') || null },
       mensagem: `${a} e ${b} saíram juntos em ${conjuntas} de até ${Math.max(suporteA, suporteB)} estruturas Protheus (26.xx/27.13) — nunca registrados como dependência um do outro.`,
       evidencia: { descricaoA: descricao(ctx, a), descricaoB: descricao(ctx, b), coOcorrencias: conjuntas, suporteA, suporteB },
       pergunta: 'É um candidato real a item dependente, ou coincidência de pedidos que sempre pediram os dois juntos?',
