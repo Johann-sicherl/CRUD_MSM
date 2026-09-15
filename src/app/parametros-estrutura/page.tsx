@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { EquipmentClassificationRule } from '@/lib/equipmentClassification'
+import type { IgnoredAccessory } from '@/lib/ignoredAccessories'
 
 interface Rule {
   property_field: string
@@ -116,6 +117,55 @@ export default function ParametrosEstruturaPage() {
   const [classError, setClassError] = useState('')
   const [classSuccessMsg, setClassSuccessMsg] = useState('')
   const [classFilter, setClassFilter] = useState('')
+
+  // 3ª coluna: acessórios marcados como "nunca vou usar" em Busc. Avanç.
+  // Acessórios Protheus — só leitura + remover aqui (adicionar é só de lá,
+  // via checkbox na linha do componente).
+  const [ignoredList, setIgnoredList] = useState<IgnoredAccessory[]>([])
+  const [ignoredLoading, setIgnoredLoading] = useState(true)
+  const [ignoredError, setIgnoredError] = useState('')
+  const [ignoredFilter, setIgnoredFilter] = useState('')
+
+  const loadIgnored = async () => {
+    setIgnoredLoading(true)
+    setIgnoredError('')
+    try {
+      const res = await fetch('/api/ignored-accessories')
+      const json = await res.json()
+      if (!res.ok) { setIgnoredError(json.error || 'Falha ao carregar acessórios ignorados'); return }
+      setIgnoredList(Array.isArray(json) ? json : [])
+    } catch {
+      setIgnoredError('Falha de rede ao carregar acessórios ignorados')
+    } finally {
+      setIgnoredLoading(false)
+    }
+  }
+
+  useEffect(() => { loadIgnored() }, [])
+
+  // Remover daqui não apaga nada em Protheus/MSM — só tira o código desta
+  // lista, então ele volta a aparecer normalmente em Busc. Avanç. Acessórios
+  // Protheus na próxima busca.
+  const removeIgnored = async (codigo: string) => {
+    const next = ignoredList.filter(i => i.codigo !== codigo)
+    setIgnoredList(next)
+    try {
+      const res = await fetch('/api/ignored-accessories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      })
+      if (!res.ok) loadIgnored()
+    } catch {
+      loadIgnored()
+    }
+  }
+
+  const ignoredFilteredList = ignoredList.filter(i => {
+    const f = ignoredFilter.trim().toLowerCase()
+    if (!f) return true
+    return i.codigo.toLowerCase().includes(f) || i.denominacao.toLowerCase().includes(f)
+  })
 
   const loadClassification = async () => {
     setClassLoading(true)
@@ -404,7 +454,7 @@ export default function ParametrosEstruturaPage() {
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em]">SISTEMA</div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
       <div>
       <h1 className="text-3xl font-bold text-on-surface mb-1">Parâmetros de Estrutura</h1>
       <p className="text-on-surface-variant text-base mb-3">
@@ -760,6 +810,77 @@ export default function ParametrosEstruturaPage() {
                 Descartar alterações e recarregar
               </button>
             </div>
+          </>
+        )}
+      </div>
+
+      <div className="xl:pl-12">
+        <h1 className="text-3xl font-bold text-on-surface mb-1">Acessórios Ignorados</h1>
+        <p className="text-on-surface-variant text-base mb-3">
+          Componentes marcados como &quot;nunca vou usar&quot; em Busc. Avanç. Acessórios Protheus — somem daquela
+          listagem enquanto estiverem aqui. Remover um código aqui não apaga nada no Protheus/MSM, só volta a
+          deixá-lo aparecer normalmente na próxima busca. Adicionar é só de lá (checkbox &quot;Ignorar&quot; na
+          linha do componente).
+        </p>
+
+        {ignoredLoading ? (
+          <div className="flex items-center gap-3 py-16 text-outline">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-base font-mono">Carregando...</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <input
+                type="text"
+                value={ignoredFilter}
+                onChange={e => setIgnoredFilter(e.target.value)}
+                placeholder="Filtrar por código ou denominação..."
+                className="flex-1 min-w-[200px] bg-surface-container border border-outline-variant rounded px-3 py-2 text-base text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              <span className="text-base text-outline font-mono whitespace-nowrap">{ignoredFilteredList.length} de {ignoredList.length}</span>
+            </div>
+
+            <div className="overflow-auto border border-outline-variant rounded-lg max-h-[65vh]">
+              <table className="text-base w-full">
+                <thead className="sticky top-0 bg-surface-container-highest">
+                  <tr>
+                    <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Código</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-on-surface-variant">Denominação</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ignoredFilteredList.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-3 text-base text-outline italic">
+                        {ignoredList.length === 0 ? 'Nenhum acessório ignorado ainda.' : 'Nenhum item combina com o filtro.'}
+                      </td>
+                    </tr>
+                  ) : ignoredFilteredList.map(item => (
+                    <tr key={item.codigo} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
+                      <td className="px-3 py-2 font-mono text-on-surface">{item.codigo}</td>
+                      <td className="px-3 py-2 text-on-surface">{item.denominacao || '—'}</td>
+                      <td className="p-1 text-center">
+                        <button
+                          onClick={() => removeIgnored(item.codigo)}
+                          className="text-outline hover:text-error transition-colors text-xl"
+                          title="Remover da lista de ignorados"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {ignoredError && (
+              <div className="mt-3 flex items-center gap-2 bg-error-container/20 border border-error/20 rounded-lg px-4 py-3 text-error text-base">
+                ⚠ {ignoredError}
+              </div>
+            )}
           </>
         )}
       </div>

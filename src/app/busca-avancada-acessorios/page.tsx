@@ -7,6 +7,7 @@ import ColumnFilter from '@/components/ColumnFilter'
 import RecordModal from '@/components/RecordModal'
 import { tables } from '@/lib/schema'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
+import type { IgnoredAccessory } from '@/lib/ignoredAccessories'
 
 const STORAGE_KEY = 'busca-avancada-acessorios-state'
 const UNCLASSIFIED_GROUP = 'Não classificado'
@@ -128,6 +129,23 @@ function RegistrationBadge({
   )
 }
 
+// Checkbox "Ignorar" por linha — marca o componente como "nunca vou usar":
+// grava (só código + denominação) em ignored-accessories.json e some da
+// listagem a partir daí (busca atual e futuras), até ser removido em Parâm.
+// Itens de Série e Acessórios. Sempre desmarcado: uma vez marcado, o item
+// deixa de existir nesta tela, então não há estado "marcado" pra mostrar.
+function IgnoreCheckbox({ onIgnore }: { onIgnore: () => void }) {
+  return (
+    <input
+      type="checkbox"
+      checked={false}
+      onChange={onIgnore}
+      title="Marcar como indesejado — some desta lista (revisável em Parâm. Itens de Série e Acessórios)"
+      className="w-4 h-4 cursor-pointer accent-error"
+    />
+  )
+}
+
 // ─── Filtro avançado — só Código e Denominação ──────────────────────────
 // Mesmo padrão "rascunho + Aplicar/Cancelar" do Filtro avançado em Busc.
 // Itens Série Estrut., simplificado: sem os campos de item de série (não se
@@ -245,6 +263,7 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   const [classificationRules, setClassificationRules] = useState<EquipmentClassificationRule[]>([])
   const [registeredCodes, setRegisteredCodes] = useState<Set<string>>(new Set())
+  const [ignoredList, setIgnoredList] = useState<IgnoredAccessory[]>([])
   // "+ Cadastrar" (linha a linha, item ainda não cadastrado): abre a mesma
   // janela "Novo — Cadastro de Componentes" (com a fila de inserção em lote
   // já disponível lá), prefiltrada com o código e a denominação do Protheus
@@ -343,6 +362,37 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   useEffect(() => { loadRegisteredCodes() }, [])
 
+  // Lista de componentes marcados como "nunca vou usar" (Parâm. Itens de
+  // Série e Acessórios) — some da listagem a partir daqui.
+  useEffect(() => {
+    fetch('/api/ignored-accessories')
+      .then(r => r.json())
+      .then(list => setIgnoredList(Array.isArray(list) ? list : []))
+      .catch(() => {})
+  }, [])
+
+  const ignoredCodes = useMemo(
+    () => new Set(ignoredList.map(i => i.codigo.trim().toUpperCase())),
+    [ignoredList],
+  )
+
+  // Grava (otimista) e persiste — só código e denominação, nunca outra
+  // informação do item. Em caso de falha de rede, recarrega a lista real do
+  // servidor em vez de deixar o estado local desalinhado do arquivo.
+  const markIgnored = (codigo: string, denominacao: string) => {
+    const norm = codigo.trim().toUpperCase()
+    if (ignoredCodes.has(norm)) return
+    const next = [...ignoredList, { codigo: codigo.trim(), denominacao: denominacao.trim() }]
+    setIgnoredList(next)
+    fetch('/api/ignored-accessories', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    }).catch(() => {
+      fetch('/api/ignored-accessories').then(r => r.json()).then(list => setIgnoredList(Array.isArray(list) ? list : [])).catch(() => {})
+    })
+  }
+
   // "+ Cadastrar" numa linha ainda não cadastrada — prefila protheus_code
   // com o código e name com a denominação encontrados aqui.
   const openAddModal = (codigo: string, denominacao: string) => {
@@ -428,6 +478,7 @@ export default function BuscaAvancadaAcessoriosPage() {
         if (r.nivel === 2) nivel2QtyByCode.set(r.codigo, r.qtd)
       }
       for (const r of g.rows) {
+        if (ignoredCodes.has(r.codigo.trim().toUpperCase())) continue
         const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
         const qtdTotal = r.nivel === 2 ? r.qtd : r.qtd * (nivel2QtyByCode.get(r.codPaiDireto) ?? 1)
         out.push({
@@ -447,7 +498,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       }
     }
     return out
-  }, [rawGroups, classificationRules, registeredCodes])
+  }, [rawGroups, classificationRules, registeredCodes, ignoredCodes])
 
   // Options for the "Filtro avançado" Código selector — todo código já
   // encontrado nesta busca, em qualquer nível (inclusive o próprio 26.xx),
@@ -549,9 +600,10 @@ export default function BuscaAvancadaAcessoriosPage() {
           registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
         }
       }
-      const nivel3Rows = g.rows.filter(r => r.nivel === 3)
+      const notIgnored = (r: AccessoryHierarchyRow) => !ignoredCodes.has(r.codigo.trim().toUpperCase())
+      const nivel3Rows = g.rows.filter(r => r.nivel === 3 && notIgnored(r))
       const nivel2 = g.rows
-        .filter(r => r.nivel === 2)
+        .filter(r => r.nivel === 2 && notIgnored(r))
         .map(r => ({
           ...toNode(r, 1),
           children: nivel3Rows.filter(n3 => n3.codPaiDireto === r.codigo).map(n3 => toNode(n3, r.qtd)),
@@ -572,7 +624,7 @@ export default function BuscaAvancadaAcessoriosPage() {
         n2.children.some(n3 => matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch))
       )
     )
-  }, [rawGroups, classificationRules, registeredCodes, hasActiveAdvancedFilter, advancedCodeFilter, advancedDescSearch])
+  }, [rawGroups, classificationRules, registeredCodes, ignoredCodes, hasActiveAdvancedFilter, advancedCodeFilter, advancedDescSearch])
 
   const cascadeByEquip = useMemo(() => {
     const map = new Map<string, CascadeHeader[]>()
@@ -649,7 +701,10 @@ export default function BuscaAvancadaAcessoriosPage() {
           Embalagens, Gastos Gerais — só abrindo para NIVEL 3 (o próprio equipamento e seus acessórios) os itens de
           nível 2 que combinem com o prefixo de NIVEL 2 informado. Cada item ganha uma categoria (regras herdadas
           da macro VBA original) e um texto dizendo se já está cadastrado no MSM (Cadastro de Equipamentos ou
-          Cadastro de Componentes). Nada é ocultado por não estar cadastrado.
+          Cadastro de Componentes). Nada é ocultado por não estar cadastrado — mas você pode marcar
+          &quot;Ignorar&quot; num componente que sabe que nunca vai usar: ele some desta lista (nesta busca e nas
+          próximas) e pode ser revisto/removido em{' '}
+          <a href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</a>.
         </p>
       </div>
 
@@ -840,6 +895,7 @@ export default function BuscaAvancadaAcessoriosPage() {
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Qtd Total</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Categoria</th>
                           <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Cadastro</th>
+                          <th className="text-center px-3 py-2 font-semibold text-on-surface-variant" title="Marcar componente como indesejado">Ignorar</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -861,6 +917,9 @@ export default function BuscaAvancadaAcessoriosPage() {
                                 denominacao={item.denominacao}
                                 onAdd={openAddModal}
                               />
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <IgnoreCheckbox onIgnore={() => markIgnored(item.codigo, item.denominacao)} />
                             </td>
                           </tr>
                           )
@@ -926,6 +985,7 @@ export default function BuscaAvancadaAcessoriosPage() {
                                       denominacao={n2.denominacao}
                                       onAdd={openAddModal}
                                     />
+                                    <IgnoreCheckbox onIgnore={() => markIgnored(n2.codigo, n2.denominacao)} />
                                   </div>
                                   {n2.children.length > 0 && (
                                     <div className="ml-6 mt-1 flex flex-col gap-1">
@@ -944,6 +1004,7 @@ export default function BuscaAvancadaAcessoriosPage() {
                                             denominacao={n3.denominacao}
                                             onAdd={openAddModal}
                                           />
+                                          <IgnoreCheckbox onIgnore={() => markIgnored(n3.codigo, n3.denominacao)} />
                                         </div>
                                         )
                                       })}

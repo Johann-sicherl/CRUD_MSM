@@ -46,6 +46,40 @@ associados) para um novo código, via rota `clone-architecture` — mesma
 observação sobre `.limit(25000)`/`range()` para evitar o cap do PostgREST em
 buscas grandes.
 
+## Acessórios ignorados — `ignoredAccessories.ts`
+
+A busca recursiva 26.xx/27.13 de Busc. Avanç. Acessórios Protheus está
+correta e sempre traz **todos** os itens da estrutura — mas nem todo
+componente que aparece ali é algo que o usuário vai usar de verdade,
+mesmo sabendo disso com certeza. Pedido explícito do usuário: um jeito de
+marcar um componente como "nunca vou usar" e ele parar de poluir a
+listagem.
+
+- `src/lib/ignoredAccessories.ts` / `src/data/ignored-accessories.json` —
+  mesmo padrão JSON-file-backed de `structurePropertyRules.ts`/
+  `equipmentClassificationRules.ts`: lista de `{ codigo, denominacao }`
+  (só esses dois campos, nunca outro dado do item). `GET`/`PUT`
+  (`/api/ignored-accessories`) substituem a lista inteira, mesma
+  convenção de `/api/structure-property-rules` — dedup por código
+  normalizado (`.trim().toUpperCase()`) feito na própria rota.
+- **Adicionar** — só em Busc. Avanç. Acessórios Protheus: um checkbox
+  "Ignorar" por linha (tabela da Lista de acessórios e nas duas linhas da
+  Visão em cascata, nível 2 e nível 3) grava o item e ele **some da
+  listagem a partir daí** — busca atual e buscas futuras, tanto em
+  `flatItems` (Lista de acessórios) quanto em `cascadeHeaders` (Visão em
+  cascata, filtrado antes de montar os nós de nível 2/3). Sempre
+  desmarcado ao renderizar — uma vez marcado, a linha deixa de existir
+  nesta tela, então não há "estado marcado" pra mostrar.
+- **Ver/remover** — só em Parâm. Itens de Série e Acessórios (renomeada
+  de "Param. Itens de Série" — pedido explícito do usuário, terceira
+  coluna da tela, ao lado de Parâmetros de Estrutura e Classificação de
+  Equipamentos): lista só-leitura + remoção (botão ✕). Remover daqui não
+  apaga nada em Protheus/MSM, só tira o código da lista — ele volta a
+  aparecer normalmente em Busc. Avanç. Acessórios Protheus na próxima
+  busca. Sem formulário de adicionar nesta coluna, de propósito — a
+  adição é sempre a partir da linha do componente na tela de busca, nunca
+  digitando um código à mão aqui.
+
 ## Análise de Estruturas / Busca Avançada de Acessórios (grupo "Consulta Banco de Dados")
 
 `/analisador-estruturas` e `/busca-avancada-acessorios` são telas de
