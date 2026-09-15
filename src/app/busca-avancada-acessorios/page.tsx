@@ -378,12 +378,25 @@ export default function BuscaAvancadaAcessoriosPage() {
   // re-render, então cada chamada acumula em cima da anterior de verdade.
   const ignoredListRef = useRef<IgnoredAccessory[]>([])
 
+  // Enquanto nenhum clique local aconteceu ainda, o GET inicial (abaixo)
+  // pode terminar tarde e sobrescrever ignoredListRef/ignoredList — mas se
+  // o usuário já clicou em algo ANTES desse GET responder (ex.: clicou
+  // muito rápido logo após a página abrir), a resposta do GET (mais
+  // antiga que o clique) não pode mais "vencer" e apagar o que já foi
+  // marcado localmente.
+  const hasLocalWriteRef = useRef(false)
+
   // Lista de componentes marcados como "nunca vou usar" (Parâm. Itens de
   // Série e Acessórios) — some da listagem a partir daqui.
   useEffect(() => {
     fetch('/api/ignored-accessories')
       .then(r => r.json())
-      .then(list => { const arr = Array.isArray(list) ? list : []; setIgnoredList(arr); ignoredListRef.current = arr })
+      .then(list => {
+        if (hasLocalWriteRef.current) return
+        const arr = Array.isArray(list) ? list : []
+        setIgnoredList(arr)
+        ignoredListRef.current = arr
+      })
       .catch(() => {})
   }, [])
 
@@ -392,25 +405,46 @@ export default function BuscaAvancadaAcessoriosPage() {
     [ignoredList],
   )
 
+  // Fila de gravação: cada PUT só é disparado depois do anterior terminar,
+  // nunca em paralelo. Achado real (2ª rodada, o fix só com ref não bastou):
+  // marcar vários itens rápido disparava vários PUT quase simultâneos, sem
+  // ordem garantida de CHEGADA no servidor (só de envio) — o request com a
+  // lista mais curta podia chegar (e escrever) DEPOIS do mais completo,
+  // apagando marcações anteriores mesmo com o ref já correto no cliente.
+  // Serializar elimina isso: nunca há dois PUT em voo ao mesmo tempo.
+  const writeQueueRef = useRef<Promise<void>>(Promise.resolve())
+
+  const persistIgnoredList = (list: IgnoredAccessory[]) => {
+    writeQueueRef.current = writeQueueRef.current
+      .catch(() => {})
+      .then(() => fetch('/api/ignored-accessories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list),
+      }))
+      .then(res => { if (!res.ok) throw new Error('Falha ao salvar') })
+      .catch(() =>
+        fetch('/api/ignored-accessories')
+          .then(r => r.json())
+          .then(arr => {
+            const clean = Array.isArray(arr) ? arr : []
+            ignoredListRef.current = clean
+            setIgnoredList(clean)
+          })
+          .catch(() => {})
+      )
+  }
+
   // Grava (otimista) e persiste — só código e denominação, nunca outra
-  // informação do item. Em caso de falha de rede, recarrega a lista real do
-  // servidor em vez de deixar o estado local desalinhado do arquivo.
+  // informação do item.
   const markIgnored = (codigo: string, denominacao: string) => {
+    hasLocalWriteRef.current = true
     const norm = codigo.trim().toUpperCase()
     if (ignoredListRef.current.some(i => i.codigo.trim().toUpperCase() === norm)) return
     const next = [...ignoredListRef.current, { codigo: codigo.trim(), denominacao: denominacao.trim() }]
     ignoredListRef.current = next
     setIgnoredList(next)
-    fetch('/api/ignored-accessories', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(next),
-    }).catch(() => {
-      fetch('/api/ignored-accessories')
-        .then(r => r.json())
-        .then(list => { const arr = Array.isArray(list) ? list : []; setIgnoredList(arr); ignoredListRef.current = arr })
-        .catch(() => {})
-    })
+    persistIgnoredList(next)
   }
 
   // "+ Cadastrar" numa linha ainda não cadastrada — prefila protheus_code

@@ -110,6 +110,31 @@ cima do valor real mais recente. Mesmo fix aplicado nos dois lados
 (`busca-avancada-acessorios/page.tsx` e `parametros-estrutura/page.tsx`,
 que tem o mesmo padrão em `removeIgnored`).
 
+**2ª rodada, mesmo bug reportado ainda acontecendo depois do fix acima** —
+dois reforços adicionados, validados com teste automatizado direto contra
+a rota real (`/api/ignored-accessories`, sem mock, disparando PUTs
+concorrentes com corpos crescentes — 8 rodadas sem serialização, 8 com; o
+teste **não reproduziu perda de dado nem sem a fila**, o que aponta pra
+causa raiz mais provável ser a instância que o usuário estava testando
+ainda rodando o código de antes do primeiro fix, não um bug novo):
+1. **Fila de gravação** (`writeQueueRef`, `persistIgnoredList`) — cada PUT
+   só é disparado depois do anterior *terminar* (nunca em paralelo), pra
+   eliminar de vez qualquer dependência da ordem de chegada dos requests
+   no servidor (que não é garantida só pela ordem de envio). Mesmo padrão
+   nos dois arquivos.
+2. **Guarda contra o GET inicial "tarde demais"** (`hasLocalWriteRef`,
+   só em `busca-avancada-acessorios/page.tsx`) — se o usuário clicar
+   "Ignorar" antes do primeiro `GET /api/ignored-accessories` (que
+   hidrata o estado ao montar a página) terminar, a resposta desse GET
+   (mais antiga que o clique) não pode mais sobrescrever o que já foi
+   marcado localmente.
+
+Se o problema persistir depois deste reforço, o próximo passo é confirmar
+que o ambiente testado já está rodando os commits mais recentes (pull +
+restart do `npm run dev`/`npm run serve`) antes de investigar mais —
+a rota e a lógica de acumulação já foram validadas isoladamente e não
+reproduzem perda de dado.
+
 ## Análise de Estruturas / Busca Avançada de Acessórios (grupo "Consulta Banco de Dados")
 
 `/analisador-estruturas` e `/busca-avancada-acessorios` são telas de

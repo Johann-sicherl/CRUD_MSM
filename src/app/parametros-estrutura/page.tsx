@@ -130,6 +130,23 @@ export default function ParametrosEstruturaPage() {
   // rápida não pode montar cada "próxima lista" em cima do mesmo snapshot
   // de estado desatualizado (React só atualiza o estado no próximo render).
   const ignoredListRef = useRef<IgnoredAccessory[]>([])
+  // Fila de gravação — mesma razão de busca-avancada-acessorios/page.tsx:
+  // nunca dois PUT em voo ao mesmo tempo, senão a ordem de CHEGADA no
+  // servidor (não a de envio) decide o resultado final, e uma remoção mais
+  // antiga pode "vencer" e desfazer uma mais recente.
+  const writeQueueRef = useRef<Promise<void>>(Promise.resolve())
+
+  const persistIgnoredList = (list: IgnoredAccessory[]) => {
+    writeQueueRef.current = writeQueueRef.current
+      .catch(() => {})
+      .then(() => fetch('/api/ignored-accessories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list),
+      }))
+      .then(res => { if (!res.ok) throw new Error('Falha ao salvar') })
+      .catch(() => loadIgnored())
+  }
 
   const loadIgnored = async () => {
     setIgnoredLoading(true)
@@ -153,20 +170,11 @@ export default function ParametrosEstruturaPage() {
   // Remover daqui não apaga nada em Protheus/MSM — só tira o código desta
   // lista, então ele volta a aparecer normalmente em Busc. Avanç. Acessórios
   // Protheus na próxima busca.
-  const removeIgnored = async (codigo: string) => {
+  const removeIgnored = (codigo: string) => {
     const next = ignoredListRef.current.filter(i => i.codigo !== codigo)
     ignoredListRef.current = next
     setIgnoredList(next)
-    try {
-      const res = await fetch('/api/ignored-accessories', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      })
-      if (!res.ok) loadIgnored()
-    } catch {
-      loadIgnored()
-    }
+    persistIgnoredList(next)
   }
 
   const ignoredFilteredList = ignoredList.filter(i => {
