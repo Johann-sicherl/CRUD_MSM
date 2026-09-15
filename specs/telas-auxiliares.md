@@ -79,6 +79,36 @@ listagem.
   busca. Sem formulário de adicionar nesta coluna, de propósito — a
   adição é sempre a partir da linha do componente na tela de busca, nunca
   digitando um código à mão aqui.
+- **"Consulta completa" / "Só o que falta no meu banco"** — mesmo
+  chaveamento de Busc. Itens Série Estrut. Protheus
+  (`showOnlyMissingFromInternal`), pedido explícito do usuário. Filtra
+  por `!item.registered` (não cadastrado nem em `accessories` nem em
+  `standard_equipment_items`) — aplicado tanto em `filteredFlatItems`
+  (Lista de acessórios) quanto em `cascadeHeaders` (Visão em cascata, que
+  também esconde o cabeçalho 26.xx que ficar sem nenhum nível 2 depois do
+  filtro). Reseta a cada nova busca, junto com Equipamento/Categoria/
+  Filtro avançado.
+
+**Bug real já corrigido: marcar vários acessórios em sequência rápida
+perdia todos menos o último — condição de corrida no estado do React, não
+falha da API.** Relatado pelo usuário: "cliquei em alguns, sumiram da
+lista, mas quando olhei em Acessórios Ignorados eles não estavam lá".
+Testado o round-trip da API isoladamente (`curl` direto em
+`/api/ignored-accessories`) — GET/PUT funcionam perfeitamente, then a
+causa era client-side: `markIgnored` montava a "próxima lista" a partir de
+`ignoredList` (estado do React, só reflete o valor novo no próximo
+render) — clicar em vários checkboxes antes de qualquer re-render
+acontecer entre um clique e outro fazia cada chamada montar o array em
+cima do MESMO snapshot antigo, e só a última chamada "vencia" de verdade
+(as outras eram sobrescritas). Sintoma batia exato: item some da tela
+(o filtro usa o estado mais recente, então some mesmo) mas nunca chega a
+ir pro arquivo (só a última chamada grava, com uma lista que não inclui
+os cliques anteriores). Corrigido com `ignoredListRef` (`useRef`, mantido
+sincronizado no mesmo instante de cada clique, sem esperar o próximo
+render) — cada chamada de `markIgnored`/`removeIgnored` agora acumula em
+cima do valor real mais recente. Mesmo fix aplicado nos dois lados
+(`busca-avancada-acessorios/page.tsx` e `parametros-estrutura/page.tsx`,
+que tem o mesmo padrão em `removeIgnored`).
 
 ## Análise de Estruturas / Busca Avançada de Acessórios (grupo "Consulta Banco de Dados")
 

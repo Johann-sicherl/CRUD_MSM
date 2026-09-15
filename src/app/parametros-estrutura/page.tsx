@@ -125,6 +125,11 @@ export default function ParametrosEstruturaPage() {
   const [ignoredLoading, setIgnoredLoading] = useState(true)
   const [ignoredError, setIgnoredError] = useState('')
   const [ignoredFilter, setIgnoredFilter] = useState('')
+  // Espelha ignoredList de forma síncrona — mesma razão de
+  // busca-avancada-acessorios/page.tsx: remover vários itens em sequência
+  // rápida não pode montar cada "próxima lista" em cima do mesmo snapshot
+  // de estado desatualizado (React só atualiza o estado no próximo render).
+  const ignoredListRef = useRef<IgnoredAccessory[]>([])
 
   const loadIgnored = async () => {
     setIgnoredLoading(true)
@@ -133,7 +138,9 @@ export default function ParametrosEstruturaPage() {
       const res = await fetch('/api/ignored-accessories')
       const json = await res.json()
       if (!res.ok) { setIgnoredError(json.error || 'Falha ao carregar acessórios ignorados'); return }
-      setIgnoredList(Array.isArray(json) ? json : [])
+      const arr = Array.isArray(json) ? json : []
+      setIgnoredList(arr)
+      ignoredListRef.current = arr
     } catch {
       setIgnoredError('Falha de rede ao carregar acessórios ignorados')
     } finally {
@@ -147,7 +154,8 @@ export default function ParametrosEstruturaPage() {
   // lista, então ele volta a aparecer normalmente em Busc. Avanç. Acessórios
   // Protheus na próxima busca.
   const removeIgnored = async (codigo: string) => {
-    const next = ignoredList.filter(i => i.codigo !== codigo)
+    const next = ignoredListRef.current.filter(i => i.codigo !== codigo)
+    ignoredListRef.current = next
     setIgnoredList(next)
     try {
       const res = await fetch('/api/ignored-accessories', {

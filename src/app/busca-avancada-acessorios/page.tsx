@@ -283,6 +283,11 @@ export default function BuscaAvancadaAcessoriosPage() {
   // veio, em árvore (26.xx → Embalagens/SubPA/Gastos Gerais → Equipamento/
   // Acessórios/matéria-prima da embalagem).
   const [viewMode, setViewMode] = useState<'lista' | 'cascata'>('lista')
+  // Mesmo chaveamento de Busc. Itens Série Estrut. Protheus
+  // (showOnlyMissingFromInternal, analisador-estruturas/page.tsx) — pedido
+  // explícito do usuário. Reseta a cada nova busca, mesmo tratamento de
+  // equipFilter/categoryFilter/advancedFilter abaixo.
+  const [showOnlyMissing, setShowOnlyMissing] = useState(false)
 
   const hydrated = useRef(false)
 
@@ -362,12 +367,23 @@ export default function BuscaAvancadaAcessoriosPage() {
 
   useEffect(() => { loadRegisteredCodes() }, [])
 
+  // Espelha ignoredList de forma síncrona — clicar em vários checkboxes em
+  // sequência rápida chama markIgnored várias vezes antes do React
+  // re-renderizar entre um clique e outro; ler `ignoredList` (estado, só
+  // atualiza no próximo render) faria cada chamada montar o próximo array a
+  // partir do MESMO snapshot antigo, e só a última chamada "vencia" —
+  // achado real: marcar vários itens seguidos, todos sumiam da tela (o
+  // filtro usa o estado mais recente de qualquer jeito), mas só o último
+  // realmente ia pro arquivo. Ref é atualizada na hora, sem esperar
+  // re-render, então cada chamada acumula em cima da anterior de verdade.
+  const ignoredListRef = useRef<IgnoredAccessory[]>([])
+
   // Lista de componentes marcados como "nunca vou usar" (Parâm. Itens de
   // Série e Acessórios) — some da listagem a partir daqui.
   useEffect(() => {
     fetch('/api/ignored-accessories')
       .then(r => r.json())
-      .then(list => setIgnoredList(Array.isArray(list) ? list : []))
+      .then(list => { const arr = Array.isArray(list) ? list : []; setIgnoredList(arr); ignoredListRef.current = arr })
       .catch(() => {})
   }, [])
 
@@ -381,15 +397,19 @@ export default function BuscaAvancadaAcessoriosPage() {
   // servidor em vez de deixar o estado local desalinhado do arquivo.
   const markIgnored = (codigo: string, denominacao: string) => {
     const norm = codigo.trim().toUpperCase()
-    if (ignoredCodes.has(norm)) return
-    const next = [...ignoredList, { codigo: codigo.trim(), denominacao: denominacao.trim() }]
+    if (ignoredListRef.current.some(i => i.codigo.trim().toUpperCase() === norm)) return
+    const next = [...ignoredListRef.current, { codigo: codigo.trim(), denominacao: denominacao.trim() }]
+    ignoredListRef.current = next
     setIgnoredList(next)
     fetch('/api/ignored-accessories', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(next),
     }).catch(() => {
-      fetch('/api/ignored-accessories').then(r => r.json()).then(list => setIgnoredList(Array.isArray(list) ? list : [])).catch(() => {})
+      fetch('/api/ignored-accessories')
+        .then(r => r.json())
+        .then(list => { const arr = Array.isArray(list) ? list : []; setIgnoredList(arr); ignoredListRef.current = arr })
+        .catch(() => {})
     })
   }
 
@@ -421,6 +441,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       setExpandedHeaders(new Set())
       setEquipFilter('')
       setCategoryFilter('')
+      setShowOnlyMissing(false)
       setAdvancedCodeFilter([])
       setAdvancedDescSearch('')
     } catch {
@@ -440,6 +461,7 @@ export default function BuscaAvancadaAcessoriosPage() {
     setExpandedHeaders(new Set())
     setEquipFilter('')
     setCategoryFilter('')
+    setShowOnlyMissing(false)
     setAdvancedCodeFilter([])
     setAdvancedDescSearch('')
   }
@@ -512,9 +534,13 @@ export default function BuscaAvancadaAcessoriosPage() {
   // "Filtro avançado" (Código + Denominação) — vale para Lista de
   // acessórios e Visão em cascata; aplicado aqui, antes de qualquer
   // agrupamento, para que os dois modos herdem o mesmo resultado.
+  // "Só o que falta no meu banco" (showOnlyMissing) entra junto.
   const filteredFlatItems = useMemo(
-    () => flatItems.filter(i => matchesAdvancedFilter(i.codigo, i.denominacao, advancedCodeFilter, advancedDescSearch)),
-    [flatItems, advancedCodeFilter, advancedDescSearch],
+    () => flatItems.filter(i =>
+      (!showOnlyMissing || !i.registered) &&
+      matchesAdvancedFilter(i.codigo, i.denominacao, advancedCodeFilter, advancedDescSearch)
+    ),
+    [flatItems, showOnlyMissing, advancedCodeFilter, advancedDescSearch],
   )
 
   const groupedByEquip = useMemo(() => {
@@ -600,31 +626,37 @@ export default function BuscaAvancadaAcessoriosPage() {
           registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
         }
       }
-      const notIgnored = (r: AccessoryHierarchyRow) => !ignoredCodes.has(r.codigo.trim().toUpperCase())
-      const nivel3Rows = g.rows.filter(r => r.nivel === 3 && notIgnored(r))
+      const keepRow = (r: AccessoryHierarchyRow) =>
+        !ignoredCodes.has(r.codigo.trim().toUpperCase()) &&
+        (!showOnlyMissing || !registeredCodes.has(r.codigo.trim().toUpperCase()))
+      const nivel3Rows = g.rows.filter(r => r.nivel === 3 && keepRow(r))
       const nivel2 = g.rows
-        .filter(r => r.nivel === 2 && notIgnored(r))
+        .filter(r => r.nivel === 2 && keepRow(r))
         .map(r => ({
           ...toNode(r, 1),
           children: nivel3Rows.filter(n3 => n3.codPaiDireto === r.codigo).map(n3 => toNode(n3, r.qtd)),
         }))
       return { estrutura: g.estrutura, descEstrutura: g.descEstrutura, equipType, nivel2 }
     })
-    if (!hasActiveAdvancedFilter) return headers
+    // Cabeçalho 26.xx que ficou sem nenhum nível 2 depois do filtro "Só o
+    // que falta" não tem mais nada útil pra mostrar — mesmo espírito de
+    // displayedGroups escondendo grupo vazio na Lista de acessórios.
+    const nonEmptyHeaders = showOnlyMissing ? headers.filter(h => h.nivel2.length > 0) : headers
+    if (!hasActiveAdvancedFilter) return nonEmptyHeaders
 
     // Um filtro ativo em Busc. Avançada Acessórios não deve isolar o item
     // encontrado tirando o resto da árvore — ele deve continuar mostrando
     // todos os pais e irmãos daquele componente, servidos junto com o
     // cabeçalho 26.xx inteiro; o filtro só decide QUAIS cabeçalhos aparecem
     // (qualquer item, em qualquer nível — 26.xx, nível 2 ou nível 3).
-    return headers.filter(h =>
+    return nonEmptyHeaders.filter(h =>
       matchesAdvancedFilter(h.estrutura, h.descEstrutura, advancedCodeFilter, advancedDescSearch) ||
       h.nivel2.some(n2 =>
         matchesAdvancedFilter(n2.codigo, n2.denominacao, advancedCodeFilter, advancedDescSearch) ||
         n2.children.some(n3 => matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch))
       )
     )
-  }, [rawGroups, classificationRules, registeredCodes, ignoredCodes, hasActiveAdvancedFilter, advancedCodeFilter, advancedDescSearch])
+  }, [rawGroups, classificationRules, registeredCodes, ignoredCodes, showOnlyMissing, hasActiveAdvancedFilter, advancedCodeFilter, advancedDescSearch])
 
   const cascadeByEquip = useMemo(() => {
     const map = new Map<string, CascadeHeader[]>()
@@ -806,6 +838,30 @@ export default function BuscaAvancadaAcessoriosPage() {
             <span className="text-outline">/</span>
             <span className={`text-sm font-semibold ${viewMode === 'cascata' ? 'text-primary' : 'text-outline'}`}>
               Visão em cascata (26.xx)
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowOnlyMissing(v => !v)}
+              role="switch"
+              aria-checked={showOnlyMissing}
+              title="Alterna entre ver tudo ou só o que está no Protheus e ainda não está cadastrado no MSM"
+              className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors shrink-0 ${
+                showOnlyMissing ? 'bg-primary' : 'bg-surface-container-highest border border-outline-variant'
+              }`}
+            >
+              <span
+                className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                  showOnlyMissing ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <span className={`text-sm font-semibold ${showOnlyMissing ? 'text-outline' : 'text-primary'}`}>
+              Consulta completa
+            </span>
+            <span className="text-outline">/</span>
+            <span className={`text-sm font-semibold ${showOnlyMissing ? 'text-primary' : 'text-outline'}`}>
+              Só o que falta no meu banco
             </span>
           </div>
           <div className="flex items-center gap-2">
