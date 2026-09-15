@@ -51,6 +51,13 @@ function classifyAccessoryRow(codigo: string, denominacao: string): { categoria:
   return { categoria, isUps }
 }
 
+// Pedido explícito do usuário: a Lista de acessórios nunca deve mostrar
+// essas categorias estruturais/intermediárias — só o resíduo "ACESSÓRIO"
+// (peça de verdade, não uma categoria de agrupamento da árvore Protheus).
+const EXCLUDED_CATEGORIES = new Set<AccessoryCategory>([
+  'SUBPA', 'EQUIPAMENTO', 'GASTOS GERAIS', 'EMBALAGENS', 'ADESIVOS', 'SPARE PARTS', 'CABOS',
+])
+
 // Same "+"-separated AND-terms search used in Busc. Itens Série Estrut.'s
 // Filtro avançado, duplicated here (rather than imported) to keep this page
 // fully isolated from that one — searches whichever description text is
@@ -151,8 +158,7 @@ function IgnoreCheckbox({ onIgnore }: { onIgnore: () => void }) {
 // Itens Série Estrut., simplificado: sem os campos de item de série (não se
 // aplicam a acessório) — apenas Código (multi-seleção) e busca livre na
 // denominação (DESC_ESTRUTURA/DESCRICAO_PRODUTO), com o mesmo "+" para
-// exigir mais de uma palavra. Vale para os dois modos de visualização
-// (Lista de acessórios e Visão em cascata).
+// exigir mais de uma palavra.
 function AdvancedFilterModal({
   onClose,
   onApply,
@@ -193,7 +199,7 @@ function AdvancedFilterModal({
           <div>
             <h2 className="text-lg font-semibold text-on-surface">Filtro avançado</h2>
             <p className="text-sm text-outline mt-0.5">
-              Selecione os valores desejados e clique em Aplicar. Vale para Lista de acessórios e Visão em cascata.
+              Selecione os valores desejados e clique em Aplicar.
               {activeCount > 0 && <span className="text-primary font-semibold"> {activeCount} filtro(s) selecionado(s)</span>}
             </p>
           </div>
@@ -271,18 +277,12 @@ export default function BuscaAvancadaAcessoriosPage() {
   // Série Estrut., só que pra accessories em vez de standard_equipment_items.
   const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [expandedHeaders, setExpandedHeaders] = useState<Set<string>>(new Set())
   const [equipFilter, setEquipFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [advancedCodeFilter, setAdvancedCodeFilter] = useState<string[]>([])
   const [advancedDescSearch, setAdvancedDescSearch] = useState('')
   const [copyFeedback, setCopyFeedback] = useState('')
-  // "Chave" de visualização: lista = lista plana de acessórios (sem
-  // duplicatas); cascata = mantém o relacionamento de qual 26.xx cada item
-  // veio, em árvore (26.xx → Embalagens/SubPA/Gastos Gerais → Equipamento/
-  // Acessórios/matéria-prima da embalagem).
-  const [viewMode, setViewMode] = useState<'lista' | 'cascata'>('lista')
   // Mesmo chaveamento de Busc. Itens Série Estrut. Protheus
   // (showOnlyMissingFromInternal, analisador-estruturas/page.tsx) — pedido
   // explícito do usuário. Reseta a cada nova busca, mesmo tratamento de
@@ -472,7 +472,6 @@ export default function BuscaAvancadaAcessoriosPage() {
       setRawGroups(json.groups || [])
       setHasScanned(true)
       setExpandedGroups(new Set())
-      setExpandedHeaders(new Set())
       setEquipFilter('')
       setCategoryFilter('')
       setShowOnlyMissing(false)
@@ -492,7 +491,6 @@ export default function BuscaAvancadaAcessoriosPage() {
     setRawGroups([])
     setHasScanned(false)
     setExpandedGroups(new Set())
-    setExpandedHeaders(new Set())
     setEquipFilter('')
     setCategoryFilter('')
     setShowOnlyMissing(false)
@@ -505,15 +503,6 @@ export default function BuscaAvancadaAcessoriosPage() {
       const next = new Set(prev)
       if (next.has(groupName)) next.delete(groupName)
       else next.add(groupName)
-      return next
-    })
-  }
-
-  const toggleHeaderExpanded = (estrutura: string) => {
-    setExpandedHeaders(prev => {
-      const next = new Set(prev)
-      if (next.has(estrutura)) next.delete(estrutura)
-      else next.add(estrutura)
       return next
     })
   }
@@ -536,6 +525,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       for (const r of g.rows) {
         if (ignoredCodes.has(r.codigo.trim().toUpperCase())) continue
         const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
+        if (EXCLUDED_CATEGORIES.has(categoria)) continue
         const qtdTotal = r.nivel === 2 ? r.qtd : r.qtd * (nivel2QtyByCode.get(r.codPaiDireto) ?? 1)
         out.push({
           estrutura: g.estrutura,
@@ -617,121 +607,23 @@ export default function BuscaAvancadaAcessoriosPage() {
     return [name, deduped] as const
   })
 
-  // "Visão em cascata" — reconstrói a árvore 26.xx → NIVEL 2 → NIVEL 3 a
-  // partir dos mesmos dados já classificados, ligando cada linha de nível 3
-  // ao seu pai de nível 2 via codPaiDireto. qtdTotal multiplica a QUANT do
-  // próprio item pela QUANT do pai direto de nível 2 (nível 2 já é a
-  // quantidade total, pois o multiplicador do 26.xx raiz é sempre 1).
-  interface CascadeNivel3Node {
-    codigo: string
-    denominacao: string
-    qtd: number
-    qtdTotal: number
-    categoria: AccessoryCategory
-    isUps: boolean
-    registered: boolean
-  }
-  interface CascadeNivel2Node extends CascadeNivel3Node {
-    children: CascadeNivel3Node[]
-  }
-  interface CascadeHeader {
-    estrutura: string
-    descEstrutura: string
-    equipType: string
-    nivel2: CascadeNivel2Node[]
-  }
-
-  // Filtro avançado ativo? Enquanto vazio, a cascata inteira aparece sem
-  // nenhuma poda — só passa a decidir o que mostrar quando há algo digitado.
+  // Filtro avançado ativo? Só usado pra destacar (bg-primary/10) a linha
+  // que bateu no filtro dentro do grupo já filtrado — não muda mais QUAIS
+  // grupos aparecem (isso já é feito por displayedGroups/filteredFlatItems).
   const hasActiveAdvancedFilter = advancedCodeFilter.length > 0 || !!advancedDescSearch.trim()
-
-  const cascadeHeaders = useMemo<CascadeHeader[]>(() => {
-    const headers = rawGroups.map(g => {
-      const equipType = classifyEquipmentType(g.descEstrutura, classificationRules) || UNCLASSIFIED_GROUP
-      const toNode = (r: AccessoryHierarchyRow, fator: number) => {
-        const { categoria, isUps } = classifyAccessoryRow(r.codigo, r.denominacao)
-        return {
-          codigo: r.codigo,
-          denominacao: r.denominacao,
-          qtd: r.qtd,
-          qtdTotal: r.qtd * fator,
-          categoria,
-          isUps,
-          registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
-        }
-      }
-      const keepRow = (r: AccessoryHierarchyRow) =>
-        !ignoredCodes.has(r.codigo.trim().toUpperCase()) &&
-        (!showOnlyMissing || !registeredCodes.has(r.codigo.trim().toUpperCase()))
-      const nivel3Rows = g.rows.filter(r => r.nivel === 3 && keepRow(r))
-      const nivel2 = g.rows
-        .filter(r => r.nivel === 2 && keepRow(r))
-        .map(r => ({
-          ...toNode(r, 1),
-          children: nivel3Rows.filter(n3 => n3.codPaiDireto === r.codigo).map(n3 => toNode(n3, r.qtd)),
-        }))
-      return { estrutura: g.estrutura, descEstrutura: g.descEstrutura, equipType, nivel2 }
-    })
-    // Cabeçalho 26.xx que ficou sem nenhum nível 2 depois do filtro "Só o
-    // que falta" não tem mais nada útil pra mostrar — mesmo espírito de
-    // displayedGroups escondendo grupo vazio na Lista de acessórios.
-    const nonEmptyHeaders = showOnlyMissing ? headers.filter(h => h.nivel2.length > 0) : headers
-    if (!hasActiveAdvancedFilter) return nonEmptyHeaders
-
-    // Um filtro ativo em Busc. Avançada Acessórios não deve isolar o item
-    // encontrado tirando o resto da árvore — ele deve continuar mostrando
-    // todos os pais e irmãos daquele componente, servidos junto com o
-    // cabeçalho 26.xx inteiro; o filtro só decide QUAIS cabeçalhos aparecem
-    // (qualquer item, em qualquer nível — 26.xx, nível 2 ou nível 3).
-    return nonEmptyHeaders.filter(h =>
-      matchesAdvancedFilter(h.estrutura, h.descEstrutura, advancedCodeFilter, advancedDescSearch) ||
-      h.nivel2.some(n2 =>
-        matchesAdvancedFilter(n2.codigo, n2.denominacao, advancedCodeFilter, advancedDescSearch) ||
-        n2.children.some(n3 => matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch))
-      )
-    )
-  }, [rawGroups, classificationRules, registeredCodes, ignoredCodes, showOnlyMissing, hasActiveAdvancedFilter, advancedCodeFilter, advancedDescSearch])
-
-  const cascadeByEquip = useMemo(() => {
-    const map = new Map<string, CascadeHeader[]>()
-    for (const h of cascadeHeaders) {
-      const bucket = map.get(h.equipType)
-      if (bucket) bucket.push(h)
-      else map.set(h.equipType, [h])
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (a === UNCLASSIFIED_GROUP) return 1
-      if (b === UNCLASSIFIED_GROUP) return -1
-      return a.localeCompare(b, 'pt-BR')
-    })
-  }, [cascadeHeaders])
-
-  const displayedCascadeGroups = cascadeByEquip.filter(([name]) => !equipFilter || name === equipFilter)
 
   // "Copiar lista" — mesma ideia do botão já usado em Auditoria (copia como
   // texto separado por TAB, para colar direto numa planilha do Excel).
   // Segue exatamente o que está sendo exibido no momento (já passou pelos
-  // filtros de Equipamento/Categoria/Filtro avançado), no formato do modo de
-  // visualização ativo — Lista de acessórios ou Visão em cascata.
-  const copyHeader = viewMode === 'lista'
-    ? ['Equipamento', 'Código', 'Denominação', 'Qtd Total', 'Categoria', 'Cadastro no MSM']
-    : ['Equipamento', 'Estrutura 26.xx', 'Nível', 'Código', 'Denominação', 'Qtd Total', 'Categoria', 'Cadastro no MSM']
+  // filtros de Equipamento/Categoria/Filtro avançado).
+  const copyHeader = ['Equipamento', 'Código', 'Denominação', 'Qtd Total', 'Categoria', 'Cadastro no MSM']
 
-  const copyRows: string[][] = viewMode === 'lista'
-    ? dedupedGroups.flatMap(([equipType, items]) =>
-        items.map(item => [
-          equipType, item.codigo, item.denominacao || '', String(item.qtdTotal), item.categoria,
-          item.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM',
-        ])
-      )
-    : displayedCascadeGroups.flatMap(([equipType, headers]) =>
-        headers.flatMap(h => h.nivel2.flatMap(n2 => [
-          [equipType, h.estrutura, '2', n2.codigo, n2.denominacao || '', String(n2.qtdTotal), n2.categoria,
-            n2.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM'],
-          ...n2.children.map(n3 => [equipType, h.estrutura, '3', n3.codigo, n3.denominacao || '', String(n3.qtdTotal), n3.categoria,
-            n3.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM']),
-        ]))
-      )
+  const copyRows: string[][] = dedupedGroups.flatMap(([equipType, items]) =>
+    items.map(item => [
+      equipType, item.codigo, item.denominacao || '', String(item.qtdTotal), item.categoria,
+      item.registered ? 'Cadastrado no MSM' : 'Não cadastrado no MSM',
+    ])
+  )
 
   const handleCopyList = () => {
     if (copyRows.length === 0) return
@@ -742,13 +634,12 @@ export default function BuscaAvancadaAcessoriosPage() {
     setTimeout(() => setCopyFeedback(''), 2500)
   }
 
-  // Applying "Filtro avançado" auto-expands whatever groups/cabeçalhos it
-  // left standing — otherwise the match would be sitting inside boxes that
-  // are still collapsed by default, defeating the point of filtering.
+  // Applying "Filtro avançado" auto-expands whatever groups it left
+  // standing — otherwise the match would be sitting inside a box that's
+  // still collapsed by default, defeating the point of filtering.
   useEffect(() => {
     if (!hasActiveAdvancedFilter) return
-    setExpandedGroups(new Set([...groupedByEquip.map(([name]) => name), ...cascadeByEquip.map(([name]) => name)]))
-    setExpandedHeaders(new Set(cascadeHeaders.map(h => h.estrutura)))
+    setExpandedGroups(new Set(groupedByEquip.map(([name]) => name)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advancedCodeFilter, advancedDescSearch])
 
@@ -763,14 +654,15 @@ export default function BuscaAvancadaAcessoriosPage() {
           Varre todo cabeçalho de estrutura no Protheus com o prefixo de NIVEL 1 informado (nunca listado
           diretamente), classifica cada um por tipo de equipamento usando as mesmas regras de{' '}
           <a href="/parametros-estrutura" className="text-primary hover:underline">Classificação de Equipamentos</a>
-          {' '}(aplicadas sobre DESC_ESTRUTURA), e lista todos os itens de NIVEL 2 dessa estrutura — SubPA,
-          Embalagens, Gastos Gerais — só abrindo para NIVEL 3 (o próprio equipamento e seus acessórios) os itens de
-          nível 2 que combinem com o prefixo de NIVEL 2 informado. Cada item ganha uma categoria (regras herdadas
-          da macro VBA original) e um texto dizendo se já está cadastrado no MSM (Cadastro de Equipamentos ou
-          Cadastro de Componentes). Nada é ocultado por não estar cadastrado — mas você pode marcar
-          &quot;Ignorar&quot; num componente que sabe que nunca vai usar: ele some desta lista (nesta busca e nas
-          próximas) e pode ser revisto/removido em{' '}
-          <a href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</a>.
+          {' '}(aplicadas sobre DESC_ESTRUTURA), e explora todos os itens de NIVEL 2 dessa estrutura — só abrindo
+          para NIVEL 3 (o próprio equipamento e seus acessórios) os itens de nível 2 que combinem com o prefixo de
+          NIVEL 2 informado. A lista mostra só a categoria &quot;ACESSÓRIO&quot; (a peça de verdade) — SubPA,
+          Equipamento, Gastos Gerais, Embalagens, Adesivos, Spare Parts e Cabos são categorias estruturais da
+          árvore Protheus, não componentes pra cadastrar, e ficam sempre fora da lista. Cada item que aparece ganha
+          um texto dizendo se já está cadastrado no MSM (Cadastro de Equipamentos ou Cadastro de Componentes) —
+          nada some por não estar cadastrado — mas você pode marcar &quot;Ignorar&quot; num componente que sabe
+          que nunca vai usar: ele some desta lista (nesta busca e nas próximas) e pode ser revisto/removido em
+          {' '}<a href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</a>.
         </p>
       </div>
 
@@ -852,30 +744,6 @@ export default function BuscaAvancadaAcessoriosPage() {
         <div className="mb-4 flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setViewMode(v => v === 'lista' ? 'cascata' : 'lista')}
-              role="switch"
-              aria-checked={viewMode === 'cascata'}
-              title="Alterna entre a lista plana de acessórios (sem duplicatas) e a visão em cascata por 26.xx"
-              className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors shrink-0 ${
-                viewMode === 'cascata' ? 'bg-primary' : 'bg-surface-container-highest border border-outline-variant'
-              }`}
-            >
-              <span
-                className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-                  viewMode === 'cascata' ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <span className={`text-sm font-semibold ${viewMode === 'cascata' ? 'text-outline' : 'text-primary'}`}>
-              Lista de acessórios
-            </span>
-            <span className="text-outline">/</span>
-            <span className={`text-sm font-semibold ${viewMode === 'cascata' ? 'text-primary' : 'text-outline'}`}>
-              Visão em cascata (26.xx)
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
               onClick={() => setShowOnlyMissing(v => !v)}
               role="switch"
               aria-checked={showOnlyMissing}
@@ -911,24 +779,22 @@ export default function BuscaAvancadaAcessoriosPage() {
               ))}
             </select>
           </div>
-          {viewMode === 'lista' && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-on-surface-variant">Categoria:</span>
-              <select
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
-                className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-              >
-                <option value="">— Todas —</option>
-                {categoriesPresent.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-on-surface-variant">Categoria:</span>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+            >
+              <option value="">— Todas —</option>
+              {categoriesPresent.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => setAdvancedFilterOpen(true)}
-            title="Filtra os componentes exibidos por Código ou por texto na Denominação — vale para os dois modos de visualização"
+            title="Filtra os componentes exibidos por Código ou por texto na Denominação"
             className={`px-3 py-1.5 text-sm rounded border transition-colors whitespace-nowrap ${
               advancedCodeFilter.length > 0 || advancedDescSearch.trim()
                 ? 'text-primary border-primary/40 bg-primary/10 hover:bg-primary/20'
@@ -957,10 +823,9 @@ export default function BuscaAvancadaAcessoriosPage() {
         <div className="text-sm text-outline italic">
           Nenhuma estrutura encontrada com esse(s) prefixo(s).
         </div>
-      ) : viewMode === 'lista' ? (
-        displayedGroups.length === 0 ? (
-          <div className="text-sm text-outline italic">Nenhum item combina com os filtros selecionados.</div>
-        ) : (
+      ) : displayedGroups.length === 0 ? (
+        <div className="text-sm text-outline italic">Nenhum item combina com os filtros selecionados.</div>
+      ) : (
         <div className="flex flex-col gap-6">
           {dedupedGroups.map(([equipType, items]) => {
             const groupOpen = expandedGroups.has(equipType)
@@ -1016,98 +881,6 @@ export default function BuscaAvancadaAcessoriosPage() {
                         })}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-        )
-      ) : displayedCascadeGroups.length === 0 ? (
-        <div className="text-sm text-outline italic">Nenhum item combina com o filtro selecionado.</div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {displayedCascadeGroups.map(([equipType, headers]) => {
-            const groupOpen = expandedGroups.has(equipType)
-            const totalCount = headers.length
-            return (
-              <div key={equipType}>
-                <div
-                  onClick={() => toggleGroupExpanded(equipType)}
-                  className="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl border border-outline-variant bg-surface-container-high hover:bg-surface-container-highest cursor-pointer select-none transition-colors"
-                >
-                  <span className={`text-outline text-sm leading-none transition-transform ${groupOpen ? 'rotate-90' : ''}`}>›</span>
-                  <span className="text-xs font-bold text-primary uppercase tracking-wide">
-                    {equipType} <span className="text-outline font-normal">({totalCount} estrutura{totalCount !== 1 ? 's' : ''} 26.xx)</span>
-                  </span>
-                </div>
-                {groupOpen && (
-                  <div className="flex flex-col gap-2">
-                    {headers.map(h => {
-                      const headerOpen = expandedHeaders.has(h.estrutura)
-                      const headerMatches = hasActiveAdvancedFilter && matchesAdvancedFilter(h.estrutura, h.descEstrutura, advancedCodeFilter, advancedDescSearch)
-                      return (
-                        <div key={h.estrutura} className="border border-outline-variant rounded-lg overflow-hidden">
-                          <div
-                            onClick={() => toggleHeaderExpanded(h.estrutura)}
-                            className={`flex items-center gap-3 px-3 py-2 hover:bg-surface-container-highest cursor-pointer select-none transition-colors ${headerMatches ? 'bg-primary/10' : 'bg-surface-container-high'}`}
-                          >
-                            <span className={`text-outline text-xs leading-none transition-transform ${headerOpen ? 'rotate-90' : ''}`}>›</span>
-                            <span className="font-mono text-xs text-primary">{h.estrutura}</span>
-                            <span className="text-xs text-on-surface-variant truncate">{h.descEstrutura}</span>
-                            <span className="text-xs text-outline ml-auto shrink-0">({h.nivel2.length})</span>
-                          </div>
-                          {headerOpen && (
-                            <div className="divide-y divide-outline-variant/40">
-                              {h.nivel2.map((n2, i2) => {
-                                const n2Matches = hasActiveAdvancedFilter && matchesAdvancedFilter(n2.codigo, n2.denominacao, advancedCodeFilter, advancedDescSearch)
-                                return (
-                                <div key={`${n2.codigo}-${i2}`} className="p-2">
-                                  <div className={`flex items-center gap-2 px-2 py-1.5 rounded ${n2Matches ? 'bg-primary/10' : 'bg-surface-container'}`}>
-                                    <span className="font-mono text-xs text-on-surface whitespace-nowrap">{n2.codigo}</span>
-                                    <span className="text-xs text-on-surface-variant truncate flex-1">{n2.denominacao || '—'}</span>
-                                    <span className="text-[10px] text-outline font-mono whitespace-nowrap">Qtd Total: {n2.qtdTotal}</span>
-                                    <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n2.categoria}</span>
-                                    {n2.isUps && <Badge tone="amber">UPS</Badge>}
-                                    <RegistrationBadge
-                                      registered={n2.registered}
-                                      codigo={n2.codigo}
-                                      denominacao={n2.denominacao}
-                                      onAdd={openAddModal}
-                                    />
-                                    <IgnoreCheckbox onIgnore={() => markIgnored(n2.codigo, n2.denominacao)} />
-                                  </div>
-                                  {n2.children.length > 0 && (
-                                    <div className="ml-6 mt-1 flex flex-col gap-1">
-                                      {n2.children.map((n3, i3) => {
-                                        const n3Matches = hasActiveAdvancedFilter && matchesAdvancedFilter(n3.codigo, n3.denominacao, advancedCodeFilter, advancedDescSearch)
-                                        return (
-                                        <div key={`${n3.codigo}-${i3}`} className={`flex items-center gap-2 px-2 py-1.5 rounded border ${n3Matches ? 'border-primary/50 bg-primary/10' : 'border-outline-variant/40'}`}>
-                                          <span className="font-mono text-xs text-primary whitespace-nowrap">{n3.codigo}</span>
-                                          <span className="text-xs text-on-surface-variant truncate flex-1">{n3.denominacao || '—'}</span>
-                                          <span className="text-[10px] text-outline font-mono whitespace-nowrap">Qtd Total: {n3.qtdTotal}</span>
-                                          <span className="text-[10px] text-on-surface-variant font-semibold whitespace-nowrap">{n3.categoria}</span>
-                                          {n3.isUps && <Badge tone="amber">UPS</Badge>}
-                                          <RegistrationBadge
-                                            registered={n3.registered}
-                                            codigo={n3.codigo}
-                                            denominacao={n3.denominacao}
-                                            onAdd={openAddModal}
-                                          />
-                                          <IgnoreCheckbox onIgnore={() => markIgnored(n3.codigo, n3.denominacao)} />
-                                        </div>
-                                        )
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
                   </div>
                 )}
               </div>

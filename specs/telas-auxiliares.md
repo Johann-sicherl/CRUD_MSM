@@ -190,6 +190,37 @@ consulta ao banco Protheus (via `mssql`, mesma base de `pdmDb.ts` — ver
 `specs/pdm-protheus-integracao.md`) para localizar itens de série/estruturas
 e acessórios diretamente na base oficial, fora do Supabase.
 
+### Busc. Avanç. Acessórios Protheus — só categoria "ACESSÓRIO", sem Visão em cascata
+
+Duas mudanças pedidas explicitamente pelo usuário, na mesma rodada:
+
+- **`EXCLUDED_CATEGORIES`** (`busca-avancada-acessorios/page.tsx`) — a
+  Lista de acessórios nunca mostra as categorias estruturais/
+  intermediárias da árvore Protheus (`SUBPA`, `EQUIPAMENTO`,
+  `GASTOS GERAIS`, `EMBALAGENS`, `ADESIVOS`, `SPARE PARTS`, `CABOS`), só o
+  resíduo `ACESSÓRIO` (peça de verdade, categoria default de
+  `classifyAccessoryRow` quando nenhum prefixo de código bate). Filtrado
+  dentro do próprio `flatItems` (`if (EXCLUDED_CATEGORIES.has(categoria))
+  continue`), antes de qualquer outro filtro — a busca recursiva 26.xx/
+  27.13 continua trazendo tudo (está correta), só a exibição na Lista que
+  ficou restrita.
+- **"Visão em cascata (26.xx)" removida por completo** — pedido explícito
+  ("pode deletar este chaveamento"). Removidos: `viewMode` (estado),
+  `expandedHeaders`/`toggleHeaderExpanded`, as interfaces
+  `CascadeNivel3Node`/`CascadeNivel2Node`/`CascadeHeader`, os cálculos
+  `cascadeHeaders`/`cascadeByEquip`/`displayedCascadeGroups`, e todo o
+  bloco de renderização da árvore 26.xx → nível 2 → nível 3. A tela agora
+  só tem a Lista de acessórios (sem chaveamento de modo de visualização) —
+  o filtro "Categoria" deixou de ser condicional a `viewMode === 'lista'`
+  (sempre visível agora, já que só existe um modo), e `copyHeader`/
+  `copyRows` ("Copiar lista") pararam de ramificar por modo.
+
+`AccessoryHierarchyRow`/`AccessoryHierarchyGroup` (o resultado bruto da
+busca em `rawGroups`, com nível 2 e nível 3) continuam existindo sem
+mudança — ainda são necessários pra calcular `qtdTotal` de um item de
+nível 3 (multiplicador do nível 2 pai) mesmo que linhas de nível 2 quase
+sempre caiam em categoria excluída e nunca apareçam na lista.
+
 ### Inteligência do Produto (`/inteligencia-produto`)
 
 Motor de regras que confronta as 9 tabelas de engenharia (`accessories`,
