@@ -1,16 +1,20 @@
-# Contexto de negócio — grounding para a Camada B (IA de prompt livre)
+# Contexto de negócio — Inteligência do Produto
 
-Este documento existe pra um propósito específico: ser o contexto de
-sistema que a "Camada B" (janela de prompt livre, ainda não implementada —
-ver `specs/telas-auxiliares.md`, seção Inteligência do Produto) vai
-precisar carregar antes de interpretar qualquer pergunta do usuário. Sem
-isso, um LLM só vê números e códigos (`STD_BLOQ='BLOQUEADO'`,
-`B1_TIPO='MP'`, `27.11.xxxxx`) sem significado nenhum — e ou alucina o que
-eles querem dizer, ou não consegue responder. Este documento é o mapa.
+Este documento existe pra um propósito específico: explicar **o que cada
+tabela/coluna do domínio significa e por que existe**, no contexto de
+negócio (VMI Security / "Monte Sua Máquina") — a base pra entender por que
+as 14 regras de `productIntelligence.ts` checam o que checam. Não é
+validação de schema (`specs/dados-e-schema.md`) nem estatística de dado
+real, é o raciocínio de negócio por trás.
 
-Não é validação de schema (`specs/dados-e-schema.md`) nem estatística de
-dado real — é **o que cada coisa significa e por que existe**, no contexto
-do negócio (VMI Security / "Monte Sua Máquina").
+**Histórico**: escrito originalmente como grounding pra uma "Camada B"
+(janela de pergunta em texto livre sobre o motor de regras) — essa camada
+foi implementada e depois **removida a pedido explícito do usuário**
+(esforço de manter o parser heurístico não valia o retorno — ver
+`specs/telas-auxiliares.md`, seção "Camada B ... tentada e removida"). O
+conteúdo deste documento (seções 1–4, o raciocínio de negócio em si)
+continua válido e útil independente disso — só as seções 5/6 (que falavam
+especificamente da Camada B) foram atualizadas.
 
 ## 1. O domínio, em uma frase
 
@@ -148,42 +152,21 @@ ser `unique`).
 | A especificação técnica bate com a estrutura real? | comparar `standard_equipment_items` × `ESTRUTURAS_PROTHEUS` via `Parâmetros de Estrutura` (R090) |
 | Dois itens sempre saem juntos, mas não é regra formal? | co-ocorrência na hierarquia `26.xx`/`27.13` (R080) |
 
-## 5. O motor de regras — o que a IA deve consultar, nunca inventar
+## 5. O motor de regras
 
-14 regras determinísticas/estatísticas já implementadas
+14 regras determinísticas/estatísticas implementadas
 (`src/lib/productIntelligence.ts`), agrupadas por categoria: integridade
 (R001, R002, R003, R070), estado (R010, R011, R012), duplicidade (R020,
 R021), dependência (R030, R031, R081), incompatibilidade (R040, R041),
 completude (R050, R051, R052), analogia (R060, R080), itens-de-série
-(R090). Detalhe de cada uma em `specs/telas-auxiliares.md`.
+(R090). Detalhe de cada uma em `specs/telas-auxiliares.md`. Rodam via a
+tela "Análise completa" de `/inteligencia-produto` — uma varredura única
+contra as 9 tabelas + cadastro/estrutura Protheus ao vivo, sem interface de
+pergunta nenhuma (essa parte foi removida, ver histórico no topo do
+documento).
 
-**Regra de ouro pra Camada B**: qualquer pergunta que se encaixe numa
-dessas 14 regras deve ser respondida rodando a regra de verdade (ou
-reaproveitando um achado já calculado), nunca "adivinhando" um padrão a
-partir do próprio raciocínio do modelo. O motor de regras é a fonte de
-verdade determinística; a IA só traduz linguagem natural pra ele e de
-volta — literal na implementação atual, não só um princípio abstrato: ver
-`src/lib/productIntelligenceNlu.ts` e a seção 6 abaixo.
+## 6. Custo real nunca aparece num achado
 
-## 6. Limites da Camada B — decisão já tomada, não revisitar sem pedido explícito
-
-A Camada B está implementada (`/inteligencia-produto`, aba "Pergunte à IA" —
-ver `specs/telas-auxiliares.md`). Decisão final do usuário sobre a
-natureza dela, que substitui a hipótese anterior deste documento: **nenhuma
-conexão com IA externa, nunca** — nem Anthropic, nem OpenAI, nem qualquer
-outro provedor. A "IA" é um parser heurístico de pergunta em português
-(`src/lib/productIntelligenceNlu.ts`) que decide quais das 14 regras rodar
-de verdade (nunca inventa achado) — 100% determinístico, sem custo de API,
-sem chave nova.
-
-- **Só propõe, nunca grava.** A aba de pergunta é só leitura — mesma
-  garantia da análise completa. Toda gravação real continua passando pelo
-  fluxo normal do app (formulário revisado por humano), nunca escrita
-  direta disparada pela IA.
-- **Sem chamada real a LLM — decisão definitiva**, não "ainda": mesmo se
-  o vocabulário reconhecido pelo parser heurístico crescer no futuro, a
-  arquitetura continua sendo tradução de linguagem natural → motor de
-  regras determinístico, nunca uma chamada de API a um modelo externo.
-- **Nunca expõe custo real** — os 10 campos financeiros nunca saem do
-  sentinela (`0`/`1`) em nenhuma resposta, de regra ou de IA. O valor real
-  mora só em `local-data/`, fora do Git e fora de qualquer prompt.
+Os 10 campos financeiros (`FORCE_TO_ONE_FIELDS`) nunca saem do sentinela
+(`0`/`1`) em nenhum achado gerado pelo motor de regras — o valor real mora
+só em `local-data/`, fora do Git. Nenhuma regra lê nem expõe esse valor.

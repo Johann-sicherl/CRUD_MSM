@@ -46,7 +46,7 @@ Next.js 14 (App Router) + TypeScript + Supabase, ferramenta administrativa inter
 - Ao trabalhar em RecordModal, DataTable, filtros de coluna, modais de edição em massa, tema/zoom: leia @specs/ui-componentes.md
 - Ao trabalhar em scripts SQL da raiz: leia @specs/sql-migrations.md
 - Ao trabalhar no módulo Double-check de Queries (tabelas `_check`, simulação de SQL da Auditoria): leia @specs/double-check-queries.md
-- Ao trabalhar na Camada B (prompt livre) da Inteligência do Produto, ou precisar do significado de negócio de tabelas/colunas do Protheus e das 9 tabelas de engenharia: leia @specs/contexto-negocio-inteligencia-produto.md
+- Ao trabalhar nas regras da Inteligência do Produto, ou precisar do significado de negócio de tabelas/colunas do Protheus e das 9 tabelas de engenharia: leia @specs/contexto-negocio-inteligencia-produto.md
 
 # Compact instructions
 

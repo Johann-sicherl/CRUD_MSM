@@ -3,10 +3,9 @@ import { listProductInfo, fetchStructureCodes, listAccessoryHierarchy, type Prot
 import { readStructurePropertyRules } from './structurePropertyRules'
 import type { ProductIntelligenceContext, ProductIntelligenceTables } from './productIntelligence'
 
-// Extraído de /api/product-intelligence/route.ts pra ser reusado também por
-// /api/product-intelligence/ask/route.ts (Camada B) — os dois precisam do
-// mesmo retrato (9 tabelas + cadastro/estrutura Protheus ao vivo), só o que
-// cada um faz com o resultado das 14 regras diverge.
+// Monta o retrato usado pelo motor de regras (9 tabelas de engenharia +
+// cadastro/estrutura Protheus ao vivo) — extraído de dentro da rota pra
+// manter o handler focado só no request/response.
 
 // Mesmos prefixos padrão de Busc. Avanç. Acessórios Protheus
 // (busca-avancada-acessorios/page.tsx, DEFAULT_HEADER_PREFIXES/

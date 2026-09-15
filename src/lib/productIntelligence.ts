@@ -621,12 +621,9 @@ const MIN_COOCCURRENCE_CONFIDENCE = 0.9
 // Um código de nível 3 (26.xx/27.13) pode estar associado a mais de um
 // equipamento (ofertado como opcional em vários, ou ser a própria variante
 // de standard_equipment_items) — mapeado uma vez aqui pra achado carregar
-// `equipamentosRelacionados` em chave.chave e permitir filtro por
-// equipamento na Camada B (productIntelligenceNlu.ts/filterAchadosByEntities).
-// Sem isso, achado real já causou falso "nada encontrado": R080 não tem
-// noção nativa de "equipamento" (é par de código, pode atravessar vários
-// pedidos/equipamentos diferentes) — filtrar por equipamento sem essa
-// chave zerava sempre o resultado, mesmo com achado de verdade existindo.
+// `equipamentosRelacionados` em chave, contexto útil pra revisar o achado
+// (R080 não tem noção nativa de "equipamento": é par de código, pode
+// atravessar vários pedidos/equipamentos diferentes).
 function mapaEquipamentosPorCodigo(ctx: ProductIntelligenceContext): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>()
   const add = (code: string, eq: string) => {
