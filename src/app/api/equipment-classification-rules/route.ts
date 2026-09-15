@@ -7,6 +7,12 @@ import type { EquipmentClassificationRule } from '@/lib/equipmentClassification'
 
 // File-based, same pattern as /api/field-options and /api/structure-property-rules
 // — no database table involved.
+//
+// Sem essas duas linhas, um build de produção pode marcar esta rota como
+// estática (só GET) — PUT cai no 405 padrão do Next em vez de rodar o
+// handler. Ver o mesmo comentário em structure-property-rules/route.ts.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 export async function GET() {
   return NextResponse.json(readEquipmentClassificationRules())

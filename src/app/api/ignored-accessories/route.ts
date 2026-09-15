@@ -6,6 +6,12 @@ import { readIgnoredAccessories, writeIgnoredAccessories, type IgnoredAccessory 
 // isso é sempre "carreguei tudo, mudei um item, salvei tudo de novo" — tanto
 // em Busc. Avanç. Acessórios Protheus (adiciona um) quanto em Parâm. Itens
 // de Série e Acessórios (remove um).
+//
+// Sem essas duas linhas, um build de produção pode marcar esta rota como
+// estática (só GET) — PUT cai no 405 padrão do Next em vez de rodar o
+// handler. Ver o mesmo comentário em structure-property-rules/route.ts.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 export async function GET() {
   return NextResponse.json(readIgnoredAccessories())

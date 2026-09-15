@@ -135,6 +135,54 @@ restart do `npm run dev`/`npm run serve`) antes de investigar mais —
 a rota e a lógica de acumulação já foram validadas isoladamente e não
 reproduzem perda de dado.
 
+**3ª rodada — causa raiz real, achada com diagnóstico no ambiente do
+usuário: rota estática em build de produção, PUT nunca chegava a rodar
+(405), nada a ver com React nem com a fila de gravação.** As duas rodadas
+acima corrigiram bugs reais (condição de corrida no client), mas nenhuma
+delas era a causa do sintoma reportado nesta rodada — o usuário confirmou
+com `git pull` + `npm run serve` limpo (sem processo `node.exe` travado) e
+o `PUT` continuava devolvendo **405 Method Not Allowed**, com o corpo de
+erro sendo a página padrão de erro do Next (`Allow: GET, HEAD` no header),
+não um erro do handler da rota.
+
+Diagnóstico: `/api/structure-property-rules`, `/api/equipment-classification-rules`
+e `/api/ignored-accessories` são caminhos **fixos** (sem segmento `[param]`
+dinâmico) que exportam `GET` junto de um método mutante (`PUT`/`POST`/
+`DELETE`) — sem `export const dynamic = 'force-dynamic'`, um build de
+produção (`next build`, dentro de `npm run serve`) pode classificar essas
+rotas como **estáticas** (só o `GET` é pré-renderizado em build; qualquer
+outro método cai no 405 padrão do Next, porque não existe handler dinâmico
+pra rodar). `/api/product-intelligence/route.ts` já tinha essas duas linhas
+desde que foi criada e nunca teve esse problema — foi o comparativo que
+confirmou a causa. Rotas com segmento dinâmico no caminho
+(`/api/[table]/route.ts`, `/api/[table]/[id]/route.ts`) não sofrem disso —
+um caminho com `[param]` nunca é elegível pra pré-renderização estática
+sem `generateStaticParams` (não usado aqui), então PUT/POST nelas sempre
+funcionou; é por isso que editar registros no resto do app nunca deu esse
+erro.
+
+**Fix**: adicionado `export const dynamic = 'force-dynamic'` +
+`export const fetchCache = 'force-no-store'` nas quatro rotas de caminho
+fixo com GET+método mutante — as três já citadas mais `/api/field-options`
+(mesmo padrão, `GET`/`POST`/`DELETE`, achada na mesma varredura). Validado
+localmente: `npm run build` (confirma no output `ƒ` em vez de `○` ao lado
+de cada rota — dinâmico, não estático) + `npm run start` + `curl` direto
+nas quatro rotas, todas voltando `200` depois do fix (antes, 405 nas duas
+que já existiam antes desta sessão e nunca tinham sido testadas em build
+de produção). Auditoria rápida confirmou que as outras rotas mutantes do
+projeto (`/api/[table]/...`, `/api/global-update/...` etc.) ou têm
+segmento dinâmico no caminho, ou são só-POST sem GET — nenhuma delas se
+encaixa no padrão de risco (GET + mutante + caminho fixo), então não
+precisaram do mesmo fix.
+
+**Diagnóstico de campo, não só de código**: como o Claude não tem acesso
+ao ambiente Windows do usuário, a causa raiz só foi encontrada com um
+roteiro de diagnóstico rodado pelo próprio usuário no PowerShell
+(matar processos node travados, testar a API direto via
+`Invoke-WebRequest`/`curl.exe` sem passar pelo navegador) — o corpo da
+resposta 405 (HTML com `Allow: GET, HEAD` e chunks `pages/_error`, a
+página de erro estática padrão do Next) foi a pista decisiva.
+
 ## Análise de Estruturas / Busca Avançada de Acessórios (grupo "Consulta Banco de Dados")
 
 `/analisador-estruturas` e `/busca-avancada-acessorios` são telas de

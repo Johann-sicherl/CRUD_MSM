@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
+// Caminho fixo (sem [param] dinâmico) + GET junto de método mutante — sem
+// isso, um build de produção pode marcar a rota como estática (só GET) e
+// POST/DELETE caem no 405 padrão do Next. Ver o mesmo achado em
+// structure-property-rules/route.ts.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 const FILE = join(process.cwd(), 'src', 'data', 'field-options.json')
 
 function read(): Record<string, string[]> {
