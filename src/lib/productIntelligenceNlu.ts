@@ -50,6 +50,13 @@ const KEYWORD_RULES: KeywordRule[] = [
   { palavras: ['familia', 'analogia', 'irmao', 'parecido com'], regras: ['R060'] },
   { palavras: ['sempre sai junto', 'sempre saem juntos', 'sempre vem junto', 'coincidencia', 'co-ocorrencia', 'cooc'], regras: ['R080'] },
   { palavras: ['serie', 'item de serie', 'especificacao tecnica', 'parametros de estrutura', 'processador', 'memoria'], regras: ['R090'] },
+  // "Estrutura do Protheus" sozinho não diz qual das três regras que olham
+  // a estrutura AO VIVO (não só o cadastro interno) é a certa — roda as
+  // três (R080/R081/R090) em vez de escolher uma; achado real: perguntar
+  // "está em alguma estrutura do Protheus" só batia no stem de R001
+  // (existência no cadastro), nunca chegava a rodar R080 (o que de fato
+  // responde "aparece junto na estrutura mas não está cadastrado").
+  { palavras: ['estrutura do protheus', 'estrutura protheus', 'na estrutura', 'arvore de relacionamento', 'arvore da estrutura'], regras: ['R080', 'R081', 'R090'] },
 ]
 
 export interface ParsedProductQuestion {

@@ -320,6 +320,18 @@ ACESSÓRIO DO EQUIPAMENTO 12... EM ALGUMA ESTRUTURA DE COMEÇO 26 OU
    comparar cada valor de `chave` — necessário porque esse é o primeiro
    campo de chave com mais de um valor possível.
 
+**Ampliação de palavra-chave, mesma rodada**: "está em alguma estrutura do
+Protheus"/"árvore de relacionamento" não batiam em nenhum stem — mesmo
+depois do fix de R080 acima, perguntar de novo com uma frase parecida
+("...está em alguma estrutura do Protheus", sem "26 ou 27.13" dessa vez)
+continuava só rodando R001. Adicionado grupo de palavra-chave
+`'estrutura do protheus'`/`'estrutura protheus'`/`'na estrutura'`/`'arvore
+de relacionamento'`/`'arvore da estrutura'` → roda as três regras que
+olham a estrutura Protheus **ao vivo** (R080+R081+R090) juntas, em vez de
+tentar adivinhar qual das três é a certa. Continua sendo heurística — não
+cobre toda forma de perguntar isso — o caminho garantido continua sendo o
+filtro estruturado (equipamento + botão da regra certa).
+
 Isso não fecha a porta a um LLM de verdade no futuro (a hipótese original
 citada abaixo, em itálico, fica como histórico) — mas a decisão vigente,
 pedida explicitamente pelo usuário, é que a Camada B **é** este motor
