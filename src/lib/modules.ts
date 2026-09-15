@@ -18,6 +18,7 @@ const REGRAS_TABLES = Object.entries(tables).filter(([, s]) => s.domain === 'reg
 
 export const MODULES: ModuleDef[] = [
   { key: 'dashboard',            label: 'Dashboard',                          href: '/',                     group: 'Geral' },
+  { key: 'inteligencia-produto', label: 'Inteligência do Produto',            href: '/inteligencia-produto', group: 'Geral' },
   { key: 'explorador-relacoes',  label: 'Janela de Pesquisa Avançada',        href: '/explorador-relacoes',  group: 'Geral' },
   { key: 'atualizador-global',   label: 'Atualizador Global de Tabelas MSM',  href: '/atualizador-global',   group: 'Geral' },
   { key: 'importar-custos-locais', label: 'Importador de Custos Locais',      href: '/importar-custos-locais', group: 'Geral' },
@@ -33,7 +34,6 @@ export const MODULES: ModuleDef[] = [
 
   { key: 'analisador-estruturas',        label: 'Busc. Itens Série Estrut. Protheus', href: '/analisador-estruturas',        group: 'Consulta Banco de Dados' },
   { key: 'busca-avancada-acessorios',    label: 'Busc. Avanc. Acessórios Protheus',   href: '/busca-avancada-acessorios',    group: 'Consulta Banco de Dados' },
-  { key: 'inteligencia-produto',         label: 'Inteligência do Produto',            href: '/inteligencia-produto',         group: 'Consulta Banco de Dados' },
 
   { key: 'options',               label: 'Lista Itens de Série',   href: '/options',               group: 'Parâmetros' },
   { key: 'parametros-estrutura',  label: 'Param. Itens de Série',  href: '/parametros-estrutura',  group: 'Parâmetros' },
