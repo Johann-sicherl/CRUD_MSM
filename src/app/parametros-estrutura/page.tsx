@@ -449,7 +449,12 @@ export default function ParametrosEstruturaPage() {
   const visibleGroups = groupOrder.filter(key => !isFiltering || (groupIndices.get(key) || []).length > 0)
 
   return (
-    <div className="p-6 max-w-[100rem]">
+    <div className="p-6">
+      {/* Sem max-w fixo — com 3 colunas (Parâmetros de Estrutura,
+          Classificação de Equipamentos, Acessórios Ignorados), o cap antigo
+          de 100rem (dimensionado pra só 2 colunas) sobrava área morta em
+          telas largas; mesmo raciocínio já aplicado às telas de DataTable
+          (ver specs/ui-componentes.md). */}
       <div className="mb-2">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em]">SISTEMA</div>
       </div>
