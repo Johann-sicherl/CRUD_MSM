@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -14,8 +14,6 @@ interface Props {
   onPinChange: (pinned: boolean) => void
 }
 
-const SIDEBAR_COLLAPSED_GROUPS_KEY = 'sidebar-collapsed-groups'
-
 export default function Sidebar({ pinned, onPinChange }: Props) {
   const pathname = usePathname()
   const [hovered, setHovered] = useState(false)
@@ -26,29 +24,20 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
   // Cada grupo (ex.: GERAL, Sistema, Administração) colapsa/expande de forma
   // independente ao clicar no cabeçalho — mais de um pode ficar aberto ao
-  // mesmo tempo (pedido explícito do usuário). Persistido em localStorage,
-  // mesmo padrão de 'sidebar-pinned' em ClientLayout.tsx.
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SIDEBAR_COLLAPSED_GROUPS_KEY)
-      if (raw) setCollapsedGroups(new Set(JSON.parse(raw)))
-    } catch {
-      // ignora — sem localStorage, todos os grupos começam expandidos
-    }
-  }, [])
+  // mesmo tempo (pedido explícito do usuário). Sem persistência em
+  // localStorage de propósito: pedido explícito do usuário pra sempre
+  // começar com tudo colapsado, tanto no primeiro acesso quanto em qualquer
+  // atualização (F5) da página — só fica expandido o que a própria pessoa
+  // clicar para abrir durante aquela sessão de navegação.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set([...MODULE_GROUPS, 'Administração'])
+  )
 
   function toggleGroupCollapsed(group: string) {
     setCollapsedGroups(prev => {
       const next = new Set(prev)
       if (next.has(group)) next.delete(group)
       else next.add(group)
-      try {
-        localStorage.setItem(SIDEBAR_COLLAPSED_GROUPS_KEY, JSON.stringify(Array.from(next)))
-      } catch {
-        // best-effort — falha ao persistir não impede o toggle na tela
-      }
       return next
     })
   }

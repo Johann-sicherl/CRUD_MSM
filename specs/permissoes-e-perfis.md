@@ -149,11 +149,16 @@ grupo), sem afetar os demais. **Não é accordion**: não existe lógica de
 "fechar os outros ao abrir um" — qualquer combinação de grupos abertos é
 válida.
 
-Persistido em `localStorage` (`sidebar-collapsed-groups`, array JSON dos
-nomes de grupo colapsados), mesmo padrão já usado por `ClientLayout.tsx`
-para `sidebar-pinned` — carregado num `useEffect` no mount, gravado a cada
-toggle. Sem servidor/perfil envolvido: é preferência de navegação local ao
-navegador, não permissão nem dado de negócio.
+**Sem persistência em `localStorage` de propósito** — diferente do padrão
+`sidebar-pinned` de `ClientLayout.tsx`. Pedido explícito do usuário, numa
+rodada seguinte: "quando abre a primeira vez a aplicação ou quando a
+atualiza que as 'Cascatas' estejam colapsadas" — o estado inicial de
+`collapsedGroups` já nasce com **todos** os grupos (`MODULE_GROUPS` +
+`'Administração'`) colapsados, tanto no primeiro acesso quanto em qualquer
+F5/refresh da página. Expandir um grupo dura só a navegação em memória
+daquela sessão (SPA — trocar de tela via `Link` não remonta a Sidebar, então
+o que a pessoa abriu continua aberto ao navegar); um refresh de verdade
+sempre volta a começar tudo fechado.
 
 O link especial "Consulta PDM x Banco MSM" (fora de `MODULES`, ver seção
 acima) é renderizado dentro do bloco do grupo "Consulta Banco de Dados" —
