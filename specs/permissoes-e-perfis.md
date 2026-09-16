@@ -231,3 +231,14 @@ O link especial "Consulta PDM x Banco MSM" (fora de `MODULES`, ver seção
 acima) é renderizado dentro do bloco do grupo "Consulta Banco de Dados" —
 some junto com o resto do grupo quando colapsado, reaparece junto quando
 expandido, sem estado próprio.
+
+**Rótulo do cabeçalho de grupo mais visível no tema Ciberpunk**: pedido
+explícito do usuário — a letra do nome do grupo (GERAL, ENGENHARIA,
+SISTEMA etc.) estava fina/pouco visível no tema Ciberpunk (`--c-outline:
+156 143 120`, um tom acastanhado dessaturado, combinado com `text-[10px]`
++ `font-semibold`). Trocado pro token `text-on-surface-variant` (bem mais
+contrastante nos três temas — Ciberpunk `212 197 171`, Cinza & Amarelo
+`200 200 184`, Luz `72 64 58`, todos mais fortes que o `outline`
+correspondente) + `font-bold` + `text-[11px]` — nunca uma cor fixa, sempre
+o token do tema (ver `ThemeZoomBar.tsx`), então a correção vale nos três
+temas, não só no Ciberpunk.

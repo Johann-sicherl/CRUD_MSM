@@ -102,7 +102,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                 <button
                   type="button"
                   onClick={() => toggleGroupCollapsed(group)}
-                  className="w-full flex items-center justify-between px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
                 >
                   <span>{group}</span>
                   <GroupChevron collapsed={isCollapsed} />
@@ -160,7 +160,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               <button
                 type="button"
                 onClick={() => toggleGroupCollapsed('Administração')}
-                className="w-full flex items-center justify-between px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
+                className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
               >
                 <span>Administração</span>
                 <GroupChevron collapsed={collapsedGroups.has('Administração')} />
