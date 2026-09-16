@@ -75,6 +75,40 @@ function buildNarrativeSummary(achados: Achado[], resumo: Record<string, number>
   return `Varri ${fonte} contra o cadastro e a estrutura ao vivo do Protheus. Encontrei ${achados.length} achado${achados.length !== 1 ? 's' : ''}: ${partes.join(', ')}.`
 }
 
+// Relatório em texto pra copiar pra área de transferência — pedido explícito
+// do usuário, mesmo espírito do "Copiar todas as regras": levar o resultado
+// de uma varredura pra fora do app (discutir/aprimorar o motor). Recebe os
+// achados JÁ FILTRADOS pela tela (severidade/tabela) — mesmo padrão de
+// "copiar o que está visível" já usado em Auditoria (scopedRows) — e
+// recalcula o resumo local a partir deles, nunca do resumo da varredura
+// inteira, pra não misturar contagem total com uma lista filtrada.
+function buildAchadosReportText(achados: Achado[], usedCheckTables: boolean, isFiltered: boolean): string {
+  const resumoLocal: Record<string, number> = {}
+  for (const a of achados) resumoLocal[a.severidade] = (resumoLocal[a.severidade] || 0) + 1
+
+  const linhas: string[] = [
+    'Inteligência do Produto — relatório de achados',
+    buildNarrativeSummary(achados, resumoLocal, usedCheckTables),
+  ]
+  if (isFiltered) linhas.push('(filtro de severidade/tabela da tela aplicado — este relatório não cobre todos os achados da última varredura)')
+  linhas.push('')
+
+  for (const s of SEVERIDADE_ORDER) {
+    const doGrupo = achados.filter(a => a.severidade === s)
+    if (doGrupo.length === 0) continue
+    linhas.push(`── ${SEVERIDADE_LABELS[s].toUpperCase()} (${doGrupo.length}) ──`, '')
+    for (const a of doGrupo) {
+      linhas.push(`[${a.regra}] ${entidadeLabel(a.entidade)}${formatChave(a.chave) ? ' · ' + formatChave(a.chave) : ''}`)
+      linhas.push(a.mensagem)
+      if (a.evidencia && Object.keys(a.evidencia).length > 0) linhas.push(`Evidência: ${JSON.stringify(a.evidencia)}`)
+      if (a.sugestao) linhas.push(`Sugestão: ${a.sugestao}`)
+      if (a.pergunta) linhas.push(`Pergunta: ${a.pergunta}`)
+      linhas.push('')
+    }
+  }
+  return linhas.join('\n').trim()
+}
+
 export default function InteligenciaProdutoPage() {
   const { creds: dbCreds } = useProtheusAuth()
   const [loading, setLoading] = useState(false)
@@ -94,6 +128,10 @@ export default function InteligenciaProdutoPage() {
   // pra área de transferência, pra discutir/aprimorar o motor fora do app.
   // Não depende de conexão Protheus — é só documentação estática do catálogo.
   const [copiedRegras, setCopiedRegras] = useState(false)
+  // Idem, mas pro RELATÓRIO de achados de uma varredura já rodada (pedido
+  // explícito do usuário, rodada seguinte: "quero copiar o relatório
+  // também das ocorrências encontradas, não somente as regras").
+  const [copiedAchados, setCopiedAchados] = useState(false)
 
   const handleCopyRegras = async () => {
     try {
@@ -157,6 +195,17 @@ export default function InteligenciaProdutoPage() {
     }
     return map
   }, [filtrados])
+
+  const handleCopyAchados = async () => {
+    try {
+      const texto = buildAchadosReportText(filtrados, usedCheckTables, !!(severidadeFilter || entidadeFilter))
+      await navigator.clipboard.writeText(texto)
+      setCopiedAchados(true)
+      setTimeout(() => setCopiedAchados(false), 1500)
+    } catch {
+      setError('Falha ao copiar o relatório')
+    }
+  }
 
   return (
     <div className="p-8 max-w-[72rem]">
@@ -242,8 +291,17 @@ export default function InteligenciaProdutoPage() {
 
       {achados && (
         <div className="flex flex-col gap-5">
-          <div className="bg-surface-container border border-outline-variant rounded-lg px-5 py-4">
+          <div className="bg-surface-container border border-outline-variant rounded-lg px-5 py-4 flex items-start justify-between gap-4">
             <p className="text-sm text-on-surface leading-relaxed">{buildNarrativeSummary(achados, resumo, usedCheckTables)}</p>
+            {achados.length > 0 && (
+              <button
+                onClick={handleCopyAchados}
+                title="Copia o relatório dos achados atualmente visíveis na tela (respeita os filtros de severidade/tabela ativos) para a área de transferência"
+                className="shrink-0 px-3 py-1.5 text-xs rounded border border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+              >
+                {copiedAchados ? '✓ Copiado' : `📋 Copiar relatório (${filtrados.length})`}
+              </button>
+            )}
           </div>
 
           {achados.length > 0 && (

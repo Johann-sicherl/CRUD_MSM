@@ -656,6 +656,25 @@ conversa, revisar/discutir aprimoramento), sem precisar abrir o código-fonte.
   `navigator.clipboard.writeText`, mesmo padrão visual "✓ Copiado" (1.5s)
   já usado em `atualizador-global.tsx`/`depurador-solic-comercial/page.tsx`.
 
+**"Copiar relatório" dos achados — rodada seguinte, pedido explícito do
+usuário**: "quero copiar o relatório também das ocorrências encontradas,
+não somente as regras". Segundo botão, dentro do box de resumo (ao lado do
+texto narrativo gerado por `buildNarrativeSummary`), só aparece depois de
+já ter rodado uma análise (`achados.length > 0`). `buildAchadosReportText`
+monta um texto agrupado por severidade (`[REGRA] tabela · chave`, mensagem,
+evidência/sugestão/pergunta quando existirem), recalculando o resumo local
+a partir da própria lista recebida — nunca do `resumo` da varredura
+inteira, pra não misturar contagem total com uma lista filtrada.
+
+**Copia o que está filtrado na tela, não a varredura inteira** — mesmo
+padrão já estabelecido em Auditoria (`scopedRows`, ver `specs/auditoria.md`):
+o botão recebe `filtrados` (já passado pelos filtros de severidade/tabela
+ativos), não `achados` bruto, e o rótulo do botão mostra a contagem
+correspondente (`Copiar relatório (N)`). Quando algum filtro está ativo, o
+texto copiado inclui um aviso explícito ("este relatório não cobre todos os
+achados da última varredura") — pra quem for colar isso numa conversa não
+achar que está vendo o total.
+
 **Achado incidental durante esta mudança**: o catálogo (agora documentado
 acima) tem 20 regras reais no código (`R001, R002, R003, R070, R010, R011,
 R012, R020, R021, R030, R031, R040, R041, R050, R051, R052, R060, R080,
