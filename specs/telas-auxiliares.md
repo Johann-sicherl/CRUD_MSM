@@ -528,10 +528,12 @@ real antes de portar. Três correções feitas nessa validação (ver
   execução.
 - **Camada 1 (determinística) + Camada 2 (analogia, R060) juntas** desde a
   primeira versão — não ficou faseado.
-- **Só produção** — roda contra as 9 tabelas reais do Supabase + Protheus ao
-  vivo, não contra as tabelas `_check` do Double-check de Queries (que
-  resolvem um problema diferente: simular SQL antes de rodar, não auditar
-  consistência de cadastro).
+- **Só produção na 1ª versão** — rodava só contra as 9 tabelas reais do
+  Supabase + Protheus ao vivo. Depois virou escolha do usuário (ver seção
+  "Fonte de dados: produção ou _check" abaixo) — não muda a razão de ser
+  original do Double-check de Queries (simular SQL antes de rodar, não
+  auditar consistência de cadastro), só reaproveita as cópias `_check` já
+  existentes como uma segunda fonte de dados pra esta varredura.
 
 **Reuso de infraestrutura existente** — nenhuma query nova contra o
 Protheus foi escrita: `listProductInfo` (`protheusDb.ts`, extensão de
@@ -549,6 +551,44 @@ Banco de Dados"), controlada por `visibleModules` do perfil, sem checagem
 de `profileId` na rota (`/api/product-intelligence`): a própria credencial
 Protheus, fornecida por requisição e nunca persistida, já é o controle de
 acesso pro lado externo — mesmo padrão de `protheus-estrutura/route.ts`.
+
+#### Fonte de dados: produção ou `_check`
+
+Pedido explícito do usuário: "quero poder escolher quais bases de dados
+eu irei rodar a análise, se é em _check, ou se é em produção". Toggle
+"Produção"/`_check` na tela (`useCheckTables`, estado local) — enviado no
+corpo do POST pra `/api/product-intelligence` e repassado pra
+`buildProductIntelligenceContext(creds, useCheckTables)`
+(`productIntelligenceContext.ts`).
+
+- **`TABELAS`** deixou de ser uma lista literal duplicada e passou a
+  reusar `DOUBLE_CHECK_TABLES` (`queryDoubleCheck.ts`) diretamente — as
+  duas listas já eram idênticas (as mesmas 9 tabelas de engenharia), e
+  agora "quais tabelas têm cópia `_check`" é exatamente a pergunta que
+  este toggle precisa responder, então faz sentido a fonte única já
+  existente ser reaproveitada aqui em vez de mantida em paralelo.
+- Cada fetch vira `supabaseAdmin.from(useCheckTables ? \`${t}_check\` :
+  t).select('*')...` — o resto do motor (`productIntelligence.ts`, as 14
+  regras) **não muda nada**: elas só indexam `ctx.tables.accessories`,
+  `ctx.tables.equipments` etc. (chaves sempre com o nome canônico, nunca
+  sufixadas), então de onde os dados vieram é irrelevante pro motor —
+  isolado inteiramente em `productIntelligenceContext.ts`.
+- **Protheus ao vivo é igual nos dois modos** — não existe cópia `_check`
+  pro Protheus (isso é um conceito exclusivo das 9 tabelas do Supabase,
+  ver `specs/double-check-queries.md`), então `protheusInfo`/
+  `bomByVariantCode`/`accessoryHierarchyGroups` sempre vêm do Protheus de
+  verdade, com a credencial informada, independente do toggle.
+- A tela lembra qual fonte a **última análise concluída** de fato usou
+  (`usedCheckTables`, separado do toggle `useCheckTables` que representa a
+  escolha pra próxima execução) — o resumo narrativo (`buildNarrativeSummary`)
+  e a mensagem de "carregando" refletem isso, pra nunca dar a entender que
+  um resultado já na tela veio de uma fonte diferente da que gerou ele.
+- **Pré-requisito não validado pelo app**: rodar contra `_check` só faz
+  sentido depois de já ter gravado essas cópias via Double-check de
+  Queries (passo 1) — a tela avisa isso num texto ao lado do toggle, mas
+  não impede rodar contra tabelas `_check` vazias/desatualizadas (nesse
+  caso a varredura roda normalmente, só que contra um retrato antigo ou
+  sem nenhuma linha).
 
 #### R080/R081/R090 — regras a partir da estrutura Protheus ao vivo
 

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase'
 import { listProductInfo, fetchStructureCodes, listAccessoryHierarchy, type ProtheusCredentials } from './protheusDb'
 import { readStructurePropertyRules } from './structurePropertyRules'
+import { DOUBLE_CHECK_TABLES } from './queryDoubleCheck'
 import type { ProductIntelligenceContext, ProductIntelligenceTables } from './productIntelligence'
 
 // Monta o retrato usado pelo motor de regras (9 tabelas de engenharia +
@@ -13,19 +14,24 @@ import type { ProductIntelligenceContext, ProductIntelligenceTables } from './pr
 const HIERARCHY_HEADER_PREFIXES = ['26']
 const HIERARCHY_NIVEL2_PREFIXES = ['27.13']
 
-const TABELAS = [
-  'accessories', 'accessory_groups', 'dependant_items', 'equipments', 'general_alerts',
-  'non_combinable_comps', 'relationship_equip_accessory', 'roller_tables', 'standard_equipment_items',
-] as const
+// As 9 tabelas de engenharia são exatamente DOUBLE_CHECK_TABLES
+// (queryDoubleCheck.ts) — reusado em vez de uma lista local duplicada
+// agora que useCheckTables precisa saber quais tabelas têm cópia _check
+// (pedido explícito do usuário: poder rodar a análise contra _check em
+// vez de produção, ver specs/telas-auxiliares.md).
+const TABELAS = DOUBLE_CHECK_TABLES
 
-export async function buildProductIntelligenceContext(creds: ProtheusCredentials): Promise<ProductIntelligenceContext> {
+export async function buildProductIntelligenceContext(
+  creds: ProtheusCredentials,
+  useCheckTables = false,
+): Promise<ProductIntelligenceContext> {
   // .range() explícito, não o default de 1000 linhas do PostgREST
   // (non_combinable_comps/relationship_equip_accessory já passam disso em produção).
   const tableResults = await Promise.all(
-    TABELAS.map(t => supabaseAdmin.from(t).select('*').range(0, 24999))
+    TABELAS.map(t => supabaseAdmin.from(useCheckTables ? `${t}_check` : t).select('*').range(0, 24999))
   )
   for (const { error } of tableResults) {
-    if (error) throw new Error(`Falha ao ler tabelas de engenharia: ${error.message}`)
+    if (error) throw new Error(`Falha ao ler tabelas de engenharia${useCheckTables ? ' (_check)' : ''}: ${error.message}`)
   }
   const tables = Object.fromEntries(
     TABELAS.map((t, i) => [t, tableResults[i].data || []])

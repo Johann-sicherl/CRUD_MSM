@@ -15,19 +15,25 @@ export async function POST(request: NextRequest) {
   const user = String(body?.user ?? '').trim()
   const password = String(body?.password ?? '')
   const apenas: string[] | undefined = Array.isArray(body?.regras) ? body.regras : undefined
+  // Pedido explícito do usuário: poder escolher se a varredura lê as 9
+  // tabelas de engenharia reais (produção) ou as cópias _check do
+  // Double-check de Queries — nunca as duas ao mesmo tempo, e o Protheus
+  // ao vivo continua igual nos dois casos (não existe "_check" pro
+  // Protheus, só pro Supabase).
+  const useCheckTables = body?.useCheckTables === true
 
   if (!user || !password) {
     return NextResponse.json({ error: 'Informe usuário e senha do banco Protheus' }, { status: 400 })
   }
 
   try {
-    const ctx = await buildProductIntelligenceContext({ user, password })
+    const ctx = await buildProductIntelligenceContext({ user, password }, useCheckTables)
     const achados = runProductIntelligence(ctx, apenas)
 
     const resumo: Record<string, number> = {}
     for (const a of achados) resumo[a.severidade] = (resumo[a.severidade] || 0) + 1
 
-    return NextResponse.json({ achados, resumo, total: achados.length })
+    return NextResponse.json({ achados, resumo, total: achados.length, useCheckTables })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao consultar o banco Protheus'
     return NextResponse.json({ error: message }, { status: 502 })

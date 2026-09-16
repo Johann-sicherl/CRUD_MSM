@@ -61,9 +61,10 @@ function AchadoCard({ achado }: { achado: Achado }) {
 // verdade (decisão explícita: sem custo de API nem chave nova), é só o
 // motor de regras narrando o próprio resumo com o mesmo tom das mensagens
 // que ele já produz por achado.
-function buildNarrativeSummary(achados: Achado[], resumo: Record<string, number>): string {
+function buildNarrativeSummary(achados: Achado[], resumo: Record<string, number>, usedCheckTables: boolean): string {
+  const fonte = usedCheckTables ? 'as 9 cópias _check (Double-check de Queries)' : 'as 9 tabelas de engenharia reais'
   if (achados.length === 0) {
-    return 'Varri as 9 tabelas de engenharia contra o cadastro e a estrutura ao vivo do Protheus e não encontrei nenhuma inconsistência. Base consistente.'
+    return `Varri ${fonte} contra o cadastro e a estrutura ao vivo do Protheus e não encontrei nenhuma inconsistência. Base consistente.`
   }
   const partes: string[] = []
   if (resumo.critico) partes.push(`${resumo.critico} crítico${resumo.critico !== 1 ? 's' : ''}`)
@@ -71,7 +72,7 @@ function buildNarrativeSummary(achados: Achado[], resumo: Record<string, number>
   if (resumo.medio) partes.push(`${resumo.medio} de severidade média`)
   if (resumo.baixo) partes.push(`${resumo.baixo} de severidade baixa`)
   if (resumo.pergunta) partes.push(`${resumo.pergunta} pergunta${resumo.pergunta !== 1 ? 's' : ''} em aberto (não são erro — pedem confirmação sua)`)
-  return `Varri as 9 tabelas de engenharia contra o cadastro e a estrutura ao vivo do Protheus. Encontrei ${achados.length} achado${achados.length !== 1 ? 's' : ''}: ${partes.join(', ')}.`
+  return `Varri ${fonte} contra o cadastro e a estrutura ao vivo do Protheus. Encontrei ${achados.length} achado${achados.length !== 1 ? 's' : ''}: ${partes.join(', ')}.`
 }
 
 export default function InteligenciaProdutoPage() {
@@ -82,6 +83,13 @@ export default function InteligenciaProdutoPage() {
   const [resumo, setResumo] = useState<Record<string, number>>({})
   const [severidadeFilter, setSeveridadeFilter] = useState<Severidade | ''>('')
   const [entidadeFilter, setEntidadeFilter] = useState('')
+  // Pedido explícito do usuário: escolher se a varredura roda contra as
+  // tabelas reais (produção) ou as cópias _check do Double-check de
+  // Queries — nunca as duas juntas. `usedCheckTables` guarda o que a
+  // ÚLTIMA análise concluída de fato usou (pode divergir do toggle atual
+  // se a pessoa mudar de fonte sem rodar de novo).
+  const [useCheckTables, setUseCheckTables] = useState(false)
+  const [usedCheckTables, setUsedCheckTables] = useState(false)
 
   const runAnalysis = async () => {
     if (!dbCreds) return
@@ -91,12 +99,13 @@ export default function InteligenciaProdutoPage() {
       const res = await fetch('/api/product-intelligence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password }),
+        body: JSON.stringify({ user: dbCreds.user, password: dbCreds.password, useCheckTables }),
       })
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Falha ao rodar a análise'); return }
       setAchados(json.achados as Achado[])
       setResumo(json.resumo || {})
+      setUsedCheckTables(useCheckTables)
     } catch {
       setError('Erro de comunicação com o banco Protheus')
     } finally {
@@ -144,23 +153,54 @@ export default function InteligenciaProdutoPage() {
         </p>
       </div>
 
-      <div className="mb-6 flex items-center gap-3 flex-wrap">
-        {dbCreds ? (
-          <button
-            onClick={runAnalysis}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:shadow-neon transition-all disabled:opacity-50"
-          >
-            {loading ? 'Analisando…' : '🧠 Rodar análise completa'}
-          </button>
-        ) : (
-          <p className="text-xs text-outline">Conecte ao Protheus (barra lateral) para rodar a análise.</p>
-        )}
-        {loading && (
-          <span className="text-xs text-outline">
-            Carregando o cadastro e a estrutura do Protheus (pode levar 1–2 min na primeira vez) e cruzando com as 9 tabelas de engenharia…
-          </span>
-        )}
+      <div className="mb-6 flex flex-col gap-3">
+        {/* Fonte dos dados do Supabase — pedido explícito do usuário.
+            O Protheus ao vivo é igual nos dois casos (não existe "_check"
+            pro Protheus, só pras 9 tabelas de engenharia no Supabase). */}
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-on-surface-variant">Fonte dos dados:</span>
+          <div className="flex items-center rounded border border-outline-variant overflow-hidden text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setUseCheckTables(false)}
+              className={`px-3 py-1.5 transition-colors ${!useCheckTables ? 'bg-primary/15 text-primary' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+            >
+              Produção
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseCheckTables(true)}
+              title="Lê as 9 cópias _check gravadas em Double-check de Queries, em vez das tabelas reais"
+              className={`px-3 py-1.5 border-l border-outline-variant transition-colors ${useCheckTables ? 'bg-blue-500/15 text-blue-400' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+            >
+              _check
+            </button>
+          </div>
+          {useCheckTables && (
+            <span className="text-[11px] text-outline">
+              Precisa ter gravado as tabelas _check antes, em Double-check de Queries.
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {dbCreds ? (
+            <button
+              onClick={runAnalysis}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:shadow-neon transition-all disabled:opacity-50"
+            >
+              {loading ? 'Analisando…' : '🧠 Rodar análise completa'}
+            </button>
+          ) : (
+            <p className="text-xs text-outline">Conecte ao Protheus (barra lateral) para rodar a análise.</p>
+          )}
+          {loading && (
+            <span className="text-xs text-outline">
+              Carregando o cadastro e a estrutura do Protheus (pode levar 1–2 min na primeira vez) e cruzando com as {useCheckTables ? 'cópias _check' : '9 tabelas de engenharia'}…
+            </span>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -172,7 +212,7 @@ export default function InteligenciaProdutoPage() {
       {achados && (
         <div className="flex flex-col gap-5">
           <div className="bg-surface-container border border-outline-variant rounded-lg px-5 py-4">
-            <p className="text-sm text-on-surface leading-relaxed">{buildNarrativeSummary(achados, resumo)}</p>
+            <p className="text-sm text-on-surface leading-relaxed">{buildNarrativeSummary(achados, resumo, usedCheckTables)}</p>
           </div>
 
           {achados.length > 0 && (
