@@ -33,8 +33,34 @@ const rowToRule = (row: ClassificationRow): EquipmentClassificationRule => ({
 
 const keyOf = (r: Rule) => `${r.property_field.trim().toLowerCase()}::${r.component_code.trim().toLowerCase()}`
 
+// Cada linha carregada do servidor ganha um _id interno só pra travar o
+// campo "Código Acessório Protheus" depois de salva (ver comentário em
+// newIds abaixo) — nunca enviado pro backend, que continua trabalhando só
+// com Rule (property_field/component_code/expected_value).
+interface RuleRow extends Rule { _id: string }
+const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
+const toRuleRow = (r: Rule): RuleRow => ({ ...r, _id: newId() })
+
+// Ordem fixa pedida pelo usuário pros grupos conhecidos (os campos de
+// "Itens de Série" de standard_equipment_items — ver
+// specs/contexto-negocio-inteligencia-produto.md) — comparação
+// case-insensitive porque property_field é texto livre digitado pelo
+// usuário, não uma coluna com valor controlado. Qualquer grupo fora desta
+// lista (custom, ainda não previsto aqui) cai depois, em ordem alfabética
+// — nunca em ordem arbitrária de inserção.
+const PROPERTY_FIELD_ORDER = [
+  'COLOR', 'LANGUAGE', 'MOTOPOLIA_TYPE', 'CONVEYOR_BELT_LOAD_CAPACITY_KG',
+  'PROCESSOR', 'MEMORY', 'GRAPHICS_CARD', 'STORAGE', 'TUBE_POWER_KV',
+]
+const groupSortRank = (key: string): number => {
+  const idx = PROPERTY_FIELD_ORDER.indexOf(key.trim().toUpperCase())
+  return idx === -1 ? PROPERTY_FIELD_ORDER.length : idx
+}
+const sortGroupKeys = (keys: string[]): string[] =>
+  [...keys].sort((a, b) => groupSortRank(a) - groupSortRank(b) || a.localeCompare(b, 'pt-BR'))
+
 const computeGroupOrder = (list: Rule[]): string[] =>
-  Array.from(new Set(list.map(r => r.property_field))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  sortGroupKeys(Array.from(new Set(list.map(r => r.property_field))))
 
 // Reads the same three-column layout the user's original spreadsheet uses
 // (GRUPO_ACESSORIOS / CODIGO_ACESSORIO_PROTHEUS / OUTPUT), matching headers
@@ -97,13 +123,24 @@ function GroupNameInput({ value, onCommit, onDone }: {
 }
 
 export default function ParametrosEstruturaPage() {
-  const [rows, setRows] = useState<Rule[]>([])
+  const [rows, setRows] = useState<RuleRow[]>([])
   const [groupOrder, setGroupOrder] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [filter, setFilter] = useState('')
+  // Filtro por grupo — pedido explícito do usuário: "dentro de cada grupo,
+  // quero poder filtrar o que eu preciso dentro daquele grupo". Diferente
+  // do filtro global acima (que também decide quais grupos aparecem) —
+  // este só restringe as linhas mostradas DENTRO de um grupo já visível.
+  const [groupFilters, setGroupFilters] = useState<Record<string, string>>({})
+  // Linhas ainda não salvas (recém-adicionadas) — só elas têm o campo
+  // "Código Acessório Protheus" editável. Pedido explícito do usuário: "não
+  // quero ter a capacidade de editar o código do cadastro, se estiver
+  // errado, tenho que apagar a linha e escrever a regra de novo" — depois
+  // de salvo, o código trava (Output continua editável sempre).
+  const [newIds, setNewIds] = useState<Set<string>>(new Set())
   const [newGroupName, setNewGroupName] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
@@ -262,7 +299,8 @@ export default function ParametrosEstruturaPage() {
       const sorted = (json as Rule[]).slice().sort((a, b) =>
         a.property_field.localeCompare(b.property_field, 'pt-BR') || a.component_code.localeCompare(b.component_code)
       )
-      setRows(sorted)
+      setRows(sorted.map(toRuleRow))
+      setNewIds(new Set())
       setGroupOrder(computeGroupOrder(sorted))
     } catch {
       setError('Falha de rede ao carregar parâmetros')
@@ -279,17 +317,24 @@ export default function ParametrosEstruturaPage() {
 
   const addRowToGroup = (groupKey: string) => {
     setFilter('')
-    setRows(prev => [...prev, { property_field: groupKey, component_code: '', expected_value: '' }])
+    setGroupFilters(prev => ({ ...prev, [groupKey]: '' }))
+    const row = toRuleRow({ property_field: groupKey, component_code: '', expected_value: '' })
+    setRows(prev => [...prev, row])
+    setNewIds(prev => new Set(prev).add(row._id))
     setExpanded(prev => new Set(prev).add(groupKey))
   }
 
   const removeRow = (index: number) => {
-    setRows(prev => prev.filter((_, i) => i !== index))
+    setRows(prev => {
+      const removedId = prev[index]?._id
+      if (removedId) setNewIds(ids => { const next = new Set(ids); next.delete(removedId); return next })
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   const renameGroup = (oldKey: string, newKey: string) => {
     setRows(prev => prev.map(r => r.property_field === oldKey ? { ...r, property_field: newKey } : r))
-    setGroupOrder(prev => Array.from(new Set(prev.map(k => k === oldKey ? newKey : k))))
+    setGroupOrder(prev => sortGroupKeys(Array.from(new Set(prev.map(k => k === oldKey ? newKey : k)))))
     setExpanded(prev => {
       if (!prev.has(oldKey)) return prev
       const next = new Set(prev)
@@ -312,8 +357,11 @@ export default function ParametrosEstruturaPage() {
     const name = newGroupName.trim()
     if (!name) return
     setFilter('')
-    if (!groupOrder.includes(name)) setGroupOrder(prev => [...prev, name])
-    setRows(prev => [...prev, { property_field: name, component_code: '', expected_value: '' }])
+    setGroupFilters(prev => ({ ...prev, [name]: '' }))
+    if (!groupOrder.includes(name)) setGroupOrder(prev => sortGroupKeys([...prev, name]))
+    const row = toRuleRow({ property_field: name, component_code: '', expected_value: '' })
+    setRows(prev => [...prev, row])
+    setNewIds(prev => new Set(prev).add(row._id))
     setExpanded(prev => new Set(prev).add(name))
     setNewGroupName('')
   }
@@ -345,7 +393,11 @@ export default function ParametrosEstruturaPage() {
       const sorted = list.slice().sort((a, b) =>
         a.property_field.localeCompare(b.property_field, 'pt-BR') || a.component_code.localeCompare(b.component_code)
       )
-      setRows(sorted)
+      // Tudo que acabou de ser salvo passa a ter o código travado — só uma
+      // linha adicionada DEPOIS deste save (via "+ Código") volta a ficar
+      // editável (ver newIds).
+      setRows(sorted.map(toRuleRow))
+      setNewIds(new Set())
       setGroupOrder(computeGroupOrder(sorted))
     } catch {
       setError('Falha de rede ao salvar parâmetros')
@@ -558,7 +610,13 @@ export default function ParametrosEstruturaPage() {
             {visibleGroups.length === 0 ? (
               <div className="text-base text-outline italic">Nenhum grupo encontrado.</div>
             ) : visibleGroups.map(key => {
-              const indices = groupIndices.get(key) || []
+              const allIndices = groupIndices.get(key) || []
+              const groupFilter = (groupFilters[key] || '').trim().toLowerCase()
+              const indices = groupFilter
+                ? allIndices.filter(i =>
+                    rows[i].component_code.toLowerCase().includes(groupFilter) ||
+                    rows[i].expected_value.toLowerCase().includes(groupFilter))
+                : allIndices
               const isOpen = isFiltering || expanded.has(key)
               return (
                 <div key={key} className="border border-outline-variant rounded-xl bg-surface-container overflow-hidden">
@@ -596,12 +654,12 @@ export default function ParametrosEstruturaPage() {
                         </>
                       )}
                     </div>
-                    <span className="text-sm text-outline font-mono whitespace-nowrap">{indices.length} código(s)</span>
+                    <span className="text-sm text-outline font-mono whitespace-nowrap">{allIndices.length} código(s)</span>
                     <button
                       onClick={e => {
                         e.stopPropagation()
                         const ok = window.confirm(
-                          `Remover o grupo "${key || '(sem nome)'}" e todos os ${indices.length} código(s) dele? Esta operação NÃO pode ser desfeita. Tem certeza?`
+                          `Remover o grupo "${key || '(sem nome)'}" e todos os ${allIndices.length} código(s) dele? Esta operação NÃO pode ser desfeita. Tem certeza?`
                         )
                         if (ok) removeGroup(key)
                       }}
@@ -613,6 +671,17 @@ export default function ParametrosEstruturaPage() {
                   </div>
                   {isOpen && (
                     <div className="overflow-auto">
+                      {allIndices.length > 5 && (
+                        <div className="px-3 py-2 border-b border-outline-variant/50 bg-surface-container-low" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            value={groupFilters[key] || ''}
+                            onChange={e => setGroupFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                            placeholder={`Filtrar dentro de "${key || '(sem nome)'}"...`}
+                            className="w-full max-w-xs bg-surface-container border border-outline-variant rounded px-2.5 py-1.5 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                          />
+                        </div>
+                      )}
                       <table className="text-base w-full">
                         <thead className="bg-surface-container-highest/60">
                           <tr>
@@ -624,15 +693,25 @@ export default function ParametrosEstruturaPage() {
                         <tbody>
                           {indices.length === 0 ? (
                             <tr>
-                              <td colSpan={3} className="px-3 py-3 text-sm text-outline italic">Nenhum código neste grupo ainda.</td>
+                              <td colSpan={3} className="px-3 py-3 text-sm text-outline italic">
+                                {groupFilter ? 'Nenhum código combina com o filtro.' : 'Nenhum código neste grupo ainda.'}
+                              </td>
                             </tr>
-                          ) : indices.map(i => (
-                            <tr key={i} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
+                          ) : indices.map(i => {
+                            const codeLocked = !newIds.has(rows[i]._id)
+                            return (
+                            <tr key={rows[i]._id} className="border-t border-outline-variant/50 odd:bg-surface-container-low">
                               <td className="p-1">
                                 <input
                                   value={rows[i].component_code}
                                   onChange={e => updateCell(i, 'component_code', e.target.value)}
-                                  className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
+                                  readOnly={codeLocked}
+                                  title={codeLocked ? 'Código já salvo — pra corrigir, remova a linha e cadastre de novo' : undefined}
+                                  className={`w-full px-2 py-2 rounded focus:outline-none font-mono text-base ${
+                                    codeLocked
+                                      ? 'bg-transparent text-on-surface-variant cursor-not-allowed'
+                                      : 'bg-transparent text-on-surface hover:bg-surface-container-high focus:bg-surface-container-high'
+                                  }`}
                                 />
                               </td>
                               <td className="p-1">
@@ -652,16 +731,30 @@ export default function ParametrosEstruturaPage() {
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
-                      <div className="px-3 py-2 border-t border-outline-variant/50 bg-surface-container-low">
+                      <div className="px-3 py-2 border-t border-outline-variant/50 bg-surface-container-low flex items-center gap-3 flex-wrap">
                         <button
                           onClick={() => addRowToGroup(key)}
                           className="px-3 py-1.5 bg-primary/10 border border-primary/40 text-primary rounded text-sm font-semibold hover:bg-primary/20 transition-colors whitespace-nowrap"
                         >
                           + Código
                         </button>
+                        {/* Salva a lista inteira (o PUT sempre substitui tudo —
+                            não existe save parcial por grupo no backend), só
+                            posicionado aqui pra não precisar rolar até o fim da
+                            página depois de editar um grupo — pedido explícito
+                            do usuário. */}
+                        <button
+                          onClick={handleSave}
+                          disabled={saving}
+                          className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          {saving ? 'Salvando…' : 'Salvar'}
+                        </button>
+                        {error && <span className="text-error text-xs">⚠ {error}</span>}
                       </div>
                     </div>
                   )}

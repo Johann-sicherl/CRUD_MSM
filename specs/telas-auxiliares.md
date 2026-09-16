@@ -164,6 +164,52 @@ associados) para um novo código, via rota `clone-architecture` — mesma
 observação sobre `.limit(25000)`/`range()` para evitar o cap do PostgREST em
 buscas grandes.
 
+## Parâmetros de Estrutura — ordem de grupo, filtro por grupo, código travado, Salvar por grupo
+
+Quatro mudanças pedidas explicitamente pelo usuário, na mesma rodada, na
+1ª coluna de `/parametros-estrutura`:
+
+- **Ordem fixa de grupo** — `PROPERTY_FIELD_ORDER` (`parametros-estrutura/page.tsx`):
+  `COLOR, LANGUAGE, MOTOPOLIA_TYPE, CONVEYOR_BELT_LOAD_CAPACITY_KG,
+  PROCESSOR, MEMORY, GRAPHICS_CARD, STORAGE, TUBE_POWER_KV` — os mesmos
+  campos de "Itens de Série" de `standard_equipment_items` (ver
+  `specs/contexto-negocio-inteligencia-produto.md`). Antes a ordem era só
+  alfabética (`localeCompare`); agora `sortGroupKeys` prioriza essa lista
+  fixa (comparação case-insensitive, já que `property_field` é texto livre)
+  e só cai pra alfabética como critério de desempate/fallback pra qualquer
+  grupo fora da lista — nunca ordem de inserção arbitrária. Usada em todo
+  lugar que recalcula `groupOrder` (`computeGroupOrder`, `addGroup`,
+  `renameGroup`), não só na carga inicial.
+- **Filtro dentro de cada grupo** (`groupFilters`, por chave de grupo) —
+  pedido explícito: "dentro de cada grupo, quero poder filtrar o que eu
+  preciso dentro daquele grupo, pra achar as opções". Diferente do filtro
+  global no topo da página (que decide **quais grupos aparecem**) — este só
+  restringe as linhas mostradas dentro de um grupo já aberto, por código ou
+  output. Só aparece quando o grupo tem mais de 5 códigos (grupos pequenos
+  não precisam de filtro pra serem navegáveis).
+- **Código trava depois de salvo** — pedido explícito: "quando eu realizo
+  um cadastro, não quero ter a capacidade de editar o código do cadastro,
+  se estiver errado, tenho que apagar a linha e escrever a regra de novo".
+  Cada linha carregada do servidor ganha um `_id` interno (nunca enviado
+  pro backend); `newIds` (`Set<string>`) marca só as linhas **ainda não
+  salvas** (adicionadas nesta sessão via "+ Código"/"+ Novo Grupo") — só
+  essas têm o campo "Código Acessório Protheus" editável (`readOnly`
+  quando fora de `newIds`, com `title` explicando o motivo). Depois de
+  qualquer save bem-sucedido, `newIds` é zerado (tudo que acabou de ser
+  gravado passa a estar travado). O campo Output continua sempre editável
+  — só o código (a chave de identidade da linha) trava, mesma lógica de
+  "nunca casar/reescrever pela identidade, só pela chave de negócio já
+  fixada" já usada no resto do app.
+- **Botão Salvar por grupo** — pedido explícito: "hoje tem apenas um único
+  botão no final da página". Adicionado um botão "Salvar" no rodapé de
+  cada grupo (ao lado de "+ Código"), pra não precisar rolar até o fim da
+  página depois de editar um grupo no topo. **Não é save parcial** — a
+  rota `PUT /api/structure-property-rules` sempre substitui a lista
+  inteira (mesmo `handleSave` de antes) — o botão por grupo é só
+  conveniência de posição, salva tudo igual ao botão do rodapé da página
+  (mantido, ainda útil pra quando várias mudanças em grupos diferentes
+  foram feitas antes de salvar).
+
 ## Acessórios ignorados — `ignoredAccessories.ts`
 
 A busca recursiva 26.xx/27.13 de Busc. Avanç. Acessórios Protheus está
