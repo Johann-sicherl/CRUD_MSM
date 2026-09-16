@@ -221,6 +221,16 @@ mudança — ainda são necessários pra calcular `qtdTotal` de um item de
 nível 3 (multiplicador do nível 2 pai) mesmo que linhas de nível 2 quase
 sempre caiam em categoria excluída e nunca apareçam na lista.
 
+**Hover no checkbox "Ignorar" evidencia a linha inteira** — pedido explícito
+do usuário: "preciso ler o que eu estou ignorando, seja somente um leve
+evidência de linha, nada estravagante". `hoveredIgnoreKey` (estado no
+componente da página, chave `${codigo}-${i}`) é setado nos handlers
+`onMouseEnter`/`onMouseLeave` do `<td>` que envolve o `IgnoreCheckbox` —
+enquanto o mouse está sobre o checkbox daquela linha, o `<tr>` ganha
+`bg-surface-container-high` (leve, mesmo tom neutro já usado em hover de
+outras listas do app, não uma cor nova). Só a linha correspondente fica em
+evidência, nunca a tabela inteira nem um destaque chamativo.
+
 **Filtro "Categoria:" removido, mesma rodada** — consequência direta do
 item acima: com `EXCLUDED_CATEGORIES` em vigor, toda linha exibida é
 sempre `ACESSÓRIO` (a única categoria que sobrevive ao filtro), então o

@@ -287,6 +287,11 @@ export default function BuscaAvancadaAcessoriosPage() {
   // explícito do usuário. Reseta a cada nova busca, mesmo tratamento de
   // equipFilter/advancedFilter abaixo.
   const [showOnlyMissing, setShowOnlyMissing] = useState(false)
+  // Passar o mouse em cima do checkbox "Ignorar" evidencia a linha inteira
+  // (leve, sem exagero) — pedido explícito do usuário: "preciso ler o que
+  // eu estou ignorando". Só a linha correspondente à chave em hover, nunca
+  // a tabela inteira.
+  const [hoveredIgnoreKey, setHoveredIgnoreKey] = useState<string | null>(null)
 
   const hydrated = useRef(false)
 
@@ -834,8 +839,12 @@ export default function BuscaAvancadaAcessoriosPage() {
                       <tbody>
                         {items.map((item, i) => {
                           const isMatch = hasActiveAdvancedFilter && matchesAdvancedFilter(item.codigo, item.denominacao, advancedCodeFilter, advancedDescSearch)
+                          const rowKey = `${item.codigo}-${i}`
                           return (
-                          <tr key={`${item.codigo}-${i}`} className={`border-t border-outline-variant/50 ${isMatch ? 'bg-primary/10' : ''}`}>
+                          <tr
+                            key={rowKey}
+                            className={`border-t border-outline-variant/50 transition-colors ${isMatch ? 'bg-primary/10' : ''} ${hoveredIgnoreKey === rowKey ? 'bg-surface-container-high' : ''}`}
+                          >
                             <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">{item.codigo}</td>
                             <td className="px-3 py-2 text-on-surface">{item.denominacao || '—'}</td>
                             <td className="px-3 py-2 text-on-surface">{item.qtdTotal}</td>
@@ -851,7 +860,11 @@ export default function BuscaAvancadaAcessoriosPage() {
                                 onAdd={openAddModal}
                               />
                             </td>
-                            <td className="px-3 py-2 text-center">
+                            <td
+                              className="px-3 py-2 text-center"
+                              onMouseEnter={() => setHoveredIgnoreKey(rowKey)}
+                              onMouseLeave={() => setHoveredIgnoreKey(prev => (prev === rowKey ? null : prev))}
+                            >
                               <IgnoreCheckbox onIgnore={() => markIgnored(item.codigo, item.denominacao)} />
                             </td>
                           </tr>
