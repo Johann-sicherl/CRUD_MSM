@@ -125,7 +125,21 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
               // nomes das janelas, e ao expandir um grupo as janelas dele
               // ficavam coladas nas do grupo vizinho (mesma cor de fundo,
               // sem nada separando um bloco do outro).
-              <div key={group} className="rounded-lg border border-outline-variant bg-surface-container/40 overflow-hidden">
+              //
+              // shrink-0 é obrigatório aqui — 3ª causa real do bug de
+              // scroll do <nav> (as duas primeiras, min-h-0 no <nav> e
+              // h-screen no <aside>, não bastaram sozinhas). Esta caixa tem
+              // overflow-hidden (pros cantos arredondados) e é filha de um
+              // <nav> que também é flex column — por spec do CSS flexbox,
+              // um item com overflow != visible tem "automatic minimum
+              // size" 0, então sem shrink-0 o navegador prefere ENCOLHER
+              // cada caixa de grupo (clipando o conteúdo por baixo do
+              // overflow-hidden) em vez de deixar o <nav> pai realmente
+              // estourar e mostrar a barra de rolagem — resultado: com
+              // muitos grupos expandidos, as janelas do meio/fim de cada
+              // grupo sumiam silenciosamente (clipadas), sem nunca haver
+              // overflow real, nem scrollbar nenhuma pra rolar até elas.
+              <div key={group} className="shrink-0 rounded-lg border border-outline-variant bg-surface-container/40 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => toggleGroupCollapsed(group)}
@@ -185,7 +199,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           })}
 
           {appUser.isAdmin && (
-            <div className="rounded-lg border border-outline-variant bg-surface-container/40 overflow-hidden">
+            <div className="shrink-0 rounded-lg border border-outline-variant bg-surface-container/40 overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleGroupCollapsed('Administração')}

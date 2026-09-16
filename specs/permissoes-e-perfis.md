@@ -295,6 +295,39 @@ depender de resolução de porcentagem/cadeia de ancestrais) — junto com o
 `min-h-0` do `<nav>`, agora o `<aside>` sempre trava em 100vh de verdade e
 o `<nav>` sempre tem uma altura real pra rolar dentro.
 
+**3ª rodada — as duas rodadas acima não resolveram: usuário reportou "não
+está funcionando, nem estou vendo ela" (a barra de rolagem)**. Causa real,
+achada reproduzindo o layout isoladamente fora do app (HTML/CSS mínimo
+replicando exatamente as classes do `<nav>`/caixa de grupo, sem precisar
+logar na aplicação): cada caixa de grupo (`<div ... overflow-hidden>`, ver
+"Caixa própria por grupo" abaixo) é **filha de um `<nav>` que também é
+flex column** (`flex flex-col gap-3`) — ou seja, o `<nav>` não é só um item
+flex do `<aside>`, ele também é um **container** flex pros seus próprios
+filhos (as caixas de grupo). Por especificação do CSS flexbox, um item flex
+cujo `overflow` não é `visible` tem "automatic minimum size" igual a
+**zero** — sem um `flex-shrink: 0` explícito, o navegador prefere
+**encolher cada caixa de grupo** (silenciosamente, clipando o conteúdo por
+baixo do próprio `overflow-hidden` da caixa) até caber no espaço
+disponível, em vez de deixar a altura total dos filhos ultrapassar a altura
+do `<nav>` e disparar o `overflow-y-auto` dele. Resultado: com muitos
+grupos expandidos ao mesmo tempo, as janelas do meio/fim de cada grupo
+simplesmente **desapareciam** (compactadas/clipadas) — nunca havia overflow
+de verdade no `<nav>`, então nunca havia barra de rolagem pra rolar até
+elas. Reproduzido e confirmado isoladamente: um teste HTML/CSS mínimo com
+o mesmo layout mediu `nav.scrollHeight === nav.clientHeight` (nenhum
+overflow detectado) mesmo com o dobro do conteúdo necessário pra estourar
+a área visível; adicionando `flex-shrink: 0` às caixas de grupo, o mesmo
+teste passou a medir `scrollHeight` corretamente maior que `clientHeight`
+(overflow real, scrollbar funcional). Corrigido com `shrink-0` na caixa de
+cada grupo (`byGroup.map` e o bloco "Administração") — `min-h-0` no
+`<nav>` e `h-screen` no `<aside>` continuam necessários (protegem contra as
+duas causas anteriores), mas não eram suficientes sozinhos: qualquer filho
+direto de um container flex-column com `overflow` não-visível (aqui,
+`overflow-hidden` pelos cantos arredondados da caixa) precisa de
+`flex-shrink: 0` se ele não pode ser comprimido — regra a replicar em
+qualquer nova lista rolável desta Sidebar que tenha uma caixa/cartão com
+`overflow-hidden` como filho direto do container com `overflow-y-auto`.
+
 **Rótulo de grupo com nome longo ("Consulta Banco de Dados") quebrava
 centralizado** — bug real corrigido na mesma rodada: o cabeçalho de grupo é
 um `<button>`, e `<button>` tem `text-align: center` por padrão do
