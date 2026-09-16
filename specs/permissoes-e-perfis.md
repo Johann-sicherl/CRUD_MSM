@@ -240,7 +240,21 @@ perfil (`byGroup.map(g => g.group)`, já filtrado pelos grupos vazios, mais
 `Set` vazio. Calculado a partir de `byGroup` — nunca de `MODULE_GROUPS`
 direto — pra não deixar sobrando em `collapsedGroups` o nome de um grupo
 que nem aparece pra esse perfil (ex.: perfil sem nenhum módulo de
-"Parâmetros" liberado).
+"Parâmetros" liberado). Estilo "slim" (pedido explícito, numa rodada
+seguinte, depois da 1ª versão ter saído com borda cheia/negrito demais
+comparado ao resto da Sidebar): texto 9px, peso normal, borda transparente
+até o hover — mesmo espírito dos botões de tema em `ThemeZoomBar.tsx`.
+
+**Rótulo de grupo com nome longo ("Consulta Banco de Dados") quebrava
+centralizado** — bug real corrigido na mesma rodada: o cabeçalho de grupo é
+um `<button>`, e `<button>` tem `text-align: center` por padrão do
+navegador; o `<span>{group}</span>` interno herdava isso sem override.
+Grupos com rótulo curto (cabe numa linha só) nunca mostravam o problema,
+mas "Consulta Banco de Dados" é longo o bastante pra quebrar em duas
+linhas dentro da largura da Sidebar — e as duas apareciam centralizadas em
+vez de alinhadas à esquerda como o resto. Corrigido com `text-left`
+explícito no `<span>` (nos dois cabeçalhos de grupo, incluindo
+"Administração").
 
 **Rótulo do cabeçalho de grupo mais visível no tema Ciberpunk**: pedido
 explícito do usuário — a letra do nome do grupo (GERAL, ENGENHARIA,

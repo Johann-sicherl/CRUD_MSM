@@ -103,19 +103,22 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3">
-          {/* Colapsar tudo / Expandir tudo — pedido explícito do usuário */}
-          <div className="flex items-center gap-2 px-4 mb-2">
+          {/* Colapsar tudo / Expandir tudo — pedido explícito do usuário.
+              Padrão "slim" da aplicação (mesmo espírito dos botões de tema
+              em ThemeZoomBar.tsx): texto pequeno, borda transparente até o
+              hover, nada de bloco cheio/negrito chamando atenção. */}
+          <div className="flex items-center gap-1.5 px-4 mb-2">
             <button
               type="button"
               onClick={collapseAllGroups}
-              className="flex-1 px-2 py-1 rounded border border-outline-variant text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide hover:border-primary/50 hover:text-primary transition-colors"
+              className="flex-1 px-2 py-1 rounded border border-transparent text-[9px] font-medium text-outline uppercase tracking-wide hover:border-outline-variant hover:text-primary hover:bg-surface-container transition-colors"
             >
               Colapsar tudo
             </button>
             <button
               type="button"
               onClick={expandAllGroups}
-              className="flex-1 px-2 py-1 rounded border border-outline-variant text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide hover:border-primary/50 hover:text-primary transition-colors"
+              className="flex-1 px-2 py-1 rounded border border-transparent text-[9px] font-medium text-outline uppercase tracking-wide hover:border-outline-variant hover:text-primary hover:bg-surface-container transition-colors"
             >
               Expandir tudo
             </button>
@@ -130,7 +133,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   onClick={() => toggleGroupCollapsed(group)}
                   className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
                 >
-                  <span>{group}</span>
+                  <span className="text-left">{group}</span>
                   <GroupChevron collapsed={isCollapsed} />
                 </button>
                 {!isCollapsed && (
@@ -188,7 +191,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                 onClick={() => toggleGroupCollapsed('Administração')}
                 className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
               >
-                <span>Administração</span>
+                <span className="text-left">Administração</span>
                 <GroupChevron collapsed={collapsedGroups.has('Administração')} />
               </button>
               {!collapsedGroups.has('Administração') && (
