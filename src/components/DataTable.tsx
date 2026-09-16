@@ -211,9 +211,14 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // Configuração de Usuários — em nenhum outro. Perfil admin não tem
   // restrição nenhuma, exatamente como Engenharia do Produto sempre teve.
   const { user: appUser } = useAppAuth()
-  const canCreateDelete = appUser.isAdmin || appUser.canCreateDelete
+  // readOnlyCheckMode (perfil Analista de Dados): somente leitura em TODA
+  // tabela, sempre — sobrepõe canCreateDelete/editableFieldsByTable mesmo
+  // que estejam configurados de outro jeito em Configuração de Usuários,
+  // pedido explícito do usuário ("não poderá fazer nenhuma alteração,
+  // nenhum insert, delete e nem update"). Ver specs/permissoes-e-perfis.md.
+  const canCreateDelete = !appUser.readOnlyCheckMode && (appUser.isAdmin || appUser.canCreateDelete)
   const restrictedFieldNames = useMemo(
-    () => appUser.isAdmin ? undefined : new Set(appUser.editableFieldsByTable[tableName] ?? []),
+    () => appUser.readOnlyCheckMode ? new Set<string>() : appUser.isAdmin ? undefined : new Set(appUser.editableFieldsByTable[tableName] ?? []),
     [appUser, tableName]
   )
   // accessories/standard_equipment_items/equipments: "Somente Novos" da
@@ -380,7 +385,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   // por linha (handleSignalCostImputed) continua igual ali, mas o botão em
   // lote não deve aparecer lá.
   const [bulkSignalingImputed, setBulkSignalingImputed] = useState(false)
-  const showBulkCostImputado = tableName === 'accessories' && usesTargetCostPending && !appUser.isAdmin
+  const showBulkCostImputado = !appUser.readOnlyCheckMode && tableName === 'accessories' && usesTargetCostPending && !appUser.isAdmin
   const selectedNovoCodes = useMemo(() => {
     if (!showBulkCostImputado || selectedIds.size === 0 || !pendingTargetCost) return []
     const codes: string[] = []
@@ -481,7 +486,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError('')
-    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), profileId: appUser.id })
     if (search) params.set('search', search)
     const res = await fetch(`/api/${tableName}?${params}`)
     if (!res.ok) {
@@ -492,7 +497,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     const json = await res.json()
     setPageData(json)
     setLoading(false)
-  }, [tableName, page, search])
+  }, [tableName, page, search, appUser.id])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -1001,7 +1006,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           nova) e a tela Atualizador Global (substituição completa); aqui é
           só atualização das colunas de Controladoria/Fiscal/Precificação
           dos códigos já cadastrados, direto na tela da tabela. */}
-      {!appUser.isAdmin && isControllershipTable(schema) && (
+      {!appUser.readOnlyCheckMode && !appUser.isAdmin && isControllershipTable(schema) && (
         <>
           <button
             onClick={() => controladoriaFileInputRef.current?.click()}
@@ -1338,7 +1343,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
                             de fundo OPACO — uma cor com /alpha deixa o texto das outras colunas
                             transparecer por baixo, dando a impressão de texto sobreposto/fantasma. */}
                         <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 transition-colors border-l border-outline-variant/40 z-10 ${isSelected ? 'bg-primary-container group-hover:bg-primary-container' : pendingKind === 'em_alteracao' ? 'bg-blue-950 group-hover:bg-blue-900' : isNewRow ? 'bg-amber-950 group-hover:bg-amber-900' : 'bg-surface-container group-hover:bg-surface-container-high'}`}>
-                          {usesTargetCostPending && pendingKeyFieldName && !appUser.isAdmin && pendingKind === 'novo' && (
+                          {!appUser.readOnlyCheckMode && usesTargetCostPending && pendingKeyFieldName && !appUser.isAdmin && pendingKind === 'novo' && (
                             <button
                               onClick={() => handleSignalCostImputed(String(row[pendingKeyFieldName] ?? ''))}
                               disabled={signalingCode === String(row[pendingKeyFieldName] ?? '').trim().toUpperCase()}

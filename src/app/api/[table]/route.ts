@@ -4,6 +4,8 @@ import { tables, getSearchableFields, isRealColumnField } from '@/lib/schema'
 import { recordInsertAudit } from '@/lib/sqlAudit'
 import { protectLocalCostsOnInsert } from '@/lib/localCostGuard'
 import { syncPendingTargetCostOnWrite } from '@/lib/pendingTargetCostGuard'
+import { getProfileById } from '@/lib/userProfileStore'
+import { isDoubleCheckTable } from '@/lib/queryDoubleCheck'
 
 type RouteParams = { params: { table: string } }
 
@@ -22,8 +24,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const orderColumn = orderParts[0]
   const ascending = orderParts[1]?.toUpperCase() !== 'DESC'
 
+  // Perfil "Analista de Dados" (readOnlyCheckMode): lê a cópia _check em vez
+  // da tabela real, pra qualquer uma das 9 tabelas que têm essa cópia (ver
+  // msm_query_double_check.sql). profileId é opcional aqui — sem ele (ou
+  // pra qualquer outro perfil), comportamento inalterado, sempre a tabela
+  // real. Nunca confia num profileId sozinho pra decidir isso: sempre
+  // resolve o perfil de verdade no servidor via getProfileById.
+  const profileId = searchParams.get('profileId') || ''
+  let sourceTable = table
+  if (profileId && isDoubleCheckTable(table)) {
+    const profile = await getProfileById(profileId)
+    if (profile?.readOnlyCheckMode) sourceTable = `${table}_check`
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query: any = supabaseAdmin.from(table).select('*', { count: 'exact' })
+  let query: any = supabaseAdmin.from(sourceTable).select('*', { count: 'exact' })
 
   if (search) {
     const fields = getSearchableFields(table)

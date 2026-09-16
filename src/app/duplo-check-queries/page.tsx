@@ -53,11 +53,16 @@ function Badge({ tone, children }: { tone: 'error' | 'amber' | 'outline' | 'succ
 export default function DuploCheckQueriesPage() {
   const { user: appUser } = useAppAuth()
 
-  if (!appUser.isAdmin) {
+  // Até esta sessão era admin-only — agora é um módulo normal
+  // (visibleModules), liberável por perfil em Configuração de Usuários
+  // (ex.: Analista de Dados). Nunca toca dado real (só as cópias _check),
+  // por isso é seguro liberar em lote pra qualquer perfil com o módulo
+  // ligado, sem exigir isAdmin.
+  if (!appUser.isAdmin && !appUser.visibleModules.includes('duplo-check-queries')) {
     return (
       <div className="p-8">
         <div className="bg-error-container/20 border border-error/30 text-error rounded-lg px-5 py-4 text-sm">
-          Acesso restrito a administradores.
+          Acesso restrito — este módulo não está liberado pro seu perfil.
         </div>
       </div>
     )

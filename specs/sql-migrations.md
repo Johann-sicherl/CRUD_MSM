@@ -16,6 +16,9 @@ dono do projeto. Convenção dos arquivos "oficiais" (com banner de cabeçalho
 | `msm_replace_protheus_code.sql` | RPC `replace_protheus_code` — substituição atômica de revisão de componente (ver `specs/pdm-protheus-integracao.md`). |
 | `msm_csv_baseline_snapshots.sql` | Tabela de snapshot pré-import, para a comparação "CSV novo vs. banco atual" (ver `specs/csv-baseline-comparacao.md`). |
 | `msm_cleanup_backup_tables.sql` | Limpeza única de tabelas `*_backup_*` criadas por uma versão antiga (já descontinuada) do Atualizador Global, que renomeava a tabela real em vez de fazer DELETE+INSERT atômico. |
+| `msm_add_connection_permissions.sql` | Colunas `can_connect_pdm`/`can_connect_protheus` em `user_profiles` — permissão por perfil pra conectar ao PDM/Protheus (ver `specs/permissoes-e-perfis.md`). |
+| `msm_query_double_check.sql` | Tabelas `_check`, RLS e a RPC `run_query_double_check` do módulo Double-check de Queries (ver `specs/double-check-queries.md`). |
+| `msm_add_read_only_check_mode.sql` | Coluna `read_only_check_mode` em `user_profiles` — perfil somente-leitura restrito às cópias `_check` (perfil "Analista de Dados", ver `specs/permissoes-e-perfis.md`). |
 
 ## Exceções à convenção — sem banner, scripts pontuais
 

@@ -25,6 +25,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
   if (typeof body?.canConnectPdm === 'boolean') patch.canConnectPdm = body.canConnectPdm
   if (typeof body?.canConnectProtheus === 'boolean') patch.canConnectProtheus = body.canConnectProtheus
+  if (typeof body?.readOnlyCheckMode === 'boolean') patch.readOnlyCheckMode = body.readOnlyCheckMode
   if (typeof body?.password === 'string' && body.password.trim()) patch.password = body.password.trim()
 
   try {

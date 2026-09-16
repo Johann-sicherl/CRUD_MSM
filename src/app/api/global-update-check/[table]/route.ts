@@ -30,8 +30,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const body = await request.json()
   const profile = await getProfileById(String(body?.profileId ?? ''))
-  if (!profile || !profile.isAdmin) {
-    return NextResponse.json({ error: 'Acesso restrito a administradores' }, { status: 403 })
+  // Double-check de Queries virou módulo normal (ver modules.ts) — admin
+  // sempre, ou qualquer perfil com o módulo liberado em visibleModules
+  // (ex.: Analista de Dados). Nunca toca dado real, só _check, então é
+  // seguro liberar em lote sem exigir isAdmin.
+  if (!profile || (!profile.isAdmin && !profile.visibleModules.includes('duplo-check-queries'))) {
+    return NextResponse.json({ error: 'Acesso restrito — módulo Double-check de Queries não liberado' }, { status: 403 })
   }
 
   const rows: Record<string, unknown>[] = Array.isArray(body.rows) ? body.rows : []

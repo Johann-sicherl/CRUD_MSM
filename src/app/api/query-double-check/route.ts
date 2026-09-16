@@ -27,8 +27,10 @@ interface StatementResult {
 export async function POST(request: NextRequest) {
   const body = await request.json()
   const profile = await getProfileById(String(body?.profileId ?? ''))
-  if (!profile || !profile.isAdmin) {
-    return NextResponse.json({ error: 'Acesso restrito a administradores' }, { status: 403 })
+  // Mesmo critério de global-update-check/[table]/route.ts — módulo normal
+  // agora, admin ou visibleModules.includes('duplo-check-queries').
+  if (!profile || (!profile.isAdmin && !profile.visibleModules.includes('duplo-check-queries'))) {
+    return NextResponse.json({ error: 'Acesso restrito — módulo Double-check de Queries não liberado' }, { status: 403 })
   }
 
   const statements: string[] = Array.isArray(body?.statements) ? body.statements : []

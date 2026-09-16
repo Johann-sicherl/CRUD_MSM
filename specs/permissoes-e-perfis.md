@@ -107,6 +107,63 @@ conectado (`analisador-estruturas`, `busca-avancada-acessorios`,
 são gated normalmente por `visibleModules`; sem `creds`, elas simplesmente
 mostram "conecte ao Protheus" e não fazem nada, igual a hoje.
 
+## Perfil somente leitura — dados CHECK (`readOnlyCheckMode`)
+
+Pedido explícito do usuário ao criar um perfil chamado exatamente "Analista
+de Dados": "este usuário será para eu analisar somente o banco de dados
+CHECK que criamos... ele não poderá fazer nenhuma alteração, e nenhuma
+insert, delete e nem UPDATE. Ele só visualizará ou exportará dados de
+todas as janelas que já permiti em Configuração de Usuários."
+
+Implementado como uma nova coluna booleana genérica em `user_profiles`
+(`read_only_check_mode`, `msm_add_read_only_check_mode.sql`, mesmo padrão
+de `can_connect_pdm`/`can_connect_protheus`) — **não hardcoded pro nome
+"Analista de Dados"**, qualquer perfil pode ligar esse toggle em
+Configuração de Usuários. Dois efeitos, os dois amarrados só a essa coluna:
+
+1. **Leitura vira CHECK, não produção** — `GET /api/[table]` (usado por
+   `DataTable.fetchData`) passa a receber `profileId` como query param
+   sempre (`fetchData`, `DataTable.tsx`). Se o perfil resolvido no servidor
+   (`getProfileById`, nunca confia num profileId sozinho) tem
+   `readOnlyCheckMode` **e** a tabela é uma das 9 com cópia `_check`
+   (`isDoubleCheckTable`, `queryDoubleCheck.ts`), a query passa a ler
+   `<tabela>_check` em vez de `<tabela>`. Fora dessas 9 tabelas (telas sem
+   cópia `_check` — dashboard, consultas Protheus etc.), a leitura continua
+   normal — o escopo desse perfil não vai além do que o Double-check de
+   Queries já cobre. `GET /api/[table]/[id]` (registro único) não foi
+   tocado — não é usado por nenhum lugar do client hoje (RecordModal edita
+   a partir da linha já carregada na lista).
+2. **Escrita bloqueada em toda tabela, sempre** — em `DataTable.tsx`,
+   `readOnlyCheckMode` sobrepõe `canCreateDelete`/`editableFieldsByTable`
+   (mesmo que estejam configurados de outro jeito): `canCreateDelete` vira
+   sempre `false` (esconde "+Novo Registro"/"Importar Excel", excluir em
+   massa, alterar selecionados, excluir por linha), `restrictedFieldNames`
+   vira sempre um `Set` vazio (todo campo do `RecordModal` renderiza
+   desabilitado, "Editar" abre só-leitura), e os três outros gatilhos de
+   escrita achados numa varredura da tela (botão "↑ Importar Custos" da
+   Controladoria, "✓ Custo Imputado" em lote e por linha) também ficam
+   escondidos. **Escopo desta proteção**: é o mesmo nível de "melhor que
+   nada" já documentado no topo deste arquivo — proteção na UI/rota
+   genérica de tabela, não uma reescrita de todo o app pra exigir
+   `profileId` em cada POST/PUT/DELETE existente (nenhum outro perfil
+   restrito, como Gerente Adm Comercial, tem esse nível de blindagem
+   também — mesmo padrão de proteção, não um padrão novo só pra este
+   perfil).
+3. **Double-check de Queries agora é módulo liberável** — ver
+   `specs/double-check-queries.md`. Pedido explícito do usuário: o
+   Analista de Dados também precisa poder carregar CSVs novos em `_check`
+   (passo 1) e simular queries (passo 2) — ação permitida mesmo sendo
+   "escrita", porque nunca toca tabela real, só a cópia `_check`.
+
+**O que o admin ainda precisa configurar manualmente** pro perfil
+"Analista de Dados" (não automatizado, é responsabilidade da tela
+Configuração de Usuários, como qualquer perfil novo): marcar
+`readOnlyCheckMode`, liberar `duplo-check-queries` + as tabelas de
+catálogo/regras relevantes em `visibleModules`. `canCreateDelete`/
+`editableFieldsByTable` podem ficar como estiverem — `readOnlyCheckMode`
+já garante somente-leitura independente deles, mas por clareza o padrão
+recomendado é deixá-los nos valores padrão (`false`/vazio) mesmo assim.
+
 ## Controladoria/Fiscal/Precificação (perfil Gerente Adm Comercial)
 
 Ver `specs/dados-e-schema.md` (`isControllershipTable`) e

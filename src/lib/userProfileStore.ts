@@ -22,6 +22,7 @@ export interface UserProfile {
   editableFieldsByTable: Record<string, string[]> // tabela -> nomes de campo editáveis no formulário
   canConnectPdm: boolean                         // pode abrir o pop-up de conexão ao banco do PDM (tela Consulta PDM x Banco MSM) — ver pdmAuthContext.tsx
   canConnectProtheus: boolean                    // pode abrir o pop-up de conexão ao banco do Protheus — ver protheusAuthContext.tsx
+  readOnlyCheckMode: boolean                     // perfil "Analista de Dados": GET nas 9 tabelas de Double-check lê a cópia _check em vez da real, e TODA escrita fica bloqueada na UI (DataTable), sobrepondo canCreateDelete/editableFieldsByTable — ver specs/permissoes-e-perfis.md
 }
 
 interface ProfileRow {
@@ -34,6 +35,7 @@ interface ProfileRow {
   editable_fields_by_table: Record<string, string[]>
   can_connect_pdm: boolean
   can_connect_protheus: boolean
+  read_only_check_mode: boolean
 }
 
 function fromRow(row: ProfileRow): UserProfile {
@@ -46,6 +48,7 @@ function fromRow(row: ProfileRow): UserProfile {
     editableFieldsByTable: row.editable_fields_by_table ?? {},
     canConnectPdm: row.can_connect_pdm,
     canConnectProtheus: row.can_connect_protheus,
+    readOnlyCheckMode: row.read_only_check_mode,
   }
 }
 
@@ -71,6 +74,7 @@ function hardcodedDefaults(): Omit<ProfileRow, 'password'>[] {
       editable_fields_by_table: {},
       can_connect_pdm: true,
       can_connect_protheus: true,
+      read_only_check_mode: false,
     },
     {
       id: 'gerente-adm-comercial',
@@ -96,6 +100,7 @@ function hardcodedDefaults(): Omit<ProfileRow, 'password'>[] {
       // em Configuração de Usuários.
       can_connect_pdm: false,
       can_connect_protheus: true,
+      read_only_check_mode: false,
     },
   ]
 }
@@ -121,6 +126,7 @@ function seedSource(): Omit<ProfileRow, 'password'>[] {
         // mesmos defaults de hardcodedDefaults() pra quem não é admin.
         can_connect_pdm: p.isAdmin,
         can_connect_protheus: true,
+        read_only_check_mode: false,
       }))
     }
   } catch { /* sem arquivo legado — segue com os padrões de sempre */ }
@@ -188,6 +194,7 @@ export async function createProfile(name: string, password: string): Promise<Use
     editable_fields_by_table: {},
     can_connect_pdm: false,
     can_connect_protheus: true,
+    read_only_check_mode: false,
   }
   const { data, error } = await supabaseAdmin.from('user_profiles').insert(row).select().single()
   if (error) throw new Error(error.message)
@@ -216,6 +223,7 @@ export async function updateProfile(
   if (patch.editableFieldsByTable !== undefined) dbPatch.editable_fields_by_table = patch.editableFieldsByTable
   if (patch.canConnectPdm !== undefined) dbPatch.can_connect_pdm = patch.canConnectPdm
   if (patch.canConnectProtheus !== undefined) dbPatch.can_connect_protheus = patch.canConnectProtheus
+  if (patch.readOnlyCheckMode !== undefined) dbPatch.read_only_check_mode = patch.readOnlyCheckMode
   if (patch.password) {
     if (patch.password.length < 4) throw new Error('Senha deve ter pelo menos 4 caracteres')
     dbPatch.password = patch.password

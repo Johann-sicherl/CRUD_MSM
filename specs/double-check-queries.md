@@ -1,11 +1,24 @@
 # Double-check de Queries
 
-Tela `/duplo-check-queries` (admin-only, link hardcoded na Sidebar fora de
-`MODULES`/`visibleModules` — mesmo tratamento de `/configuracao-usuarios`,
-ver `specs/permissoes-e-perfis.md`). Pedido explícito do usuário: testar se
-uma instrução SQL exportada da Auditoria (DELETE/INSERT/UPDATE) vai dar erro
-no banco oficial **antes** de rodá-la de verdade — sem nunca tocar nos dados
+Tela `/duplo-check-queries`. Pedido explícito do usuário: testar se uma
+instrução SQL exportada da Auditoria (DELETE/INSERT/UPDATE) vai dar erro no
+banco oficial **antes** de rodá-la de verdade — sem nunca tocar nos dados
 reais.
+
+**Histórico — deixou de ser admin-only**: até uma sessão posterior, esta
+tela era tratada como `/configuracao-usuarios` (admin-only, link hardcoded
+na Sidebar fora de `MODULES`/`visibleModules`). Pedido explícito do usuário
+ao criar o perfil "Analista de Dados" (ver `specs/permissoes-e-perfis.md`,
+seção "Perfil somente leitura — dados CHECK"): virou módulo normal
+(`duplo-check-queries`, grupo "Sistema" em `modules.ts`, logo abaixo de
+"Desenvolvedor de Queries"), liberável por perfil como qualquer outro —
+"o analista de dados também consegue carregar os csvs novos". Seguro
+liberar sem exigir `isAdmin` porque esta tela **nunca** toca dado real, só
+as cópias `_check` — mesmo critério de acesso nos dois lugares que
+verificam permissão: `duplo-check-queries/page.tsx` (guard client-side) e
+as rotas `global-update-check/[table]`/`query-double-check`
+(`profile.isAdmin || profile.visibleModules.includes('duplo-check-queries')`,
+sempre resolvido no servidor via `getProfileById` — nunca confia no client).
 
 ## Ideia geral
 

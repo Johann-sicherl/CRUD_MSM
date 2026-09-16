@@ -14,6 +14,7 @@ interface UserProfile {
   editableFieldsByTable: Record<string, string[]>
   canConnectPdm: boolean
   canConnectProtheus: boolean
+  readOnlyCheckMode: boolean
 }
 
 export default function ConfiguracaoUsuariosPage() {
@@ -272,6 +273,22 @@ export default function ConfiguracaoUsuariosPage() {
                       className="mt-0.5"
                     />
                     <span>Pode conectar ao banco do Protheus (libera o pop-up de conexão, usado por todas as telas que consultam o Protheus).</span>
+                  </label>
+
+                  <label className="flex items-start gap-2 text-sm text-on-surface cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.readOnlyCheckMode}
+                      onChange={e => setDraft(d => d && { ...d, readOnlyCheckMode: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <strong>Somente leitura — dados CHECK</strong> (perfil Analista de Dados): nas 9
+                      tabelas com cópia <code>_check</code> (ver Double-check de Queries), o perfil vê o
+                      retrato gravado em <code>_check</code> em vez dos dados reais. Bloqueia toda
+                      escrita — inserir, editar, excluir, importar custos, sinalizar custo imputado — em
+                      qualquer tabela, mesmo que os campos acima liberem isso.
+                    </span>
                   </label>
 
                   <section>

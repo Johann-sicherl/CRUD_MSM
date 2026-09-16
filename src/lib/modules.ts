@@ -41,6 +41,14 @@ export const MODULES: ModuleDef[] = [
   ...REGRAS_TABLES.map(([key, s]) => ({ key, label: s.label, href: `/${key}`, group: ENGINEERING_GROUP })),
 
   { key: 'auditoria',                    label: 'Desenvolvedor de Queries',       href: '/auditoria',                    group: 'Sistema' },
+  // Double-check de Queries: até esta sessão era admin-only, link hardcoded
+  // na Sidebar fora de MODULES — pedido explícito do usuário pra virar
+  // módulo normal (liberável por perfil, ex.: Analista de Dados), logo
+  // abaixo de Desenvolvedor de Queries. Ver checagem de permissão própria
+  // em duplo-check-queries/page.tsx e nas rotas
+  // global-update-check/[table]/query-double-check (isAdmin OU módulo
+  // visível — nunca confia só no client).
+  { key: 'duplo-check-queries',          label: 'Double-check de Queries',        href: '/duplo-check-queries',          group: 'Sistema' },
   { key: 'clonagem-estrutural-avancada', label: 'Clonagem Estrut. Avançada',      href: '/clonagem-estrutural-avancada', group: 'Sistema' },
   { key: 'depurador-solic-comercial',    label: 'Depurador Solic. Comercial',     href: '/depurador-solic-comercial',    group: 'Sistema' },
 
