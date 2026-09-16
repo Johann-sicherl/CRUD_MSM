@@ -637,6 +637,50 @@ abaixo) — uma ferramenta própria, sempre acessível, focada só nisso.
   do app que deixam campo obrigatório sem prefill quando não há valor
   certo pra chutar (ex.: `legacy_group_id` no "+ Cadastrar" de acessórios).
 
+**Bug real já corrigido: consulta "extremamente demorada" comparada às
+outras telas de estrutura** — pedido explícito do usuário, achado logo
+depois de publicar a tela. A query ao Protheus em si não era o problema
+(mesma `BomDetailCache` de 30min que Busc. Avanç. Acessórios Protheus já
+usa, e essa tela nunca foi lenta) — eram dois problemas de algoritmo,
+ambos no processamento em memória depois da query:
+
+1. **`buildChildTree` sem memoização** (`protheusDb.ts`) — a subárvore do
+   MESMO código era recalculada do zero toda vez que ele aparecia como
+   NIVEL 3 em outro cabeçalho 26.xx (um acessório comum, tipo um conjunto
+   de CPU, aparece em dezenas de pedidos) — trabalho puramente redundante,
+   já que a subárvore de um código não depende de quem o chamou. Corrigido
+   com um `Map` de memo (`childTreeMemo`) por chamada de
+   `listAccessoryHierarchy`, chave só o código (não os `ancestors` — a
+   subárvore é a mesma independente do caminho que chegou nela, exceto num
+   caso patológico de estrutura cíclica, onde a guarda de `ancestors`
+   continua valendo dentro da primeira computação que descobre o ciclo).
+   Beneficia as duas telas que chamam `listAccessoryHierarchy` — Busc.
+   Avanç. Acessórios Protheus também ficou mais rápida, mesmo já sendo
+   rápida antes.
+2. **Explosão combinatória O(n²) em `computeCooccurrence`** (o gargalo
+   real) — a versão original achatava âncoras (NIVEL 3) + toda a
+   subárvore num único conjunto por pedido e rodava all-pairs O(n²) nele.
+   Nenhuma outra tela do app faz esse tipo de cruzamento O(n²) (Busc.
+   Avanç. Acessórios Protheus só lista, nunca cruza par nenhum) — é por
+   isso que "as outras consultas de estrutura são tão mais rápidas": elas
+   pagam o mesmo custo de ler ESTRUTURAS, mas nenhuma delas eleva esse
+   custo ao quadrado. Um pedido cuja subárvore explode em centenas/
+   milhares de parafusos, cabos e suportes fazia esse n² virar um número
+   absurdo. Corrigido separando `anchors` (NIVEL 3, os itens de verdade
+   escolhidos) de `others` (a subárvore) em `CooccurrenceOrder`
+   (`cooccurrenceAnalysis.ts`) — pares só são gerados âncora×âncora e
+   âncora×profundo, **nunca profundo×profundo**, derrubando a
+   complexidade de O((A+D)²) pra O(A×(A+D)). Como A (itens escolhidos) é
+   tipicamente uma fração pequena de D (subestrutura inteira), a diferença
+   é enorme. Também é mais correto pro negócio: dois parafusos que só
+   existem porque estão dentro do mesmo conjunto não são um "candidato a
+   item dependente" de verdade — isso é só composição de BOM, não uma
+   decisão comercial; o sinal que interessa é "este componente profundo
+   sempre acompanha ESTE item escolhido". `productIntelligence.ts` (R080)
+   foi ajustado pro novo formato de `computeCooccurrence` (`{ anchors }`,
+   sem `others`) — comportamento idêntico a antes, já que R080 nunca usou
+   subárvore.
+
 ### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
 
 **Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de

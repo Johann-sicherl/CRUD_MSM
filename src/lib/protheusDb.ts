@@ -578,13 +578,29 @@ export interface AccessoryHierarchyGroup {
 // explícito do usuário), com guarda de ciclo: um componente que já é
 // ancestral de si mesmo na cadeia atual é ignorado (mesma defesa já usada
 // em explodeBomForExport/calculateBomCost pra estrutura cíclica).
+//
+// `memo` (achado real, pedido explícito do usuário: "a consulta está
+// extremamente demorada") — sem cache, a subárvore do MESMO código era
+// recalculada do zero toda vez que ele aparecia como NIVEL 3 em outro
+// cabeçalho 26.xx (um acessório comum, tipo um conjunto de CPU, aparece
+// em dezenas de pedidos diferentes) — trabalho puramente redundante,
+// porque a subárvore de um código não muda dependendo de quem o chamou
+// (é sempre a mesma estrutura Protheus). Escopo do memo é por chamada de
+// `listAccessoryHierarchy` (um `Map` novo por busca, nunca entre buscas
+// diferentes) — chave só o código, ignorando `ancestors`: correto pra
+// estrutura sem ciclo (o caso normal), e mesmo numa estrutura cíclica
+// patológica a guarda de `ancestors` continua sendo respeitada dentro da
+// primeira computação que descobre o ciclo.
 function buildChildTree(
   byEstrutura: Map<string, BomLine[]>,
   code: string,
   ancestors: Set<string>,
+  memo: Map<string, AccessoryHierarchyChildNode[]>,
 ): AccessoryHierarchyChildNode[] {
+  const cached = memo.get(code)
+  if (cached) return cached
   const lines = byEstrutura.get(code)
-  if (!lines || lines.length === 0) return []
+  if (!lines || lines.length === 0) { memo.set(code, []); return [] }
   const nextAncestors = new Set(ancestors)
   nextAncestors.add(code)
   const out: AccessoryHierarchyChildNode[] = []
@@ -594,9 +610,10 @@ function buildChildTree(
       codigo: line.componente,
       denominacao: line.descComponente,
       qtd: line.quant,
-      filhos: buildChildTree(byEstrutura, line.componente, nextAncestors),
+      filhos: buildChildTree(byEstrutura, line.componente, nextAncestors, memo),
     })
   }
+  memo.set(code, out)
   return out
 }
 
@@ -614,6 +631,10 @@ export async function listAccessoryHierarchy(
   const headers = Array.from(byEstrutura.keys())
     .filter(code => normHeaderPrefixes.some(p => code.toUpperCase().startsWith(p)))
     .sort((a, b) => a.localeCompare(b))
+
+  // Um Map por chamada — nunca reaproveitado entre buscas diferentes (a
+  // BomDetailCache em si já cuida da validade entre buscas, 30min).
+  const childTreeMemo = new Map<string, AccessoryHierarchyChildNode[]>()
 
   const groups: AccessoryHierarchyGroup[] = []
   for (const estrutura of headers) {
@@ -636,7 +657,7 @@ export async function listAccessoryHierarchy(
         if (!nivel3.componente) continue
         rows.push({
           nivel: 3, codigo: nivel3.componente, denominacao: nivel3.descComponente, qtd: nivel3.quant, codPaiDireto: nivel2.componente,
-          filhos: buildChildTree(byEstrutura, nivel3.componente, new Set([estrutura, nivel2.componente, nivel3.componente])),
+          filhos: buildChildTree(byEstrutura, nivel3.componente, new Set([estrutura, nivel2.componente, nivel3.componente]), childTreeMemo),
         })
       }
     }

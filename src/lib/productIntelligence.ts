@@ -653,7 +653,13 @@ regra('R080', 'analogia', ctx => {
   // reusada também pela tela "Pesquisa de Itens Dependentes Avançada"
   // (fora deste motor), pra nunca ter duas implementações da mesma conta
   // que podem divergir com o tempo.
-  const pares = computeCooccurrence(grupos, { minSupport: MIN_COOCCURRENCE_SUPPORT, minConfidence: MIN_COOCCURRENCE_CONFIDENCE })
+  // R080 só olha NIVEL 3 (sem subárvore) — vira sempre `others: []`, então
+  // o comportamento de antes (all-pairs só entre os códigos de nível 3)
+  // continua idêntico.
+  const pares = computeCooccurrence(
+    grupos.map(codes => ({ anchors: codes })),
+    { minSupport: MIN_COOCCURRENCE_SUPPORT, minConfidence: MIN_COOCCURRENCE_CONFIDENCE },
+  )
 
   for (const { codigoA: a, codigoB: b, coOcorrencias: conjuntas, suporteA, suporteB } of pares) {
     if (dependenciasConhecidas.has(`${a}|${b}`) || dependenciasConhecidas.has(`${b}|${a}`)) continue

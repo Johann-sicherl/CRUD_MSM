@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAccessoryHierarchy, type AccessoryHierarchyChildNode } from '@/lib/protheusDb'
-import { computeCooccurrence } from '@/lib/cooccurrenceAnalysis'
+import { computeCooccurrence, type CooccurrenceOrder } from '@/lib/cooccurrenceAnalysis'
 import { supabaseAdmin } from '@/lib/supabase'
 
 // Feeds "Pesquisa de Itens Dependentes Avançada" — mesma coleta de
@@ -17,6 +17,17 @@ import { supabaseAdmin } from '@/lib/supabase'
 // código por pedido inclui TODA a subárvore de cada item — sinal mais
 // rico, "análise geral componente a componente" (pedido explícito do
 // usuário), sem alterar o comportamento já existente de R080.
+//
+// Achado real, pedido explícito do usuário ("a consulta está extremamente
+// demorada, as outras consultas de estrutura são mais rápidas"): os
+// códigos de nível 3 (as âncoras — itens de verdade ofertados) entram em
+// `anchors`, e toda a subárvore deles entra em `others` — nunca os dois
+// juntos num único conjunto achatado pra all-pairs O(n²)
+// (cooccurrenceAnalysis.ts nunca pareia dois códigos de `others` entre
+// si). Ver o comentário de `CooccurrenceOrder` pra a explicação completa
+// de por que isso era o gargalo real (não a query ao Protheus em si — a
+// mesma BomDetailCache/`filhos` que Busc. Avanç. Acessórios Protheus usa,
+// que nunca fica lento porque essa tela nunca cruza par nenhum).
 
 function flattenChildCodes(
   nodes: AccessoryHierarchyChildNode[],
@@ -53,18 +64,19 @@ export async function POST(request: NextRequest) {
     const groups = await listAccessoryHierarchy(headerPrefixes, nivel2Prefixes, { user, password })
 
     const descriptions = new Map<string, string>()
-    const orders: string[][] = []
+    const orders: CooccurrenceOrder[] = []
     for (const g of groups) {
-      const codes = new Set<string>()
+      const anchors = new Set<string>()
+      const others = new Set<string>()
       for (const row of g.rows) {
         if (row.nivel !== 3) continue
         const code = row.codigo.trim().toUpperCase()
         if (!code) continue
-        codes.add(code)
+        anchors.add(code)
         if (!descriptions.has(code)) descriptions.set(code, row.denominacao)
-        flattenChildCodes(row.filhos ?? [], codes, descriptions)
+        flattenChildCodes(row.filhos ?? [], others, descriptions)
       }
-      orders.push(Array.from(codes))
+      orders.push({ anchors: Array.from(anchors), others: Array.from(others) })
     }
 
     const pairs = computeCooccurrence(orders, { minSupport, minConfidence })
