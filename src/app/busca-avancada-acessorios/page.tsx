@@ -14,12 +14,25 @@ const UNCLASSIFIED_GROUP = 'Não classificado'
 const DEFAULT_HEADER_PREFIXES = '26'
 const DEFAULT_NIVEL2_PREFIXES = '27.13'
 
+interface AccessoryHierarchyChildNode {
+  codigo: string
+  denominacao: string
+  qtd: number
+  filhos: AccessoryHierarchyChildNode[]
+}
+
 interface AccessoryHierarchyRow {
   nivel: 2 | 3
   codigo: string
   denominacao: string
   qtd: number
   codPaiDireto: string
+  // Subárvore (nível 4 em diante) do próprio código deste NIVEL 3 — pedido
+  // explícito do usuário: "aumente a busca para até o último nível", sem
+  // misturar os filhos como linha solta na Lista de acessórios. `?? []`
+  // em todo lugar que lê isto, pra tolerar um resultado salvo no idb por
+  // uma versão anterior desta página (sem este campo) sem quebrar a tela.
+  filhos?: AccessoryHierarchyChildNode[]
 }
 
 interface AccessoryHierarchyGroup {
@@ -70,6 +83,17 @@ function matchesDescriptionSearch(description: string | null | undefined, query:
   return terms.every(t => desc.includes(t))
 }
 
+// Remove (recursivamente, subárvore inteira) qualquer nó marcado como
+// "Ignorar" da árvore de filhos de um item — mesmo comportamento já
+// existente pros itens de nível 3 (somem da lista), estendido aos filhos
+// de nível 4+: se o componente foi marcado como "nunca vou usar", ele não
+// deve continuar aparecendo escondido dentro de uma seta de expandir.
+function filterIgnoredTree(nodes: AccessoryHierarchyChildNode[], ignoredCodes: Set<string>): AccessoryHierarchyChildNode[] {
+  return nodes
+    .filter(n => !ignoredCodes.has(n.codigo.trim().toUpperCase()))
+    .map(n => ({ ...n, filhos: filterIgnoredTree(n.filhos, ignoredCodes) }))
+}
+
 // "Filtro avançado" here is intentionally just these two fields (no item de
 // série columns like em Busc. Itens Série Estrut. — não se aplicam a
 // acessório): Código (multi-seleção exata) e a denominação (busca livre).
@@ -91,6 +115,11 @@ interface FlatItem {
   categoria: AccessoryCategory
   isUps: boolean
   registered: boolean
+  // Subárvore do Protheus (nível 4 em diante) — nunca vira linha própria na
+  // Lista de acessórios, só alimenta a seta de expandir por linha (ver
+  // ChildRows abaixo). Sempre um array (nunca undefined), já normalizado
+  // aqui pra não precisar de `?? []` em todo lugar que a usa depois.
+  filhos: AccessoryHierarchyChildNode[]
 }
 
 function Badge({ tone, children }: { tone: 'error' | 'success' | 'outline' | 'amber'; children: React.ReactNode }) {
@@ -292,6 +321,20 @@ export default function BuscaAvancadaAcessoriosPage() {
   // eu estou ignorando". Só a linha correspondente à chave em hover, nunca
   // a tabela inteira.
   const [hoveredIgnoreKey, setHoveredIgnoreKey] = useState<string | null>(null)
+  // Linhas da árvore de subestrutura (nível 4+) expandidas — pedido
+  // explícito do usuário: itens que têm filhos ganham uma seta, clicar na
+  // linha expande/recolhe. Chave por caminho completo (não só o código),
+  // pra um mesmo código de filho em ramos diferentes ter estado próprio.
+  const [expandedItemKeys, setExpandedItemKeys] = useState<Set<string>>(new Set())
+
+  const toggleItemExpanded = (key: string) => {
+    setExpandedItemKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   const hydrated = useRef(false)
 
@@ -476,6 +519,7 @@ export default function BuscaAvancadaAcessoriosPage() {
       setRawGroups(json.groups || [])
       setHasScanned(true)
       setExpandedGroups(new Set())
+      setExpandedItemKeys(new Set())
       setEquipFilter('')
       setShowOnlyMissing(false)
       setAdvancedCodeFilter([])
@@ -494,6 +538,7 @@ export default function BuscaAvancadaAcessoriosPage() {
     setRawGroups([])
     setHasScanned(false)
     setExpandedGroups(new Set())
+    setExpandedItemKeys(new Set())
     setEquipFilter('')
     setShowOnlyMissing(false)
     setAdvancedCodeFilter([])
@@ -542,6 +587,7 @@ export default function BuscaAvancadaAcessoriosPage() {
           categoria,
           isUps,
           registered: registeredCodes.has(r.codigo.trim().toUpperCase()),
+          filhos: filterIgnoredTree(r.filhos ?? [], ignoredCodes),
         })
       }
     }
@@ -639,6 +685,90 @@ export default function BuscaAvancadaAcessoriosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advancedCodeFilter, advancedDescSearch])
 
+  // Uma linha da árvore de subestrutura (item de nível 3 da Lista de
+  // acessórios, ou qualquer descendente dele) — pedido explícito do
+  // usuário: "aumente a busca para até o último nível... não quero ver
+  // este itens diretamente na lista no meio de todos os outros
+  // componentes... quero que os que tem 'filhos' possuam uma seta... que
+  // ao clicar na linha do item ele expanda, e nessa linha, visível, um
+  // alerta de 'Este componente possui filhos cadastrados'". Recursiva:
+  // cada filho pode ter seus próprios filhos, expandidos com o mesmo
+  // mecanismo, indentados um nível a mais. `key` é o caminho completo
+  // (não só o código) — o mesmo código de filho pode aparecer em ramos
+  // diferentes da árvore, cada um com seu próprio estado de expandido.
+  const renderTreeRow = (
+    node: { codigo: string; denominacao: string; qtd: number; filhos: AccessoryHierarchyChildNode[] },
+    key: string,
+    depth: number,
+    isMatch: boolean,
+  ) => {
+    const { categoria, isUps } = classifyAccessoryRow(node.codigo, node.denominacao)
+    const registered = registeredCodes.has(node.codigo.trim().toUpperCase())
+    const hasChildren = node.filhos.length > 0
+    const isExpanded = expandedItemKeys.has(key)
+    const out = [
+      <tr
+        key={key}
+        onClick={hasChildren ? () => toggleItemExpanded(key) : undefined}
+        className={`border-t border-outline-variant/50 transition-colors ${isMatch ? 'bg-primary/10' : ''} ${hoveredIgnoreKey === key ? 'bg-surface-container-high' : ''} ${hasChildren ? 'cursor-pointer hover:bg-surface-container-high select-none' : ''}`}
+      >
+        <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5" style={{ marginLeft: depth * 18 }}>
+            {depth > 0 && <span className="text-outline font-sans">↳</span>}
+            {hasChildren && (
+              <span
+                className={`text-outline text-[9px] leading-none inline-block transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
+                title={isExpanded ? 'Recolher' : 'Expandir'}
+              >
+                ▾
+              </span>
+            )}
+            {node.codigo}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-on-surface">
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            {node.denominacao || '—'}
+            {hasChildren && (
+              <span
+                title="Este componente possui filhos cadastrados na estrutura Protheus"
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap text-amber-400 border-amber-500/30 bg-amber-500/10"
+              >
+                ⚠ Este componente possui filhos cadastrados
+              </span>
+            )}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-on-surface">{node.qtd}</td>
+        <td className="px-3 py-2 whitespace-nowrap">
+          <span className="text-on-surface-variant font-semibold">{categoria}</span>
+          {isUps && <span className="ml-1.5"><Badge tone="amber">UPS</Badge></span>}
+        </td>
+        <td className="px-3 py-2">
+          <RegistrationBadge registered={registered} codigo={node.codigo} denominacao={node.denominacao} onAdd={openAddModal} />
+        </td>
+        <td
+          className="px-3 py-2 text-center"
+          onClick={e => e.stopPropagation()}
+          onMouseEnter={() => setHoveredIgnoreKey(key)}
+          onMouseLeave={() => setHoveredIgnoreKey(prev => (prev === key ? null : prev))}
+        >
+          <IgnoreCheckbox onIgnore={() => markIgnored(node.codigo, node.denominacao)} />
+        </td>
+      </tr>,
+    ]
+    if (hasChildren && isExpanded) {
+      node.filhos.forEach((child, idx) => {
+        // idx no sufixo da chave — o mesmo código pode aparecer mais de uma
+        // vez entre os filhos diretos de um nó (duas linhas distintas na
+        // ESTRUTURAS pro mesmo par ESTRUTURA/COMPONENTE), mesma cautela já
+        // usada no `${item.codigo}-${i}` da lista original.
+        out.push(...renderTreeRow(child, `${key}>${child.codigo}#${idx}`, depth + 1, false))
+      })
+    }
+    return out
+  }
+
   return (
     <div className="p-8 max-w-[108rem]">
       <div className="mb-6">
@@ -659,6 +789,11 @@ export default function BuscaAvancadaAcessoriosPage() {
           nada some por não estar cadastrado — mas você pode marcar &quot;Ignorar&quot; num componente que sabe
           que nunca vai usar: ele some desta lista (nesta busca e nas próximas) e pode ser revisto/removido em
           {' '}<a href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</a>.
+          A busca também explora, em memória, toda a subestrutura de cada acessório até o último nível — sem
+          misturar esses componentes mais profundos na lista principal: quando um item tem filhos na estrutura
+          Protheus, a própria linha dele ganha uma seta e um aviso (&quot;possui filhos cadastrados&quot;); clicar
+          na linha expande e mostra os filhos logo abaixo, indentados, cada um com o mesmo selo de cadastro no
+          MSM e a mesma seta se ele também tiver filhos.
         </p>
       </div>
 
@@ -837,37 +972,15 @@ export default function BuscaAvancadaAcessoriosPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {items.map((item, i) => {
+                        {items.flatMap(item => {
                           const isMatch = hasActiveAdvancedFilter && matchesAdvancedFilter(item.codigo, item.denominacao, advancedCodeFilter, advancedDescSearch)
-                          const rowKey = `${item.codigo}-${i}`
-                          return (
-                          <tr
-                            key={rowKey}
-                            className={`border-t border-outline-variant/50 transition-colors ${isMatch ? 'bg-primary/10' : ''} ${hoveredIgnoreKey === rowKey ? 'bg-surface-container-high' : ''}`}
-                          >
-                            <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">{item.codigo}</td>
-                            <td className="px-3 py-2 text-on-surface">{item.denominacao || '—'}</td>
-                            <td className="px-3 py-2 text-on-surface">{item.qtdTotal}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <span className="text-on-surface-variant font-semibold">{item.categoria}</span>
-                              {item.isUps && <span className="ml-1.5"><Badge tone="amber">UPS</Badge></span>}
-                            </td>
-                            <td className="px-3 py-2">
-                              <RegistrationBadge
-                                registered={item.registered}
-                                codigo={item.codigo}
-                                denominacao={item.denominacao}
-                                onAdd={openAddModal}
-                              />
-                            </td>
-                            <td
-                              className="px-3 py-2 text-center"
-                              onMouseEnter={() => setHoveredIgnoreKey(rowKey)}
-                              onMouseLeave={() => setHoveredIgnoreKey(prev => (prev === rowKey ? null : prev))}
-                            >
-                              <IgnoreCheckbox onIgnore={() => markIgnored(item.codigo, item.denominacao)} />
-                            </td>
-                          </tr>
+                          // qtd aqui é item.qtdTotal (já multiplicado pelo pai NIVEL 2), não
+                          // item.qtd cru — renderTreeRow trata isso como "a quantidade a
+                          // mostrar nesta linha", que pros filhos (nível 4+) é a própria
+                          // QUANT do BOM (sem multiplicação acumulada, não pedido aqui).
+                          return renderTreeRow(
+                            { codigo: item.codigo, denominacao: item.denominacao, qtd: item.qtdTotal, filhos: item.filhos },
+                            item.codigo, 0, isMatch,
                           )
                         })}
                       </tbody>

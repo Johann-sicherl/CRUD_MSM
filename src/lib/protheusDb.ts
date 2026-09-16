@@ -549,12 +549,55 @@ export interface AccessoryHierarchyRow {
   denominacao: string
   qtd: number
   codPaiDireto: string
+  // Subárvore recursiva (nível 4 em diante) do próprio código deste NIVEL 3
+  // — pedido explícito do usuário: "aumente a busca para até o último
+  // nível" (não parar em NIVEL 3), mas sem misturar esses filhos como
+  // linhas soltas na Lista de acessórios (isso é resolvido no client: a
+  // UI só usa `filhos` para desenhar a seta de expandir por linha, nunca
+  // achata esses nós na listagem principal). Vazio (nunca undefined) para
+  // NIVEL 2 e para NIVEL 3 sem sub-estrutura — computado só a partir do
+  // BomDetailCache já carregado, sem nenhuma query nova ao Protheus.
+  filhos: AccessoryHierarchyChildNode[]
+}
+
+export interface AccessoryHierarchyChildNode {
+  codigo: string
+  denominacao: string
+  qtd: number
+  filhos: AccessoryHierarchyChildNode[]
 }
 
 export interface AccessoryHierarchyGroup {
   estrutura: string
   descEstrutura: string
   rows: AccessoryHierarchyRow[]
+}
+
+// Monta a subárvore de `code` a partir do BomDetailCache já em memória —
+// recursivo, sem limite de profundidade ("até o último nível", pedido
+// explícito do usuário), com guarda de ciclo: um componente que já é
+// ancestral de si mesmo na cadeia atual é ignorado (mesma defesa já usada
+// em explodeBomForExport/calculateBomCost pra estrutura cíclica).
+function buildChildTree(
+  byEstrutura: Map<string, BomLine[]>,
+  code: string,
+  ancestors: Set<string>,
+): AccessoryHierarchyChildNode[] {
+  const lines = byEstrutura.get(code)
+  if (!lines || lines.length === 0) return []
+  const nextAncestors = new Set(ancestors)
+  nextAncestors.add(code)
+  const out: AccessoryHierarchyChildNode[] = []
+  for (const line of lines) {
+    if (!line.componente || nextAncestors.has(line.componente)) continue
+    out.push({
+      codigo: line.componente,
+      denominacao: line.descComponente,
+      qtd: line.quant,
+      filhos: buildChildTree(byEstrutura, line.componente, nextAncestors),
+    })
+  }
+  return out
 }
 
 export async function listAccessoryHierarchy(
@@ -578,7 +621,7 @@ export async function listAccessoryHierarchy(
     const nivel2Lines = byEstrutura.get(estrutura) || []
     for (const nivel2 of nivel2Lines) {
       if (!nivel2.componente) continue
-      rows.push({ nivel: 2, codigo: nivel2.componente, denominacao: nivel2.descComponente, qtd: nivel2.quant, codPaiDireto: estrutura })
+      rows.push({ nivel: 2, codigo: nivel2.componente, denominacao: nivel2.descComponente, qtd: nivel2.quant, codPaiDireto: estrutura, filhos: [] })
 
       // Only descend into NIVEL 3 for a NIVEL 2 node whose own código matches
       // one of nivel2Prefixes (default "27.13", the SubPA branch) — other
@@ -591,7 +634,10 @@ export async function listAccessoryHierarchy(
       const nivel3Lines = byEstrutura.get(nivel2.componente) || []
       for (const nivel3 of nivel3Lines) {
         if (!nivel3.componente) continue
-        rows.push({ nivel: 3, codigo: nivel3.componente, denominacao: nivel3.descComponente, qtd: nivel3.quant, codPaiDireto: nivel2.componente })
+        rows.push({
+          nivel: 3, codigo: nivel3.componente, denominacao: nivel3.descComponente, qtd: nivel3.quant, codPaiDireto: nivel2.componente,
+          filhos: buildChildTree(byEstrutura, nivel3.componente, new Set([estrutura, nivel2.componente, nivel3.componente])),
+        })
       }
     }
     if (rows.length === 0) continue

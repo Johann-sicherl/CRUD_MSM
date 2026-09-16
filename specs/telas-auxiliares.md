@@ -483,6 +483,68 @@ por categoria dentro de `displayedGroups`, os dois resets
 essa, só o filtro) — hoje sempre mostra "ACESSÓRIO", mas fica como
 confirmação visual por linha, não como filtro redundante.
 
+### Busc. Avanç. Acessórios Protheus — busca até o último nível, com árvore expansível por linha
+
+Pedido explícito do usuário: "quero que aumente a busca para até o último
+nível destes itens, e faça a verificação se estes itens estão cadastrados
+também no meu banco de dados, só tem um porém... não quero ver este itens
+diretamente na lista no meio de todos os outros componentes diretos de 26
+e 27.13, quero que os que tem 'filhos' possuam uma seta para baixo com uma
+linha que ao clicar na linha do item ele expanda, e nessa linha, visível,
+um alerta de 'Este componente possui filhos cadastrados'". Antes desta
+mudança, a busca (`listAccessoryHierarchy`) parava em NIVEL 3 (o próprio
+acessório) — o que houvesse abaixo dele na estrutura Protheus nunca era
+consultado nem mostrado.
+
+- **`AccessoryHierarchyRow.filhos`** (`protheusDb.ts`) — cada linha de
+  NIVEL 3 ganhou um campo `filhos: AccessoryHierarchyChildNode[]`
+  (`{ codigo, denominacao, qtd, filhos }`, recursivo) com a subárvore
+  completa do próprio código daquele acessório, até onde a estrutura
+  Protheus for ("até o último nível", sem limite de profundidade fixo).
+  `buildChildTree` monta isso **sem nenhuma query nova ao Protheus** — usa
+  o mesmo `BomDetailCache` (`byEstrutura`) que `listAccessoryHierarchy` já
+  carrega pra montar NIVEL 2/3, com guarda de ciclo (um componente que já é
+  ancestral de si mesmo na cadeia atual é ignorado, mesma defesa já usada
+  em `explodeBomForExport`/`calculateBomCost`). NIVEL 2 sempre grava
+  `filhos: []` (a recursão só faz sentido a partir do próprio acessório,
+  não da categoria estrutural pai).
+- **Nunca vira linha solta na Lista de acessórios** — `flatItems`
+  continua exatamente igual em quantidade/ordem de linhas de topo (só
+  NIVEL 3 categoria "ACESSÓRIO", uma por equipamento, como já era); os
+  `filhos` só viajam junto em cada `FlatItem`, prontos pra alimentar a
+  árvore expansível, nunca achatados como linha própria.
+- **Seta + alerta na própria linha, expande ao clicar em qualquer parte
+  dela** — `renderTreeRow` (`busca-avancada-acessorios/page.tsx`) é
+  recursivo: desenha a linha do item, e se `filhos.length > 0`, adiciona
+  (na mesma célula do Código) uma seta que gira ao expandir/recolher e (na
+  célula de Denominação, na mesma linha, pedido explícito "nessa linha,
+  visível") um selo amber "⚠ Este componente possui filhos cadastrados".
+  A linha inteira é clicável quando tem filhos (`onClick` no `<tr>`, mesmo
+  padrão já usado no cabeçalho de grupo por equipamento logo acima) —
+  célula "Ignorar" faz `stopPropagation` pra não expandir/recolher sem
+  querer ao marcar um componente como indesejado.
+- **Filhos expandidos ganham exatamente o mesmo tratamento dos itens de
+  topo** — Categoria/UPS (`classifyAccessoryRow`, mesma função pura),
+  selo "Cadastrado no MSM"/"+ Cadastrar" (`RegistrationBadge`, mesma
+  checagem contra `accessories`/`standard_equipment_items`) e checkbox
+  "Ignorar" (`markIgnored`) — inclusive recursivamente: um filho de
+  segundo nível que também tenha filhos ganha sua própria seta/alerta,
+  indentada mais um nível (prefixo "↳" + recuo), com estado de
+  expandido/recolhido independente (chave por caminho completo, ex.
+  `27.13.00001>27.02.00042#0`, não só pelo código — o mesmo código de
+  filho pode aparecer em mais de um ramo da árvore).
+- **"Ignorar" também remove a subárvore inteira do componente ignorado**
+  — `filterIgnoredTree` (recursivo) tira qualquer nó marcado como
+  indesejado (e tudo abaixo dele) da árvore de `filhos` antes de chegar em
+  `flatItems`, mesmo comportamento que já existia pros itens de NIVEL 3
+  (somem da lista) — sem isso, um componente marcado como "nunca vou
+  usar" continuaria escondido dentro da seta de expandir de outro item.
+- **Compatibilidade com resultado salvo no IndexedDB** — uma busca salva
+  por uma versão anterior desta página (antes de `filhos` existir) não tem
+  esse campo; todo lugar que lê `r.filhos` faz `?? []`, então um resultado
+  antigo carregado do cache simplesmente mostra os itens sem seta (em vez
+  de quebrar a tela) — a próxima busca nova já vem com a árvore completa.
+
 ### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
 
 **Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de
