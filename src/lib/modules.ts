@@ -1,4 +1,4 @@
-import { tables, DOMAIN_LABELS } from './schema'
+import { tables } from './schema'
 
 // Catálogo único de "módulos" (páginas/tabelas) do app — usado pela Sidebar
 // pra renderizar a navegação e pela Configuração de Usuários pra montar o
@@ -16,6 +16,13 @@ export interface ModuleDef {
 const CATALOGO_TABLES = Object.entries(tables).filter(([, s]) => s.domain === 'catalogo')
 const REGRAS_TABLES = Object.entries(tables).filter(([, s]) => s.domain === 'regras')
 
+// Grupo único da Sidebar para as tabelas de Portifólio + Regras — pedido
+// explícito do usuário: "as janelas que estão em Portifólio e as Janelas de
+// Regras estejam na nova aba chamada Engenharia". Não é o mesmo conceito de
+// DOMAIN_LABELS (que continua distinguindo catalogo/regras nos badges de
+// DataTable/Dashboard) — só a navegação lateral foi fundida.
+const ENGINEERING_GROUP = 'Engenharia'
+
 export const MODULES: ModuleDef[] = [
   { key: 'dashboard',            label: 'Dashboard',                          href: '/',                     group: 'Geral' },
   { key: 'inteligencia-produto', label: 'Inteligência do Produto',            href: '/inteligencia-produto', group: 'Geral' },
@@ -23,10 +30,15 @@ export const MODULES: ModuleDef[] = [
   { key: 'atualizador-global',   label: 'Atualizador Global de Tabelas MSM',  href: '/atualizador-global',   group: 'Geral' },
   { key: 'importar-custos-locais', label: 'Importador de Custos Locais',      href: '/importar-custos-locais', group: 'Geral' },
 
-  ...CATALOGO_TABLES.map(([key, s]) => ({ key, label: s.label, href: `/${key}`, group: DOMAIN_LABELS.catalogo })),
-  { key: 'custos-gerais-vmi',    label: 'Custos Gerais VMI',                  href: '/custos-gerais-vmi',    group: DOMAIN_LABELS.catalogo },
+  // Portifólio (DOMAIN_LABELS.catalogo) e Regras (DOMAIN_LABELS.regras)
+  // continuam duas categorias distintas no schema (badge de domínio em
+  // DataTable/Dashboard, ver DOMAIN_LABELS/DOMAIN_COLORS) — só a navegação
+  // da Sidebar foi unificada num único grupo "Engenharia", pedido explícito
+  // do usuário.
+  ...CATALOGO_TABLES.map(([key, s]) => ({ key, label: s.label, href: `/${key}`, group: ENGINEERING_GROUP })),
+  { key: 'custos-gerais-vmi',    label: 'Custos Gerais VMI',                  href: '/custos-gerais-vmi',    group: ENGINEERING_GROUP },
 
-  ...REGRAS_TABLES.map(([key, s]) => ({ key, label: s.label, href: `/${key}`, group: DOMAIN_LABELS.regras })),
+  ...REGRAS_TABLES.map(([key, s]) => ({ key, label: s.label, href: `/${key}`, group: ENGINEERING_GROUP })),
 
   { key: 'auditoria',                    label: 'Desenvolvedor de Queries',       href: '/auditoria',                    group: 'Sistema' },
   { key: 'clonagem-estrutural-avancada', label: 'Clonagem Estrut. Avançada',      href: '/clonagem-estrutural-avancada', group: 'Sistema' },
@@ -39,6 +51,6 @@ export const MODULES: ModuleDef[] = [
   { key: 'parametros-estrutura',  label: 'Param. Itens de Série e Acessórios', href: '/parametros-estrutura',  group: 'Parâmetros' },
 ]
 
-export const MODULE_GROUPS: string[] = ['Geral', DOMAIN_LABELS.catalogo, DOMAIN_LABELS.regras, 'Sistema', 'Consulta Banco de Dados', 'Parâmetros']
+export const MODULE_GROUPS: string[] = ['Geral', ENGINEERING_GROUP, 'Sistema', 'Consulta Banco de Dados', 'Parâmetros']
 
 export const ALL_MODULE_KEYS: string[] = MODULES.map(m => m.key)

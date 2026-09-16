@@ -123,11 +123,19 @@ a configuração de módulos/campos editáveis em dia na tela de administração
   aparecem **automaticamente** em `MODULES` (via `CATALOGO_TABLES`/
   `REGRAS_TABLES`). Uma página que não é tabela (ex.: `dashboard`,
   `explorador-relacoes`) precisa ser adicionada à mão no array.
-- `MODULE_GROUPS = ['Geral', DOMAIN_LABELS.catalogo, DOMAIN_LABELS.regras,
-  'Sistema', 'Consulta Banco de Dados', 'Parâmetros']` — esta é a taxonomia
-  de navegação da própria Sidebar; **não é** a mesma organização usada para
-  os arquivos `specs/*.md` (que seguem domínio/preocupação arquitetural, não
-  agrupamento de UI).
+- `MODULE_GROUPS = ['Geral', 'Engenharia', 'Sistema', 'Consulta Banco de
+  Dados', 'Parâmetros']` — esta é a taxonomia de navegação da própria
+  Sidebar; **não é** a mesma organização usada para os arquivos `specs/*.md`
+  (que seguem domínio/preocupação arquitetural, não agrupamento de UI).
+  **Histórico**: até esta sessão existiam dois grupos separados,
+  `DOMAIN_LABELS.catalogo` ("Portifólio") e `DOMAIN_LABELS.regras`
+  ("Regras") — pedido explícito do usuário pra fundir os dois numa única
+  aba "Engenharia" na Sidebar. `DOMAIN_LABELS`/`DOMAIN_COLORS` (`schema.ts`)
+  **não mudaram** — continuam distinguindo `catalogo`/`regras` nos badges de
+  domínio de `DataTable.tsx`/Dashboard; só a navegação lateral (`modules.ts`,
+  constante interna `ENGINEERING_GROUP`) foi unificada. Uma tabela nova com
+  `domain: 'catalogo'` ou `domain: 'regras'` continua caindo automaticamente
+  no grupo "Engenharia" da Sidebar, sem precisar editar `modules.ts`.
 
 ### Grupos da Sidebar são colapsáveis, independentes entre si
 
