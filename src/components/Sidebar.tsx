@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -14,6 +14,8 @@ interface Props {
   onPinChange: (pinned: boolean) => void
 }
 
+const SIDEBAR_COLLAPSED_GROUPS_KEY = 'sidebar-collapsed-groups'
+
 export default function Sidebar({ pinned, onPinChange }: Props) {
   const pathname = usePathname()
   const [hovered, setHovered] = useState(false)
@@ -21,6 +23,35 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
   const { creds: protheusCreds, disconnect: disconnectProtheus, openPrompt: openProtheusPrompt } = useProtheusAuth()
   const { creds: pdmCreds, disconnect: disconnectPdm, openPrompt: openPdmPrompt } = usePdmAuth()
   const { user: appUser, logout: appLogout } = useAppAuth()
+
+  // Cada grupo (ex.: GERAL, Sistema, Administração) colapsa/expande de forma
+  // independente ao clicar no cabeçalho — mais de um pode ficar aberto ao
+  // mesmo tempo (pedido explícito do usuário). Persistido em localStorage,
+  // mesmo padrão de 'sidebar-pinned' em ClientLayout.tsx.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SIDEBAR_COLLAPSED_GROUPS_KEY)
+      if (raw) setCollapsedGroups(new Set(JSON.parse(raw)))
+    } catch {
+      // ignora — sem localStorage, todos os grupos começam expandidos
+    }
+  }, [])
+
+  function toggleGroupCollapsed(group: string) {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_GROUPS_KEY, JSON.stringify(Array.from(next)))
+      } catch {
+        // best-effort — falha ao persistir não impede o toggle na tela
+      }
+      return next
+    })
+  }
 
   // Módulos visíveis vêm do perfil (ver Configuração de Usuários). Admin
   // ignora a lista — visibleModules é só um snapshot gravado na criação do
@@ -75,85 +106,106 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3">
-          {byGroup.map(({ group, items }) => (
-            <div key={group} className="mt-5 first:mt-0">
-              <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-                {group}
+          {byGroup.map(({ group, items }) => {
+            const isCollapsed = collapsedGroups.has(group)
+            return (
+              <div key={group} className="mt-5 first:mt-0">
+                <button
+                  type="button"
+                  onClick={() => toggleGroupCollapsed(group)}
+                  className="w-full flex items-center justify-between px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
+                >
+                  <span>{group}</span>
+                  <GroupChevron collapsed={isCollapsed} />
+                </button>
+                {!isCollapsed && (
+                  <>
+                    {items.map(m => {
+                      const isActive = pathname === m.href
+                      return (
+                        <Link
+                          key={m.key}
+                          href={m.href}
+                          // Sem pré-carregar em segundo plano o código de toda tela
+                          // listada aqui assim que o menu aparece — em computador
+                          // de baixa performance isso competia por CPU/rede com o
+                          // que a pessoa realmente estava usando. Cada tela ainda
+                          // carrega normalmente ao ser aberta, só não adianta o
+                          // trabalho de telas que talvez nunca sejam abertas.
+                          prefetch={false}
+                          className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                            isActive
+                              ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                              : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                          }`}
+                        >
+                          <span className="truncate">{m.label}</span>
+                        </Link>
+                      )
+                    })}
+                    {/* Consulta PDM x Banco MSM: fora de MODULES/visibleModules de
+                        propósito (mesmo tratamento de Configuração de Usuários,
+                        abaixo) — só entra pelo canConnectPdm/isAdmin do perfil,
+                        nunca por uma entrada de módulo comum. */}
+                    {group === 'Consulta Banco de Dados' && (appUser.isAdmin || appUser.canConnectPdm) && (
+                      <Link
+                        href="/pdm-consulta-acessorios"
+                        prefetch={false}
+                        className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                          pathname === '/pdm-consulta-acessorios'
+                            ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                            : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                        }`}
+                      >
+                        <span className="truncate">Consulta PDM x Banco MSM</span>
+                      </Link>
+                    )}
+                  </>
+                )}
               </div>
-              {items.map(m => {
-                const isActive = pathname === m.href
-                return (
+            )
+          })}
+
+          {appUser.isAdmin && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => toggleGroupCollapsed('Administração')}
+                className="w-full flex items-center justify-between px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
+              >
+                <span>Administração</span>
+                <GroupChevron collapsed={collapsedGroups.has('Administração')} />
+              </button>
+              {!collapsedGroups.has('Administração') && (
+                <>
                   <Link
-                    key={m.key}
-                    href={m.href}
-                    // Sem pré-carregar em segundo plano o código de toda tela
-                    // listada aqui assim que o menu aparece — em computador
-                    // de baixa performance isso competia por CPU/rede com o
-                    // que a pessoa realmente estava usando. Cada tela ainda
-                    // carrega normalmente ao ser aberta, só não adianta o
-                    // trabalho de telas que talvez nunca sejam abertas.
+                    href="/configuracao-usuarios"
                     prefetch={false}
                     className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                      isActive
+                      pathname === '/configuracao-usuarios'
                         ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
                         : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                     }`}
                   >
-                    <span className="truncate">{m.label}</span>
+                    <span className="truncate">Configuração de Usuários</span>
                   </Link>
-                )
-              })}
-              {/* Consulta PDM x Banco MSM: fora de MODULES/visibleModules de
-                  propósito (mesmo tratamento de Configuração de Usuários,
-                  abaixo) — só entra pelo canConnectPdm/isAdmin do perfil,
-                  nunca por uma entrada de módulo comum. */}
-              {group === 'Consulta Banco de Dados' && (appUser.isAdmin || appUser.canConnectPdm) && (
-                <Link
-                  href="/pdm-consulta-acessorios"
-                  prefetch={false}
-                  className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                    pathname === '/pdm-consulta-acessorios'
-                      ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  <span className="truncate">Consulta PDM x Banco MSM</span>
-                </Link>
+                  {/* Double-check de Queries: fora de MODULES/visibleModules de
+                      propósito, mesmo tratamento de Configuração de Usuários
+                      acima — ferramenta sensível, admin-only sempre, nunca
+                      configurável por perfil. */}
+                  <Link
+                    href="/duplo-check-queries"
+                    prefetch={false}
+                    className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                      pathname === '/duplo-check-queries'
+                        ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                        : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                    }`}
+                  >
+                    <span className="truncate">Double-check de Queries</span>
+                  </Link>
+                </>
               )}
-            </div>
-          ))}
-
-          {appUser.isAdmin && (
-            <div className="mt-5">
-              <div className="px-4 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.15em] font-mono">
-                Administração
-              </div>
-              <Link
-                href="/configuracao-usuarios"
-                prefetch={false}
-                className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                  pathname === '/configuracao-usuarios'
-                    ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                }`}
-              >
-                <span className="truncate">Configuração de Usuários</span>
-              </Link>
-              {/* Double-check de Queries: fora de MODULES/visibleModules de
-                  propósito, mesmo tratamento de Configuração de Usuários
-                  acima — ferramenta sensível, admin-only sempre, nunca
-                  configurável por perfil. */}
-              <Link
-                href="/duplo-check-queries"
-                prefetch={false}
-                className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                  pathname === '/duplo-check-queries'
-                    ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                }`}
-              >
-                <span className="truncate">Double-check de Queries</span>
-              </Link>
             </div>
           )}
         </nav>
@@ -213,6 +265,24 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
         </div>
       </aside>
     </>
+  )
+}
+
+function GroupChevron({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}
+    >
+      <path d="M4 6l4 4 4-4" />
+    </svg>
   )
 }
 

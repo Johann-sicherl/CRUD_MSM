@@ -128,3 +128,26 @@ a configuração de módulos/campos editáveis em dia na tela de administração
   de navegação da própria Sidebar; **não é** a mesma organização usada para
   os arquivos `specs/*.md` (que seguem domínio/preocupação arquitetural, não
   agrupamento de UI).
+
+### Grupos da Sidebar são colapsáveis, independentes entre si
+
+Pedido explícito do usuário: "Está muito moroso navegar pela barra lateral,
+por conta das inúmeras janelas que criamos, quero colapsar as janelas...
+Eu posso deixar aberta mais de uma janela." Cada cabeçalho de grupo (os de
+`byGroup`, derivados de `MODULE_GROUPS`, mais o bloco "Administração"
+admin-only) é um `<button>` clicável com um chevron que gira 90° — clicar
+alterna só aquele grupo (`collapsedGroups: Set<string>`, chave = nome do
+grupo), sem afetar os demais. **Não é accordion**: não existe lógica de
+"fechar os outros ao abrir um" — qualquer combinação de grupos abertos é
+válida.
+
+Persistido em `localStorage` (`sidebar-collapsed-groups`, array JSON dos
+nomes de grupo colapsados), mesmo padrão já usado por `ClientLayout.tsx`
+para `sidebar-pinned` — carregado num `useEffect` no mount, gravado a cada
+toggle. Sem servidor/perfil envolvido: é preferência de navegação local ao
+navegador, não permissão nem dado de negócio.
+
+O link especial "Consulta PDM x Banco MSM" (fora de `MODULES`, ver seção
+acima) é renderizado dentro do bloco do grupo "Consulta Banco de Dados" —
+some junto com o resto do grupo quando colapsado, reaparece junto quando
+expandido, sem estado próprio.
