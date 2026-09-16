@@ -30,8 +30,9 @@ sempre resolvido no servidor via `getProfileById` — nunca confia no client).
    ("Exportar TXTs por tabela/ação") e roda cada instrução, em sequência
    (uma dependendo do efeito da anterior), contra essas cópias `_check`.
    Reporta linha por linha se rodou ok (e quantas linhas afetou) ou deu
-   erro (FK, UNIQUE, chave não encontrada etc.) — e desfaz tudo no final,
-   mesmo que nada tenha dado erro. Nada fica gravado, nunca.
+   erro (UNIQUE, NOT NULL, CHECK, chave não encontrada etc. — **não FK**,
+   ver "Tabelas _check sem foreign key entre si" abaixo) — e desfaz tudo no
+   final, mesmo que nada tenha dado erro. Nada fica gravado, nunca.
 
 ## Escopo de tabelas — lista fechada, não "toda tabela com auditQueries"
 
@@ -51,12 +52,7 @@ uma vez, manualmente, pelo dono do projeto. Ele:
 
 1. Cria as 9 tabelas `_check` via `CREATE TABLE ... (LIKE <tabela>
    INCLUDING ALL)` — copia tipos, defaults, NOT NULL, UNIQUE/PK, CHECK e
-   índices. **`LIKE ... INCLUDING ALL` não copia foreign keys** (limitação
-   conhecida do Postgres, mesmo com `INCLUDING ALL`) — por isso o passo
-   seguinte recria à mão as 7 FKs de `msm_foreign_keys.sql`, mas apontando
-   `_check → _check` em vez de tabela real → tabela real. Isso é
-   deliberado: a simulação precisa validar contra o retrato do dia gravado
-   no passo 1, não contra dado de produção ao vivo.
+   índices (nunca foreign keys, ver seção abaixo).
 2. Ativa RLS em todas as 9 (`ENABLE ROW LEVEL SECURITY`, zero políticas) —
    mesma estratégia de `msm_seguranca.sql`: só `supabaseAdmin` (service_role)
    opera.
@@ -118,25 +114,48 @@ custo nestas queries, pode apenas ignorar no sentinela"** — esta tela só
 precisa saber se as queries rodam, não precisa (e não deve) saber o custo de
 verdade.
 
-## Ordem de import em lote — dependência de FK, não ordem de seleção do arquivo
+## Tabelas `_check` sem foreign key entre si — pedido explícito do usuário
+
+Até uma sessão posterior, `msm_query_double_check.sql` recriava aqui o
+mesmo grafo de FKs de `msm_foreign_keys.sql`, só que `_check → _check` —
+pra a simulação (passo 2) também pegar erro de FK, igual pegaria no banco
+oficial. Removido a pedido explícito do usuário, depois de um erro real ao
+gravar `standard_equipment_items` em `_check` sozinho: `insert or update on
+table "standard_equipment_items_check" violates foreign key constraint
+"fk_sei_equipment_check" — Key (legacy_equipment_id)=(49) is not present in
+table "equipments_check"`. Ele precisa poder gravar/analisar cada tabela
+`_check` de forma independente, exatamente como ela está no CSV oficial
+daquela tabela — sem que gravar uma dependa de outra tabela relacionada já
+ter sido gravada em `_check` antes (ou ter a linha referenciada): "não
+podemos ter isso, porque tenho que ver o banco de dados como ele está, o
+relacionamento deve estar somente no banco de dados original (sem
+_check)". Revertido com `msm_query_double_check_remove_fks.sql` (as 7
+tabelas já existentes) — `msm_query_double_check.sql` também foi corrigido
+pra não recriar essas FKs numa instalação nova.
+
+**Consequência aceita conscientemente**: a simulação (passo 2) não pega
+mais erro de FK — só UNIQUE/NOT NULL/CHECK/"linha não encontrada". Um
+INSERT/UPDATE que violaria uma foreign key no banco oficial pode rodar sem
+erro contra `_check` agora.
+
+## Ordem de import em lote — não é mais necessária, mantida por previsibilidade
 
 `DOUBLE_CHECK_TABLES` é só a whitelist, em ordem alfabética — **não** serve
-para decidir em que ordem gravar as tabelas `_check`. Bug real já
-encontrado: o botão "Gravar N tabela(s) em _check" rodava os arquivos na
-ordem em que o usuário os selecionou no seletor de arquivos do navegador;
-como `standard_equipment_items`/`roller_tables`/`relationship_equip_accessory`/
-`non_combinable_comps` têm FK para `equipments_check`, gravá-las antes de
-`equipments_check` estar populada faz todo INSERT falhar com `violates
-foreign key constraint ... is not present in table equipments_check` — a
-linha pai ainda não existe na cópia `_check` no momento do INSERT do filho.
+para decidir em que ordem gravar as tabelas `_check`. **Histórico**: o
+botão "Gravar N tabela(s) em _check" rodava os arquivos na ordem em que o
+usuário os selecionou no seletor de arquivos do navegador; enquanto as
+tabelas `_check` ainda tinham FK entre si (ver seção acima), gravar uma
+tabela filha antes da tabela pai já causou erro real de FK. Corrigido na
+época com `DOUBLE_CHECK_IMPORT_ORDER` (`src/lib/queryDoubleCheck.ts`) — uma
+ordem topológica explícita (pais `accessory_groups`/`equipments` primeiro),
+usada por `CsvSnapshotSection` (`duplo-check-queries/page.tsx`, `runAll`)
+pra ordenar `readyFiles` antes do `for...of` sequencial.
 
-Corrigido com `DOUBLE_CHECK_IMPORT_ORDER` (`src/lib/queryDoubleCheck.ts`) —
-uma ordem topológica explícita do mesmo grafo de FKs de
-`msm_query_double_check.sql` (pais `accessory_groups`/`equipments` primeiro,
-depois os filhos que os referenciam). `CsvSnapshotSection`
-(`duplo-check-queries/page.tsx`, `runAll`) ordena `readyFiles` por esse
-array antes de rodar o `for...of` sequencial — não importa mais em que
-ordem o usuário selecionou os arquivos no picker.
+Com as FKs removidas (seção acima), essa ordem **deixou de ser necessária**
+pra evitar erro — cada tabela `_check` é gravada de forma independente
+agora. `DOUBLE_CHECK_IMPORT_ORDER` foi mantida mesmo assim, só por
+previsibilidade (pais antes de filhos é uma ordem de leitura mais natural
+pra quem revisa o resultado do lote) — não por necessidade técnica.
 
 ## Reaproveitamento — nada de caminho de escrita paralelo para o import
 
@@ -150,6 +169,10 @@ duplicar a lógica de substituição atômica. Permissão via `getProfileById`
 ## Arquivos
 
 - `msm_query_double_check.sql` — migração manual (ver acima).
+- `msm_query_double_check_remove_fks.sql` — migração manual, só pra quem já
+  rodou a versão antiga de `msm_query_double_check.sql` (com FKs `_check →
+  _check`) — remove as 7 constraints (ver "Tabelas _check sem foreign key
+  entre si" acima).
 - `src/lib/queryDoubleCheck.ts` — `DOUBLE_CHECK_TABLES`/`isDoubleCheckTable`,
   `rewriteStatementForCheck`, `parseSqlStatementsFromText` (um `.txt` da
   Auditoria é uma instrução por linha).

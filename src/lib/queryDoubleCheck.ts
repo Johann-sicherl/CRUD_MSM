@@ -23,16 +23,16 @@ export function isDoubleCheckTable(table: string): table is DoubleCheckTable {
   return DOUBLE_CHECK_TABLE_SET.has(table)
 }
 
-// Ordem de import por dependência de FK (ver msm_query_double_check.sql,
-// passo 2) — pais (equipments/accessory_groups) sempre antes dos filhos que
-// referenciam eles. DOUBLE_CHECK_TABLES acima é só a whitelist (ordem
-// alfabética, não serve pra isso) — rodar o "Gravar em lote" na ordem de
-// seleção do arquivo já causou erro real: standard_equipment_items/
-// roller_tables/relationship_equip_accessory/non_combinable_comps rodaram
-// antes de equipments (o usuário selecionou os arquivos fora de ordem) e
-// todo INSERT deu "violates foreign key constraint ... is not present in
-// table equipments_check", porque a linha pai ainda não existia na cópia
-// _check no momento do INSERT do filho.
+// Histórico: esta ordem existia pra evitar erro de FK ao gravar "Gravar em
+// lote" fora de ordem (standard_equipment_items antes de equipments já deu
+// "violates foreign key constraint ... is not present in table
+// equipments_check"). As tabelas _check deixaram de ter FK entre si (pedido
+// explícito do usuário — ver msm_query_double_check_remove_fks.sql e
+// specs/double-check-queries.md: ele precisa gravar/analisar cada tabela
+// _check de forma independente, sem depender de outra já ter sido
+// gravada), então essa ordem não é mais necessária pra evitar erro — mantida
+// só por previsibilidade (pais antes de filhos continua sendo uma ordem de
+// leitura mais natural pra quem revisa o resultado do lote).
 export const DOUBLE_CHECK_IMPORT_ORDER: DoubleCheckTable[] = [
   'accessory_groups',
   'equipments',
