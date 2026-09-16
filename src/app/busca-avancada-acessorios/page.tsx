@@ -685,17 +685,32 @@ export default function BuscaAvancadaAcessoriosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advancedCodeFilter, advancedDescSearch])
 
+  // Um tom de fundo levemente diferente por nível de profundidade da
+  // cascata — pedido explícito do usuário, mesmo espírito das caixas por
+  // grupo da Sidebar ("trabalho semelhante foi feito no SIDEBAR, em que
+  // separamos por blocos visuais o cascateamento"): só pra separar
+  // visualmente onde um nível termina e o próximo começa, sem precisar
+  // ler a indentação com atenção. Nível 0 (linha de topo da Lista de
+  // acessórios) fica sem tint — só os filhos expandidos (nível 4+) ganham
+  // o bloco de cor, ciclando entre os 3 tons se a estrutura for mais funda
+  // que isso.
+  const DEPTH_TINTS = ['bg-surface-container/40', 'bg-surface-container-high/40', 'bg-surface-container-highest/40']
+
   // Uma linha da árvore de subestrutura (item de nível 3 da Lista de
   // acessórios, ou qualquer descendente dele) — pedido explícito do
   // usuário: "aumente a busca para até o último nível... não quero ver
   // este itens diretamente na lista no meio de todos os outros
   // componentes... quero que os que tem 'filhos' possuam uma seta... que
-  // ao clicar na linha do item ele expanda, e nessa linha, visível, um
-  // alerta de 'Este componente possui filhos cadastrados'". Recursiva:
-  // cada filho pode ter seus próprios filhos, expandidos com o mesmo
-  // mecanismo, indentados um nível a mais. `key` é o caminho completo
-  // (não só o código) — o mesmo código de filho pode aparecer em ramos
-  // diferentes da árvore, cada um com seu próprio estado de expandido.
+  // ao clicar na linha do item ele expanda". A seta à esquerda do código é
+  // a ÚNICA flag de "tem filhos" (pedido explícito, rodada seguinte: o
+  // selo de texto que existia antes foi removido — "é cadastrados no
+  // Banco de Dados de Produção, não o banco de dados do Protheus", e o
+  // texto antigo ("possui filhos cadastrados") dava a entender o
+  // contrário). Recursiva: cada filho pode ter seus próprios filhos,
+  // expandidos com o mesmo mecanismo, indentados um nível a mais. `key` é
+  // o caminho completo (não só o código) — o mesmo código de filho pode
+  // aparecer em ramos diferentes da árvore, cada um com seu próprio
+  // estado de expandido.
   const renderTreeRow = (
     node: { codigo: string; denominacao: string; qtd: number; filhos: AccessoryHierarchyChildNode[] },
     key: string,
@@ -706,11 +721,12 @@ export default function BuscaAvancadaAcessoriosPage() {
     const registered = registeredCodes.has(node.codigo.trim().toUpperCase())
     const hasChildren = node.filhos.length > 0
     const isExpanded = expandedItemKeys.has(key)
+    const tintClass = depth > 0 ? DEPTH_TINTS[(depth - 1) % DEPTH_TINTS.length] : ''
     const out = [
       <tr
         key={key}
         onClick={hasChildren ? () => toggleItemExpanded(key) : undefined}
-        className={`border-t border-outline-variant/50 transition-colors ${isMatch ? 'bg-primary/10' : ''} ${hoveredIgnoreKey === key ? 'bg-surface-container-high' : ''} ${hasChildren ? 'cursor-pointer hover:bg-surface-container-high select-none' : ''}`}
+        className={`border-t border-outline-variant/50 transition-colors ${isMatch ? 'bg-primary/10' : tintClass} ${hoveredIgnoreKey === key ? 'bg-surface-container-high' : ''} ${hasChildren ? 'cursor-pointer hover:bg-surface-container-high select-none' : ''}`}
       >
         <td className="px-3 py-2 font-mono text-primary whitespace-nowrap">
           <span className="inline-flex items-center gap-1.5" style={{ marginLeft: depth * 18 }}>
@@ -718,7 +734,7 @@ export default function BuscaAvancadaAcessoriosPage() {
             {hasChildren && (
               <span
                 className={`text-outline text-[9px] leading-none inline-block transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
-                title={isExpanded ? 'Recolher' : 'Expandir'}
+                title={isExpanded ? 'Recolher — este componente tem filhos na estrutura Protheus' : 'Expandir — este componente tem filhos na estrutura Protheus'}
               >
                 ▾
               </span>
@@ -726,19 +742,7 @@ export default function BuscaAvancadaAcessoriosPage() {
             {node.codigo}
           </span>
         </td>
-        <td className="px-3 py-2 text-on-surface">
-          <span className="inline-flex items-center gap-1.5 flex-wrap">
-            {node.denominacao || '—'}
-            {hasChildren && (
-              <span
-                title="Este componente possui filhos cadastrados na estrutura Protheus"
-                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap text-amber-400 border-amber-500/30 bg-amber-500/10"
-              >
-                ⚠ Este componente possui filhos cadastrados
-              </span>
-            )}
-          </span>
-        </td>
+        <td className="px-3 py-2 text-on-surface">{node.denominacao || '—'}</td>
         <td className="px-3 py-2 text-on-surface">{node.qtd}</td>
         <td className="px-3 py-2 whitespace-nowrap">
           <span className="text-on-surface-variant font-semibold">{categoria}</span>
@@ -791,9 +795,11 @@ export default function BuscaAvancadaAcessoriosPage() {
           {' '}<a href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</a>.
           A busca também explora, em memória, toda a subestrutura de cada acessório até o último nível — sem
           misturar esses componentes mais profundos na lista principal: quando um item tem filhos na estrutura
-          Protheus, a própria linha dele ganha uma seta e um aviso (&quot;possui filhos cadastrados&quot;); clicar
-          na linha expande e mostra os filhos logo abaixo, indentados, cada um com o mesmo selo de cadastro no
-          MSM e a mesma seta se ele também tiver filhos.
+          Protheus, a própria linha dele ganha uma seta à esquerda do código (única flag de &quot;tem filhos&quot;
+          — não indica nada sobre cadastro no banco de dados MSM); clicar na linha expande e mostra os filhos logo
+          abaixo, indentados e em blocos com um tom de fundo levemente diferente por nível (só pra separar
+          visualmente a cascata), cada um com o mesmo selo de cadastro no MSM e a mesma seta se ele também tiver
+          filhos.
         </p>
       </div>
 

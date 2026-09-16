@@ -545,6 +545,34 @@ consultado nem mostrado.
   antigo carregado do cache simplesmente mostra os itens sem seta (em vez
   de quebrar a tela) — a próxima busca nova já vem com a árvore completa.
 
+**2ª rodada, pedido explícito do usuário — o selo de alerta dava a entender
+a coisa errada, e a cascata precisava de separação visual**: "a flag de
+'Este componente possui filhos cadastrados', é cadastrados no Banco de
+Dados de Produção, não o banco de dados do Protheus, a flag que vou usar
+para saber se tem filho ou não, é somente a seta ao lado esquerdo de
+nome... quero que visualmente a cascata seja em blocos com cores
+levemente diferentes... trabalho semelhante foi feito no SIDEBAR".
+
+- **Selo de texto "⚠ Este componente possui filhos cadastrados" removido**
+  — a palavra "cadastrados" dava a entender que os filhos já estavam
+  registrados no banco de dados MSM (produção), quando na real "ter
+  filhos" é só sobre a estrutura Protheus (não tem nada a ver com
+  `RegistrationBadge`/`registeredCodes`, que é o selo real de "Cadastrado
+  no MSM" já existente por linha). A **seta** à esquerda do código
+  continua sendo a única indicação de "este item tem filhos" — nenhuma
+  outra flag nova foi adicionada, só removido o texto que confundia.
+- **Blocos de cor por nível da cascata** — mesmo espírito das caixas por
+  grupo da Sidebar (ver `specs/permissoes-e-perfis.md`, "Caixa própria por
+  grupo"). `DEPTH_TINTS` (`busca-avancada-acessorios/page.tsx`) é uma
+  lista de 3 tons neutros do tema (`bg-surface-container/40` →
+  `-high/40` → `-highest/40`, ciclando se a estrutura for mais funda que
+  isso) aplicada como fundo do `<tr>` conforme a profundidade
+  (`depth > 0`, nível 0 — a própria Lista de acessórios — continua sem
+  tint). É só separação visual (facilita ver onde um nível termina e o
+  próximo começa dentro da cascata expandida); não muda nenhuma lógica de
+  filtro/seleção, e cede espaço pros estados de interação já existentes
+  (`isMatch`/hover) quando algum deles está ativo naquela linha.
+
 ### Pesquisa de Itens Dependentes Avançada (`/pesquisa-itens-dependentes-avancada`)
 
 Tela nova, grupo "Consulta Banco de Dados". Pedido explícito do usuário:
