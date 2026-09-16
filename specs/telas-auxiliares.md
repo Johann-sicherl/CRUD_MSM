@@ -221,6 +221,18 @@ mudança — ainda são necessários pra calcular `qtdTotal` de um item de
 nível 3 (multiplicador do nível 2 pai) mesmo que linhas de nível 2 quase
 sempre caiam em categoria excluída e nunca apareçam na lista.
 
+**Filtro "Categoria:" removido, mesma rodada** — consequência direta do
+item acima: com `EXCLUDED_CATEGORIES` em vigor, toda linha exibida é
+sempre `ACESSÓRIO` (a única categoria que sobrevive ao filtro), então o
+seletor "Categoria:" nunca oferecia mais de uma opção real — pedido
+explícito do usuário pra tirar. Removidos `categoryFilter`/
+`setCategoryFilter` (estado), `categoriesPresent` (`useMemo`), o filtro
+por categoria dentro de `displayedGroups`, os dois resets
+(`runScan`/`clearResults`) e o bloco `<select>` correspondente. A coluna
+"Categoria" continua aparecendo na própria tabela (não foi pedido tirar
+essa, só o filtro) — hoje sempre mostra "ACESSÓRIO", mas fica como
+confirmação visual por linha, não como filtro redundante.
+
 ### Inteligência do Produto (`/inteligencia-produto`)
 
 Motor de regras que confronta as 9 tabelas de engenharia (`accessories`,

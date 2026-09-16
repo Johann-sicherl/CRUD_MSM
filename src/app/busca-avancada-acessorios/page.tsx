@@ -278,7 +278,6 @@ export default function BuscaAvancadaAcessoriosPage() {
   const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [equipFilter, setEquipFilter] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [advancedCodeFilter, setAdvancedCodeFilter] = useState<string[]>([])
   const [advancedDescSearch, setAdvancedDescSearch] = useState('')
@@ -286,7 +285,7 @@ export default function BuscaAvancadaAcessoriosPage() {
   // Mesmo chaveamento de Busc. Itens Série Estrut. Protheus
   // (showOnlyMissingFromInternal, analisador-estruturas/page.tsx) — pedido
   // explícito do usuário. Reseta a cada nova busca, mesmo tratamento de
-  // equipFilter/categoryFilter/advancedFilter abaixo.
+  // equipFilter/advancedFilter abaixo.
   const [showOnlyMissing, setShowOnlyMissing] = useState(false)
 
   const hydrated = useRef(false)
@@ -473,7 +472,6 @@ export default function BuscaAvancadaAcessoriosPage() {
       setHasScanned(true)
       setExpandedGroups(new Set())
       setEquipFilter('')
-      setCategoryFilter('')
       setShowOnlyMissing(false)
       setAdvancedCodeFilter([])
       setAdvancedDescSearch('')
@@ -492,7 +490,6 @@ export default function BuscaAvancadaAcessoriosPage() {
     setHasScanned(false)
     setExpandedGroups(new Set())
     setEquipFilter('')
-    setCategoryFilter('')
     setShowOnlyMissing(false)
     setAdvancedCodeFilter([])
     setAdvancedDescSearch('')
@@ -581,14 +578,8 @@ export default function BuscaAvancadaAcessoriosPage() {
     })
   }, [filteredFlatItems])
 
-  const categoriesPresent = useMemo(
-    () => Array.from(new Set(filteredFlatItems.map(i => i.categoria))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [filteredFlatItems],
-  )
-
   const displayedGroups = groupedByEquip
     .filter(([name]) => !equipFilter || name === equipFilter)
-    .map(([name, items]) => [name, items.filter(i => !categoryFilter || i.categoria === categoryFilter)] as const)
     .filter(([, items]) => items.length > 0)
 
   // "Lista de acessórios" — os mesmos itens de displayedGroups, mas sem
@@ -775,19 +766,6 @@ export default function BuscaAvancadaAcessoriosPage() {
             >
               <option value="">— Todos —</option>
               {groupedByEquip.map(([name]) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-on-surface-variant">Categoria:</span>
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-            >
-              <option value="">— Todas —</option>
-              {categoriesPresent.map(name => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
