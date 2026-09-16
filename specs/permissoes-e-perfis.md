@@ -154,6 +154,16 @@ Configuração de Usuários. Dois efeitos, os dois amarrados só a essa coluna:
    Analista de Dados também precisa poder carregar CSVs novos em `_check`
    (passo 1) e simular queries (passo 2) — ação permitida mesmo sendo
    "escrita", porque nunca toca tabela real, só a cópia `_check`.
+4. **Sem os filtros "Completo/Somente Novos/Em Alteração de Custeio"** — em
+   `DataTable.tsx`, pedido explícito do usuário: "não precisamos do filtro
+   ... porque este usuário só enxerga tabela de _Check, não teremos nada a
+   ser inserido nisso". O grupo de abas inteiro (`actionButtons`) some pra
+   `readOnlyCheckMode`, independente de `isRestrictedControladoriaView`/
+   `usesTargetCostPending`/`baseline`. `viewMode` também é forçado pra
+   `'completo'` sempre nesse perfil (mesmo `useEffect` que sincroniza com
+   `?view=novos`/`?view=em_alteracao` da URL) — sem isso, um link antigo
+   com esse query param deixaria a lista filtrada sem nenhuma aba visível
+   pra voltar a "Completo".
 
 **O que o admin ainda precisa configurar manualmente** pro perfil
 "Analista de Dados" (não automatizado, é responsabilidade da tela

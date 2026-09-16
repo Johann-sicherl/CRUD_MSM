@@ -291,8 +291,13 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
     // mudam, sem remount).
     const wantedView = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null
     setColFilters({}); setFilterSearch({}); setSelectedIds(new Set()); setProtheusStatusMap(null); setBaselineRows(null); setBaselineError(null); setLocalCosts(null); setPendingTargetCost(null)
-    setViewMode(wantedView === 'novos' ? 'novos' : wantedView === 'em_alteracao' ? 'em_alteracao' : 'completo')
-  }, [tableName])
+    // readOnlyCheckMode nunca filtra por Somente Novos/Em Alteração de
+    // Custeio — não existe "novo"/"pendente" nas tabelas _check (nada é
+    // inserido nelas via app, só substituição total pelo CSV) — mesmo que
+    // a URL peça ?view=novos (ex.: um link antigo copiado antes de virar
+    // este perfil), ignora e sempre mostra tudo.
+    setViewMode(appUser.readOnlyCheckMode ? 'completo' : wantedView === 'novos' ? 'novos' : wantedView === 'em_alteracao' ? 'em_alteracao' : 'completo')
+  }, [tableName, appUser.readOnlyCheckMode])
 
   useEffect(() => {
     let cancelled = false
@@ -900,7 +905,7 @@ export default function DataTable({ tableName, schema, initialViewMode }: Props)
           depende de baseline nenhum, é a fila pending_target_cost); perfil
           admin nas demais tabelas só quando há um retrato de import pra
           comparar — some junto com o destaque amarelo quando não há um. */}
-      {(isRestrictedControladoriaView || usesTargetCostPending || baseline !== null) && (
+      {!appUser.readOnlyCheckMode && (isRestrictedControladoriaView || usesTargetCostPending || baseline !== null) && (
         <div className="flex items-center rounded border border-outline-variant overflow-hidden text-xs font-medium shrink-0">
           <button
             onClick={() => setViewMode('completo')}
