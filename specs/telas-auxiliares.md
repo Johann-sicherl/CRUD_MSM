@@ -122,6 +122,60 @@ escolhe a curva de capacidade mais próxima nesses casos, e a tela mostra um
 aviso explícito ("usando a curva de X Ah como aproximação") — nunca falha
 silenciosamente nem trava o cálculo.
 
+### Os 4 catálogos viraram editáveis pela própria tela (aba "Catálogos")
+
+Pedido explícito do usuário, rodada seguinte: "como que eu vou mudar
+alguma coisa nas tabelas ou banco de dados que foi criado? Adicionar um
+nobreak ou mudar a informação de algum equipamento?" — pergunta feita de
+volta pra saber quais dos 4 catálogos precisavam de edição pela tela
+(modelos de UPS, BOM de equipamento, módulos de bateria externa, grupos de
+capacidade de bateria) — resposta: **todos os 4**. A curva de derating por
+temperatura (`TEMPERATURE_CURVE`) continua fixa no código — não foi uma
+das opções oferecidas, é dado "científico" que raramente muda.
+
+**Arquitetura**: `upsAutonomyCalc.ts` deixou de importar os JSON
+estaticamente — virou um módulo 100% puro, toda função recebe o catálogo
+(`UpsModel[]`, `BatteryGroup[]`, `EquipmentBomComponent[]` etc.) como
+parâmetro explícito, nunca lido de uma constante do módulo. Os dados
+passaram a viver atrás de rotas próprias, mesmo padrão JSON-file-backed
+de `structure-property-rules.ts` (`GET`/`PUT` substituem o arquivo
+inteiro, `force-dynamic`/`force-no-store` nos dois, mesma lição do bug de
+405 documentado acima nesta seção):
+- `src/lib/upsAutonomyStore.ts` — `readUpsAutonomyCatalog`/
+  `writeUpsAutonomyCatalog` (`ups-autonomy-catalog.json`: `ups`,
+  `batteryGroups`, `batteryExternal`) e `readUpsAutonomyEquipment`/
+  `writeUpsAutonomyEquipment` (`ups-autonomy-equipment.json`:
+  `equipmentNames`, `equipmentBom`, `equipmentLoadParams`).
+- `/api/ups-autonomy-catalog` e `/api/ups-autonomy-equipment` — as rotas.
+- `calculadora-autonomia-nobreak/page.tsx` busca os dois endpoints no
+  mount (`loadAll`) e guarda em estado — a aba "Calculadora" e a aba
+  "Catálogos" leem/escrevem o MESMO estado, então salvar um catálogo
+  reflete na hora no seletor da calculadora, sem precisar recarregar a
+  página.
+
+**UI de cada catálogo** — tabelas largas com rolagem horizontal (mesmo
+padrão de tela wide-table já usado em `duplo-check-queries`), linha por
+registro, todos os campos como input, botão "+ Novo" no rodapé e "✕" por
+linha — sem nenhuma trava de "código não editável depois de salvo" aqui
+(diferente de Parâmetros de Estrutura): esses catálogos não têm o mesmo
+risco de casar linha errada por identidade, e o usuário não pediu essa
+trava aqui.
+- **Modelos de UPS / Módulos de bateria externa** — uma linha por
+  registro, todos os ~13–19 campos do catálogo original.
+- **Grupos de capacidade de bateria** — só 8 linhas normalmente
+  (capacidade + os 5 coeficientes da curva `a,b,c,d,e`) — mexer aqui exige
+  ter uma tabela de descarga nova do fabricante pra reajustar a curva, não
+  é edição do dia a dia.
+- **Equipamentos e BOM de potência** — duas tabelas ligadas: "Equipamentos"
+  (nome + os 5 parâmetros de carga Ativo/Stand By) e "Componentes" (nome +
+  VA unitário + checkbox Stand By + uma coluna de quantidade por
+  equipamento cadastrado — mesma matriz da aba "Escâneres" da planilha
+  original). Adicionar um equipamento novo cria a linha de parâmetros de
+  carga (zerada) e uma coluna nova na tabela de componentes
+  automaticamente; remover um equipamento apaga a linha de parâmetros E a
+  quantidade dele em todo componente (com confirmação, "não pode ser
+  desfeito" — mesmo padrão de "Remover grupo" em Parâmetros de Estrutura).
+
 ## Classificação de equipamentos — `equipmentClassification.ts` / `equipmentClassificationRules.ts`
 
 - `classifyEquipmentType(...)` aplica uma lista ordenada de regras

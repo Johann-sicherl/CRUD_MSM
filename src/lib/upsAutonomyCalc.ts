@@ -3,9 +3,11 @@
 // "Cálculos" + "Temperatura" + "Baterias"). Ver specs/telas-auxiliares.md
 // para o raciocínio de negócio por trás de cada fórmula — este arquivo só
 // implementa, não reexplica.
-
-import catalogData from '@/data/ups-autonomy-catalog.json'
-import equipmentData from '@/data/ups-autonomy-equipment.json'
+//
+// Módulo puro, sem dado embutido: os catálogos (UPS, grupos de bateria,
+// bateria externa, BOM de equipamento) são editáveis pela própria tela
+// (ver upsAutonomyStore.ts) e sempre passados como parâmetro pelas
+// funções abaixo — nunca lidos de uma constante fixa do módulo.
 
 export interface UpsModel {
   brand: string
@@ -69,32 +71,40 @@ export interface EquipmentLoadParams {
   powerSafetyFactor: number
 }
 
-export const UPS_CATALOG: UpsModel[] = catalogData.ups as UpsModel[]
-export const BATTERY_GROUPS: BatteryGroup[] = catalogData.batteryGroups as BatteryGroup[]
-export const TEMPERATURE_CURVE: BatteryCurve = catalogData.temperatureCurve as BatteryCurve
-export const EXTERNAL_BATTERY_CATALOG: ExternalBatteryModule[] = catalogData.batteryExternal as ExternalBatteryModule[]
-
-export const EQUIPMENT_NAMES: string[] = equipmentData.equipmentNames
-export const EQUIPMENT_BOM: EquipmentBomComponent[] = equipmentData.equipmentBom as EquipmentBomComponent[]
-export const EQUIPMENT_LOAD_PARAMS: Record<string, EquipmentLoadParams> = equipmentData.equipmentLoadParams as Record<string, EquipmentLoadParams>
-
-export const UPS_TECHNOLOGIES: string[] = Array.from(new Set(UPS_CATALOG.map(u => u.technology))).sort()
-
-export function upsByTechnology(technology: string): UpsModel[] {
-  return UPS_CATALOG.filter(u => u.technology === technology)
+// y = a·ln(b·x + c) + d·x + e — curva de derating de capacidade da bateria
+// por temperatura ambiente, ajustada uma única vez a partir de um
+// datasheet de fabricante (fonte: upsbatterycenter.com). Não é editável
+// pela tela (pedido do usuário cobriu só os 4 catálogos de lista — UPS,
+// equipamento, bateria externa, grupos de bateria; esta curva é um dado
+// "científico" fixo, igual pra qualquer conta).
+export const TEMPERATURE_CURVE: BatteryCurve = {
+  a: 35.13339088428316,
+  b: 0.015650555629037378,
+  c: 6.421107151504944,
+  d: -0.07634371786785887,
+  e: -64.50173901498157,
 }
 
-export function findBatteryGroup(capacityAh: number): BatteryGroup | undefined {
-  return BATTERY_GROUPS.find(g => g.capacityAh === capacityAh)
+export function upsTechnologies(catalog: UpsModel[]): string[] {
+  return Array.from(new Set(catalog.map(u => u.technology))).sort()
 }
 
-// Nem todo UPS do catálogo usa uma capacidade de bateria com curva ajustada
-// (a maioria usa; alguns modelos pequenos usam 5/7 Ah, sem curva própria —
-// ver histórico em specs/telas-auxiliares.md). Pra esses casos, a UI usa a
-// curva do grupo de capacidade mais próxima como aproximação — nunca trava
-// o cálculo, mas o rótulo do campo deixa claro que é uma aproximação.
-export function nearestBatteryGroup(capacityAh: number): BatteryGroup {
-  return BATTERY_GROUPS.reduce((best, g) =>
+export function upsByTechnology(catalog: UpsModel[], technology: string): UpsModel[] {
+  return technology === 'Todos' ? catalog : catalog.filter(u => u.technology === technology)
+}
+
+export function findBatteryGroup(groups: BatteryGroup[], capacityAh: number): BatteryGroup | undefined {
+  return groups.find(g => g.capacityAh === capacityAh)
+}
+
+// Nem todo UPS do catálogo usa uma capacidade de bateria com curva
+// ajustada (a maioria usa; alguns modelos pequenos usam 5/7 Ah, sem curva
+// própria — ver histórico em specs/telas-auxiliares.md). Pra esses casos,
+// a UI usa a curva do grupo de capacidade mais próxima como aproximação —
+// nunca trava o cálculo, mas o rótulo do campo deixa claro que é uma
+// aproximação.
+export function nearestBatteryGroup(groups: BatteryGroup[], capacityAh: number): BatteryGroup {
+  return groups.reduce((best, g) =>
     Math.abs(g.capacityAh - capacityAh) < Math.abs(best.capacityAh - capacityAh) ? g : best
   )
 }
@@ -104,10 +114,10 @@ export function nearestBatteryGroup(capacityAh: number): BatteryGroup {
 // como `standby: true` (os que continuam ligados fora do ciclo de
 // disparo: eletrônica de controle, monitor, computador, ventilação,
 // solenoide de trava, câmeras etc. — ver Escâneres!G, planilha original).
-export function equipmentApparentPowerVA(equipmentName: string): { active: number; standby: number } {
+export function equipmentApparentPowerVA(bom: EquipmentBomComponent[], equipmentName: string): { active: number; standby: number } {
   let active = 0
   let standby = 0
-  for (const c of EQUIPMENT_BOM) {
+  for (const c of bom) {
     const qty = c.qtyByEquipment[equipmentName]
     if (!qty) continue
     active += qty * c.unitVA
@@ -116,9 +126,7 @@ export function equipmentApparentPowerVA(equipmentName: string): { active: numbe
   return { active, standby }
 }
 
-// y = a·ln(b·x + c) + d·x + e — curva de derating de capacidade da bateria
-// por temperatura ambiente, ajustada uma única vez (Temperatura!F17:F21,
-// fonte: datasheet de fabricante) e compartilhada por todos os modelos.
+// y = a·ln(b·x + c) + d·x + e
 export function temperatureDeratingFactor(ambientTempC: number, curve: BatteryCurve = TEMPERATURE_CURVE): number {
   const { a, b, c, d, e } = curve
   return a * Math.log(b * ambientTempC + c) + d * ambientTempC + e
@@ -150,6 +158,7 @@ export interface BatteryBankConfig {
 export interface AutonomyCalcInput {
   loadSegments: LoadSegment[]           // tipicamente 2: Ativo e Stand By
   selectedUps: UpsModel
+  batteryGroups: BatteryGroup[]
   internalBattery: BatteryBankConfig    // normalmente derivado do próprio UPS selecionado
   externalBattery: BatteryBankConfig | null  // null = nenhuma bateria externa
   // Parâmetros gerais — mesmos defaults da planilha original, editáveis:
@@ -182,10 +191,10 @@ export interface AutonomyCalcResult {
 // Réplica de Cálculos!M12:M33 + B31/B32/B35 — ver o comentário no topo do
 // arquivo. Lança erro se algum grupo de bateria (interna/externa) não tiver
 // curva cadastrada pra capacidade escolhida — a UI deve restringir o
-// seletor de capacidade às BATTERY_GROUPS existentes, nunca deixar digitar
+// seletor de capacidade às `batteryGroups` existentes, nunca deixar digitar
 // um Ah livre.
 export function calculateAutonomy(input: AutonomyCalcInput): AutonomyCalcResult {
-  const { loadSegments, selectedUps, internalBattery, externalBattery } = input
+  const { loadSegments, selectedUps, batteryGroups, internalBattery, externalBattery } = input
   const warnings: string[] = []
 
   const activePowerBySegment = loadSegments.map(s => s.apparentPowerVA * s.pf)
@@ -202,7 +211,7 @@ export function calculateAutonomy(input: AutonomyCalcInput): AutonomyCalcResult 
   const minUpsActivePowerW = (1 + input.powerSafetyFactor) * maxActivePowerW
   const minUpsApparentPowerVA = minUpsActivePowerW / input.upsPf
 
-  const internalGroup = findBatteryGroup(internalBattery.capacityAh)
+  const internalGroup = findBatteryGroup(batteryGroups, internalBattery.capacityAh)
   if (!internalGroup) throw new Error(`Nenhuma curva de bateria cadastrada para ${internalBattery.capacityAh} Ah (banco interno)`)
 
   const extCapacity = externalBattery?.capacityAh ?? 0
@@ -220,7 +229,7 @@ export function calculateAutonomy(input: AutonomyCalcInput): AutonomyCalcResult 
   let externalEnergyPerBatteryWh = 0
   let externalTotalEnergyWh = 0
   if (externalBattery && externalBattery.capacityAh > 0) {
-    const externalGroup = findBatteryGroup(externalBattery.capacityAh)
+    const externalGroup = findBatteryGroup(batteryGroups, externalBattery.capacityAh)
     if (!externalGroup) throw new Error(`Nenhuma curva de bateria cadastrada para ${extCapacity} Ah (banco externo)`)
     externalBatteryPowerW = totalWeightedCapacity > 0
       ? (avgBatteryPowerW * externalBattery.capacityAh) / totalWeightedCapacity
