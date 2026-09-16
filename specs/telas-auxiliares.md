@@ -545,6 +545,70 @@ consultado nem mostrado.
   antigo carregado do cache simplesmente mostra os itens sem seta (em vez
   de quebrar a tela) — a próxima busca nova já vem com a árvore completa.
 
+### Pesquisa de Itens Dependentes Avançada (`/pesquisa-itens-dependentes-avancada`)
+
+Tela nova, grupo "Consulta Banco de Dados". Pedido explícito do usuário:
+"uma regra de negócio que eu tenho... expressada através da tabela de
+dependant_items, eu tenho que fazer a análise geral componente a
+componente do estudo de caso da simples repetição de, esse componente
+sempre saiu com este componente" — minerar a estrutura Protheus ao vivo
+pra achar pares de código que sempre saem juntos nos pedidos (o mesmo
+estudo de caso por trás de `dependant_items`), separado do motor de 20
+regras de Inteligência do Produto (desativado da navegação, ver seção
+abaixo) — uma ferramenta própria, sempre acessível, focada só nisso.
+
+**Arquitetura desenhada e confirmada com o usuário antes de implementar**
+(ver histórico da conversa) — três decisões deliberadas:
+1. Extrair a matemática de coocorrência da regra R080
+   (`productIntelligence.ts`) pra um módulo puro compartilhado, em vez de
+   duplicá-la — pra nunca ter duas implementações da mesma conta que podem
+   divergir com o tempo.
+2. O conjunto de código por pedido inclui a subárvore inteira de cada item
+   (nível 3 + todo `filhos`, até o último nível — reaproveitando a busca
+   profunda de Busc. Avanç. Acessórios Protheus, ver seção acima), não só
+   o próprio nível 3 como R080 sempre fez — sinal mais rico, "análise
+   geral" de verdade. **R080 não mudou de comportamento** — continua
+   olhando só nível 3, pra não alterar resultado de algo que já existia.
+3. Limiares de suporte mínimo/confiança mínima ficam **editáveis na
+   tela** (não fixos no código como em R080) — aqui é uma ferramenta de
+   investigação, não uma regra automática.
+
+- **`src/lib/cooccurrenceAnalysis.ts`** (novo) — `computeCooccurrence(orders,
+  options)`, módulo 100% puro (sem I/O): recebe um array de conjuntos de
+  código (um por pedido) e devolve os pares que batem os limiares de
+  `minSupport`/`minConfidence` (confiança exigida nos dois sentidos, A→B e
+  B→A — um acessório genérico que entra em quase todo pedido não vira
+  "candidato" só por aparecer muito, se não for exclusivo do outro lado do
+  par). `productIntelligence.ts` (regra R080) foi refatorado pra chamar
+  esta função em vez de repetir a conta inline — mesmo resultado de antes,
+  só sem duplicação.
+- **`POST /api/dependent-items-analysis`** (novo) — reusa
+  `listAccessoryHierarchy` (mesma função de Busc. Avanç. Acessórios
+  Protheus, **nenhuma query nova ao Protheus**), monta o conjunto de
+  código por pedido (nível 3 + `filhos` achatado recursivamente), roda
+  `computeCooccurrence`, e cruza cada par contra `dependant_items`
+  (Supabase, `.range(0, 24999)`) pra marcar `jaDeclarado` (verifica os
+  dois sentidos, `protheus_code|protheus_item_code` e o inverso).
+- **UI** — mesmos campos de prefixo de Busc. Avanç. Acessórios Protheus
+  (NIVEL 1/NIVEL 2), mais dois campos novos (suporte mínimo, confiança
+  mínima %, default 3 e 90% — os mesmos valores já validados em R080).
+  Tabela de pares com Código/Denominação/suporte dos dois lados,
+  coocorrências, confiança nos dois sentidos, selo "Já declarado"
+  (verde) ou "Candidato novo" (âmbar), toggle "Todos os pares"/"Só
+  candidatos novos" e filtro por código (a análise "componente a
+  componente" pedida — olhar só os pares que envolvem um código
+  específico, sem rodar a busca de novo), e "⧉ Copiar lista" (mesmo
+  padrão TSV pra Excel do resto do app).
+- **"+ Cadastrar dependência"** — só aparece em candidatos novos, abre
+  `RecordModal` de `dependant_items` prefilido com `protheus_code`/
+  `protheus_item_code` dos dois lados do par. **`legacy_equipment_id` fica
+  em branco de propósito** — a coocorrência é achada através de vários
+  pedidos/equipamentos possivelmente diferentes, então não há um
+  equipamento único e correto pra prefill automático; a pessoa escolhe o
+  equipamento certo antes de salvar, mesmo padrão de outros "+ Cadastrar"
+  do app que deixam campo obrigatório sem prefill quando não há valor
+  certo pra chutar (ex.: `legacy_group_id` no "+ Cadastrar" de acessórios).
+
 ### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
 
 **Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de

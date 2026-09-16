@@ -1,6 +1,7 @@
 import type { ProtheusProductInfo, AccessoryHierarchyGroup } from './protheusDb'
 import type { StructurePropertyRule } from './structurePropertyRules'
 import { computeStructurePropertyResults } from './structurePropertyMatch'
+import { computeCooccurrence } from './cooccurrenceAnalysis'
 
 // Motor de regras de "Inteligência do Produto" — confronta as 9 tabelas de
 // engenharia (accessories, accessory_groups, dependant_items, equipments,
@@ -644,29 +645,17 @@ regra('R080', 'analogia', ctx => {
     .filter(codes => codes.length >= 2)
   const codeToEquip = mapaEquipamentosPorCodigo(ctx)
 
-  const suporte = new Map<string, number>()
-  const coOcorrencia = new Map<string, number>() // "A|B" com A<B
-  for (const codes of grupos) {
-    for (const c of codes) suporte.set(c, (suporte.get(c) || 0) + 1)
-    for (let i = 0; i < codes.length; i++) {
-      for (let j = i + 1; j < codes.length; j++) {
-        const [a, b] = [codes[i], codes[j]].sort()
-        const k = `${a}|${b}`
-        coOcorrencia.set(k, (coOcorrencia.get(k) || 0) + 1)
-      }
-    }
-  }
-
   const dependenciasConhecidas = new Set(
     ctx.tables.dependant_items.map(r => `${normUp(r.protheus_code)}|${normUp(r.protheus_item_code)}`)
   )
 
-  for (const [par, conjuntas] of coOcorrencia) {
-    const [a, b] = par.split('|')
-    const suporteA = suporte.get(a) || 0
-    const suporteB = suporte.get(b) || 0
-    if (suporteA < MIN_COOCCURRENCE_SUPPORT || suporteB < MIN_COOCCURRENCE_SUPPORT) continue
-    if (conjuntas / suporteA < MIN_COOCCURRENCE_CONFIDENCE || conjuntas / suporteB < MIN_COOCCURRENCE_CONFIDENCE) continue
+  // Matemática de coocorrência extraída pra cooccurrenceAnalysis.ts —
+  // reusada também pela tela "Pesquisa de Itens Dependentes Avançada"
+  // (fora deste motor), pra nunca ter duas implementações da mesma conta
+  // que podem divergir com o tempo.
+  const pares = computeCooccurrence(grupos, { minSupport: MIN_COOCCURRENCE_SUPPORT, minConfidence: MIN_COOCCURRENCE_CONFIDENCE })
+
+  for (const { codigoA: a, codigoB: b, coOcorrencias: conjuntas, suporteA, suporteB } of pares) {
     if (dependenciasConhecidas.has(`${a}|${b}`) || dependenciasConhecidas.has(`${b}|${a}`)) continue
     const equipamentosRelacionados = Array.from(new Set([
       ...(codeToEquip.get(a) || []), ...(codeToEquip.get(b) || []),
