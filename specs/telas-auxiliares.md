@@ -630,6 +630,41 @@ cadastro interno entre si:
   (um equipamento por vez, com contexto) é onde "missing" faz sentido
   revisar caso a caso.
 
+### "Copiar todas as regras" — catálogo legível das regras pra área de transferência
+
+Pedido explícito do usuário: "quero um botão para copiar todas as regras
+para área de transferência para aprimorarmos esta 'IA' que estamos
+criando" — levar a lógica atual de cada regra pra fora do app (colar numa
+conversa, revisar/discutir aprimoramento), sem precisar abrir o código-fonte.
+
+- `REGRAS_CATALOGO` (`src/lib/productIntelligence.ts`, logo após `REGRAS`) —
+  array estático `{ codigo, categoria, titulo, descricao }`, um por regra,
+  na mesma ordem de registro de `REGRAS`. É pura documentação: o motor em si
+  (`runProductIntelligence`) nunca lê isto, só `REGRAS`. Cada `descricao` foi
+  escrita a partir da lógica real de cada regra (não é resumo genérico) —
+  qualquer regra nova ou mudança de comportamento numa regra existente
+  precisa atualizar a entrada correspondente aqui também, ou o catálogo
+  copiado fica desalinhado do motor de verdade.
+- `GET /api/product-intelligence/rules` — rota só-leitura, sem credencial
+  nenhuma (não toca Protheus nem Supabase), devolve `{ regras:
+  REGRAS_CATALOGO }`. Caminho fixo mas só `GET` — não corre o risco de 405
+  em build de produção documentado mais abaixo nesta seção (esse bug era
+  especificamente sobre caminho fixo com `GET` + método mutante juntos).
+- Botão no cabeçalho de `/inteligencia-produto` (não depende de conexão
+  Protheus — é só o catálogo estático) — busca a rota acima, formata
+  `[CODIGO] categoria — título\ndescrição` por regra e copia via
+  `navigator.clipboard.writeText`, mesmo padrão visual "✓ Copiado" (1.5s)
+  já usado em `atualizador-global.tsx`/`depurador-solic-comercial/page.tsx`.
+
+**Achado incidental durante esta mudança**: o catálogo (agora documentado
+acima) tem 20 regras reais no código (`R001, R002, R003, R070, R010, R011,
+R012, R020, R021, R030, R031, R040, R041, R050, R051, R052, R060, R080,
+R081, R090`) — o texto de `specs/contexto-negocio-inteligencia-produto.md`
+("14 regras determinísticas/estatísticas") ficou desatualizado depois que
+R080/R081/R090 foram adicionadas numa rodada posterior sem atualizar essa
+contagem. Não corrigido nesta sessão (fora do escopo do pedido) — só
+registrado aqui pra quem for mexer nesse spec depois.
+
 ### Camada B (`/inteligencia-produto`, aba "Pergunte à IA") — tentada e removida
 
 **Histórico**: depois da primeira versão da Inteligência do Produto (14

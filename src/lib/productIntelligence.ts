@@ -772,4 +772,55 @@ export function runProductIntelligence(ctx: ProductIntelligenceContext, apenas?:
   return achados
 }
 
+export interface RegraCatalogo { codigo: string; categoria: string; titulo: string; descricao: string }
+
+// Catálogo legível por humano das regras — pura documentação (o motor em si
+// nunca lê isto, só REGRAS acima). Alimenta o botão "Copiar todas as
+// regras" de /inteligencia-produto — pedido explícito do usuário, pra levar
+// a lógica atual de cada regra pra fora do app e discutir/aprimorar o motor
+// (rodapé "área de transferência", texto pronto pra colar numa conversa).
+// Mantido na mesma ordem de registro de REGRAS acima.
+export const REGRAS_CATALOGO: RegraCatalogo[] = [
+  { codigo: 'R001', categoria: 'integridade', titulo: 'Código inexistente no Protheus',
+    descricao: "Todo protheus_code referenciado nas 9 tabelas de engenharia (accessories, relationship_equip_accessory, non_combinable_comps [protheus_code e remove_list_code], roller_tables, standard_equipment_items, dependant_items [protheus_code e protheus_item_code]) precisa existir no cadastro do Protheus (SB1010). Severidade crítico." },
+  { codigo: 'R002', categoria: 'integridade', titulo: 'Equipamento órfão',
+    descricao: "legacy_equipment_id referenciado em relationship_equip_accessory/non_combinable_comps/roller_tables/standard_equipment_items/dependant_items precisa existir em 'equipments'. Já garantida por foreign key real no Postgres — mantida por defesa em profundidade / reuso futuro contra uma fonte sem essa FK (ex.: um CSV antes de importar). Severidade crítico." },
+  { codigo: 'R003', categoria: 'integridade', titulo: 'Grupo de acessório órfão',
+    descricao: "legacy_group_id de accessories, e legacy_group_id/legacy_second_group_id de non_combinable_comps, precisam existir em accessory_groups. A primeira metade já é garantida por FK real; só legacy_second_group_id não tem FK nenhuma. Severidade alto." },
+  { codigo: 'R070', categoria: 'integridade', titulo: 'Alerta órfão',
+    descricao: "legacy_general_alert_id (em accessories, standard_equipment_items, relationship_equip_accessory) precisa existir em general_alerts. Sem FK real, e o Atualizador Global não valida esse campo ao substituir a tabela inteira. Severidade alto." },
+  { codigo: 'R010', categoria: 'estado', titulo: 'Oferta ativa de item bloqueado',
+    descricao: "Linha ativa (status='active') em relationship_equip_accessory cujo protheus_code está BLOQUEADO no cadastro do Protheus. Severidade crítico." },
+  { codigo: 'R011', categoria: 'estado', titulo: 'Oferta ativa de item desativado no catálogo interno',
+    descricao: "Linha ativa em relationship_equip_accessory cujo código está com status 'deactive' em accessories — catálogo e oferta desalinhados. Severidade alto." },
+  { codigo: 'R012', categoria: 'estado', titulo: 'Revisão desatualizada',
+    descricao: "Código em uso (standard_equipment_items ou relationship_equip_accessory) tem uma revisão-irmã mais nova e ainda não bloqueada no Protheus (mesmo código-sem-revisão B1_COD LEFT 11, sufixo de revisão maior). Severidade médio, formulada como pergunta — a revisão antiga pode ser a correta de propósito." },
+  { codigo: 'R020', categoria: 'duplicidade', titulo: 'Linha duplicada na chave de negócio',
+    descricao: "Mais de uma linha em relationship_equip_accessory para a mesma chave de negócio real (legacy_equipment_id, protheus_code) — operation_time não faz parte dessa chave, então duas linhas com operation_time diferente ainda contam como duplicata. Severidade médio." },
+  { codigo: 'R021', categoria: 'duplicidade', titulo: 'Opcional já presente na estrutura padrão do equipamento',
+    descricao: "Código ofertado como acessório opcional (relationship_equip_accessory) que também aparece em algum nível da estrutura Protheus recursiva (BOM completo, todos os níveis) de algum código-variante cadastrado pro mesmo equipamento em standard_equipment_items. Não é comparação dentro da própria relationship_equip_accessory (não detecta linha duplicada ali) — é cruzamento contra a estrutura física real do Protheus. Severidade alto, formulada como pergunta: pode ser unidade extra/sobressalente legítima (ex.: mouse/teclado/monitor de reposição) ou duplicidade de venda real." },
+  { codigo: 'R030', categoria: 'dependencia', titulo: 'Dependência inferida por família de código, não declarada',
+    descricao: "Quando pelo menos 50% dos itens de uma família de código (5 primeiros caracteres do protheus_code, com no mínimo 5 casos-base) declaram uma mesma família de item dependente em dependant_items, aponta os itens dessa família que não declaram. Severidade alto, formulada como pergunta." },
+  { codigo: 'R031', categoria: 'dependencia', titulo: 'Regra de dependência para código não ofertado',
+    descricao: "dependant_items tem uma regra (protheus_code) para um par (equipamento, código) que não está em uso — o código não é nem o próprio equipamento nem está ofertado (nem em standard_equipment_items nem em relationship_equip_accessory) para aquele legacy_equipment_id. Severidade médio." },
+  { codigo: 'R040', categoria: 'incompatibilidade', titulo: 'Incompatibilidade não recíproca',
+    descricao: "non_combinable_comps tem uma linha \"A exclui B\" para um equipamento sem a linha recíproca \"B exclui A\". Severidade médio." },
+  { codigo: 'R041', categoria: 'incompatibilidade', titulo: 'Código de incompatibilidade não ofertado',
+    descricao: "Código citado em non_combinable_comps (protheus_code ou remove_list_code) que não é opcional ofertado (relationship_equip_accessory) daquele equipamento — regra de incompatibilidade referenciando algo que não está no cardápio. Severidade médio." },
+  { codigo: 'R050', categoria: 'completude', titulo: 'Equipamento sem nenhuma configuração cadastrada',
+    descricao: "Equipamento cadastrado em 'equipments' sem nenhuma linha em relationship_equip_accessory, standard_equipment_items, dependant_items, roller_tables ou non_combinable_comps. Severidade pergunta — pode ser só uma expectativa comercial ainda não projetada." },
+  { codigo: 'R051', categoria: 'completude', titulo: 'Mesa de roletes incompleta',
+    descricao: "Equipamento com linha(s) em roller_tables mas faltando algum dos tipos esperados (start, middle, end — ou unique quando não precisa dividir). Severidade pergunta." },
+  { codigo: 'R052', categoria: 'completude', titulo: 'Acessório ou grupo nunca usado',
+    descricao: "Acessório cadastrado em accessories mas nunca ofertado em nenhum equipamento (relationship_equip_accessory), ou grupo de accessory_groups sem nenhum acessório cadastrado nele. Severidade pergunta — pode ser reserva para projeto futuro." },
+  { codigo: 'R060', categoria: 'analogia', titulo: 'Opcional ausente por analogia de família comercial',
+    descricao: "Dentro de uma família comercial (2 primeiras palavras de equipments.commercial_name, com pelo menos 3 membros com oferta cadastrada), um código ofertado por 75% ou mais dos irmãos (mas não por todos) e ausente num equipamento específico dessa família. Severidade médio, formulada como pergunta." },
+  { codigo: 'R080', categoria: 'analogia', titulo: 'Co-ocorrência forte na estrutura Protheus sem dependência cadastrada',
+    descricao: "Minera a hierarquia 26.xx → 27.13 → nível 3 ao vivo do Protheus (mesma consulta de Busc. Avanç. Acessórios Protheus): dois códigos de nível 3 que saem juntos em pelo menos 90% das estruturas onde qualquer um dos dois aparece (mínimo 3 ocorrências de amostra, confiança nos dois sentidos) e ainda não estão registrados como dependência um do outro em dependant_items. Estatística, não determinística — severidade sempre pergunta." },
+  { codigo: 'R081', categoria: 'dependencia', titulo: 'Embalagem da estrutura Protheus divergindo do dependente cadastrado',
+    descricao: "Para cada variante (standard_equipment_items.protheus_code), compara os códigos de embalagem (prefixo 27.11) vistos na estrutura Protheus real (BOM recursivo) contra o que está cadastrado em dependant_items para aquele legacy_equipment_id — aponta o que falta cadastrar ou o que sobra (não existe mais na estrutura Protheus). Severidade alto." },
+  { codigo: 'R090', categoria: 'itens-de-serie', titulo: 'Especificação técnica divergente da estrutura Protheus',
+    descricao: "Reaproveita o motor de comparação de Busc. Itens Série Estrut. Protheus (computeStructurePropertyResults) para comparar os campos de especificação de standard_equipment_items (processador, memória, cor, idioma etc.) contra o que a estrutura Protheus real (BOM da variante) indica via Parâmetros de Estrutura. Só os status 'mismatch' (severidade alto) e 'duplicate' — dois códigos da estrutura indicando valores diferentes pra mesma propriedade (severidade médio) — viram achado; 'missing' é omitido de propósito (ruído normal numa varredura em lote do catálogo inteiro)." },
+]
+
 export const REGRAS_DISPONIVEIS = REGRAS.map(r => ({ codigo: r.codigo, categoria: r.categoria }))

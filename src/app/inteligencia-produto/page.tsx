@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
-import type { Achado, Severidade } from '@/lib/productIntelligence'
+import type { Achado, Severidade, RegraCatalogo } from '@/lib/productIntelligence'
 import { tables } from '@/lib/schema'
 
 const SEVERIDADE_ORDER: Severidade[] = ['critico', 'alto', 'medio', 'baixo', 'pergunta']
@@ -90,6 +90,28 @@ export default function InteligenciaProdutoPage() {
   // se a pessoa mudar de fonte sem rodar de novo).
   const [useCheckTables, setUseCheckTables] = useState(false)
   const [usedCheckTables, setUsedCheckTables] = useState(false)
+  // Pedido explícito do usuário: copiar a lógica atual de todas as regras
+  // pra área de transferência, pra discutir/aprimorar o motor fora do app.
+  // Não depende de conexão Protheus — é só documentação estática do catálogo.
+  const [copiedRegras, setCopiedRegras] = useState(false)
+
+  const handleCopyRegras = async () => {
+    try {
+      const res = await fetch('/api/product-intelligence/rules')
+      const json = await res.json()
+      const regras: RegraCatalogo[] = json.regras || []
+      const texto = [
+        `Inteligência do Produto — catálogo de regras (${regras.length})`,
+        '',
+        ...regras.map(r => `[${r.codigo}] ${r.categoria} — ${r.titulo}\n${r.descricao}`),
+      ].join('\n\n')
+      await navigator.clipboard.writeText(texto)
+      setCopiedRegras(true)
+      setTimeout(() => setCopiedRegras(false), 1500)
+    } catch {
+      setError('Falha ao copiar as regras')
+    }
+  }
 
   const runAnalysis = async () => {
     if (!dbCreds) return
@@ -138,19 +160,28 @@ export default function InteligenciaProdutoPage() {
 
   return (
     <div className="p-8 max-w-[72rem]">
-      <div className="mb-6">
-        <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
-          Consulta Banco de Dados · inteligência do produto
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
+            Consulta Banco de Dados · inteligência do produto
+          </div>
+          <h1 className="text-3xl font-bold text-on-surface tracking-tight">Inteligência do Produto</h1>
+          <p className="text-on-surface-variant text-base mt-1 max-w-3xl">
+            Motor de regras que confronta as 9 tabelas de engenharia (Cadastro de Componentes, Grupo de
+            Equipamentos, Cadastro de Equipamentos, Equipamento x Acessórios, Produtos Não Combináveis,
+            Produtos Dependentes, Mesas de Roletes, Grupo de Acessórios, Cadastro de Alertas) contra o
+            cadastro e a estrutura ao vivo do Protheus — acha inconsistência que a validação normal de
+            escrita do app nunca pega, porque nunca olha o Protheus, ou porque o dado entrou via
+            Atualizador Global (substituição total, sem validar campo por campo).
+          </p>
         </div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Inteligência do Produto</h1>
-        <p className="text-on-surface-variant text-base mt-1 max-w-3xl">
-          Motor de regras que confronta as 9 tabelas de engenharia (Cadastro de Componentes, Grupo de
-          Equipamentos, Cadastro de Equipamentos, Equipamento x Acessórios, Produtos Não Combináveis,
-          Produtos Dependentes, Mesas de Roletes, Grupo de Acessórios, Cadastro de Alertas) contra o
-          cadastro e a estrutura ao vivo do Protheus — acha inconsistência que a validação normal de
-          escrita do app nunca pega, porque nunca olha o Protheus, ou porque o dado entrou via
-          Atualizador Global (substituição total, sem validar campo por campo).
-        </p>
+        <button
+          onClick={handleCopyRegras}
+          title="Copia o código, categoria e a lógica de todas as regras do motor, em texto — para revisar/aprimorar fora do app"
+          className="shrink-0 px-3 py-1.5 text-xs rounded border border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+        >
+          {copiedRegras ? '✓ Copiado' : '📋 Copiar todas as regras'}
+        </button>
       </div>
 
       <div className="mb-6 flex flex-col gap-3">
