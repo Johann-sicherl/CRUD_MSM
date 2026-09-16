@@ -277,6 +277,24 @@ grupos expandidos ao mesmo tempo (exatamente o caso de "Expandir tudo").
 Corrigido com `min-h-0` no `<nav>` — padrão CSS a replicar em qualquer
 área flex-scroll nova desta Sidebar.
 
+**`min-h-0` sozinho não resolveu — 2ª rodada**: usuário confirmou que
+"Expandir tudo" ainda não habilitava scrollbar nenhuma depois do fix
+acima. Causa real: o `<aside>` usava `h-full` (`height: 100%`) — uma
+altura **percentual**, que em teoria resolve contra o viewport pra um
+elemento `position: fixed` (é o comportamento padrão do CSS), mas na
+prática, combinado com `zoom` no `<html>` (`document.documentElement.style.zoom`,
+ver `ThemeZoomBar.tsx`) e sem nenhum ancestral com altura 100% explícita
+na cadeia, o `%` pode não travar numa altura confiável — o `<aside>` (que
+não rola sozinho, é `fixed`) cresce além da tela, e como não é parte do
+fluxo normal do documento, o scroll da própria página (`body`) também não
+alcança o conteúdo cortado: nem o `<nav>` rola internamente (não tinha
+altura real pra sobrar) nem a página rola (elemento fixo não some do
+viewport) — o conteúdo simplesmente ficava inacessível. Corrigido trocando
+`h-full` por `h-screen` (`height: 100vh`, unidade de viewport direta, sem
+depender de resolução de porcentagem/cadeia de ancestrais) — junto com o
+`min-h-0` do `<nav>`, agora o `<aside>` sempre trava em 100vh de verdade e
+o `<nav>` sempre tem uma altura real pra rolar dentro.
+
 **Rótulo de grupo com nome longo ("Consulta Banco de Dados") quebrava
 centralizado** — bug real corrigido na mesma rodada: o cabeçalho de grupo é
 um `<button>`, e `<button>` tem `text-align: center` por padrão do

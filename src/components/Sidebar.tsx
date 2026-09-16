@@ -70,7 +70,16 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
       )}
 
       <aside
-        className={`fixed left-0 top-0 h-full z-30 w-64 flex flex-col bg-surface-container-low border-r border-outline-variant shadow-2xl transition-transform duration-200 ease-in-out ${
+        // h-screen (100vh fixo), não h-full (100%) — o primeiro fix do
+        // scroll (min-h-0 no <nav>) não bastou: h-full depende de
+        // resolução de altura percentual, que combinado com position:fixed
+        // + zoom (document.documentElement.style.zoom, ver ThemeZoomBar.tsx)
+        // pode não travar numa altura confiável. h-screen usa a unidade vh
+        // direto, sem depender de cadeia de altura de ancestral nenhuma —
+        // garante que o <aside> nunca passa da tela, então o <nav> (flex-1
+        // min-h-0 overflow-y-auto) sempre tem uma altura de verdade pra
+        // rolar dentro.
+        className={`fixed left-0 top-0 h-screen z-30 w-64 flex flex-col bg-surface-container-low border-r border-outline-variant shadow-2xl transition-transform duration-200 ease-in-out ${
           expanded ? 'translate-x-0' : '-translate-x-full'
         }`}
         onMouseLeave={() => setHovered(false)}

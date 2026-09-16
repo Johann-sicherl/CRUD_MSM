@@ -159,7 +159,11 @@ export default function CalculadoraAutonomiaNobreakPage() {
   }
 
   return (
-    <div className="p-8 max-w-[110rem] flex flex-col gap-8">
+    // Sem max-w fixo — mesma convenção de qualquer tela de tabela larga
+    // (ver specs/ui-componentes.md): um cap fixo deixa a tela visivelmente
+    // mais estreita que o resto do app em painéis largos, ainda mais
+    // notável aqui com as tabelas de catálogo (19 colunas em alguns casos).
+    <div className="p-8 flex flex-col gap-8">
       <div>
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">
           Sistema · calculadora-autonomia-nobreak

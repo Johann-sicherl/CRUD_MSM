@@ -153,6 +153,15 @@ inteiro, `force-dynamic`/`force-no-store` nos dois, mesma lição do bug de
   reflete na hora no seletor da calculadora, sem precisar recarregar a
   página.
 
+**Largura da página, sem `max-w` fixo** — pedido explícito do usuário
+("aumente a largura das tabelas pra chegar mais próximo do canto da
+página"), depois de a 1ª versão ter saído com `max-w-[110rem]` no
+container raiz — violava a convenção já documentada em
+`specs/ui-componentes.md` ("nenhuma tela de tabela deve ter max-w fixo no
+container central"), esquecida ao criar esta tela nova. Removido — a
+página (e as tabelas largas dela, `w-full` dentro de um container sem
+cap) agora ocupa toda a largura disponível, igual ao resto do app.
+
 **UI de cada catálogo** — tabelas largas com rolagem horizontal (mesmo
 padrão de tela wide-table já usado em `duplo-check-queries`), linha por
 registro, todos os campos como input, botão "+ Novo" no rodapé e "✕" por
@@ -263,6 +272,19 @@ Quatro mudanças pedidas explicitamente pelo usuário, na mesma rodada, na
   conveniência de posição, salva tudo igual ao botão do rodapé da página
   (mantido, ainda útil pra quando várias mudanças em grupos diferentes
   foram feitas antes de salvar).
+
+## Parâmetros de Estrutura — layout em pilha vertical, não mais 3 colunas
+
+Pedido explícito do usuário, depois de elogiar o layout novo da aba
+"Catálogos" da Calculadora de Autonomia de Nobreak (cada seção um abaixo
+da outra, título no topo, bem separado): "aplique este mesmo conceito de
+organização um abaixo do outro pra janela de Param. Itens de Série e
+Acessórios". As 3 colunas lado a lado (`grid xl:grid-cols-3`: Parâmetros
+de Estrutura, Classificação de Equipamentos, Acessórios Ignorados)
+viraram uma pilha vertical (`flex flex-col gap-10`) — cada seção continua
+com seu próprio título/descrição/tabela/botões, só a disposição mudou; o
+`xl:pl-12` que espaçava as colunas foi removido (não faz mais sentido em
+pilha vertical, o `gap-10` do container já separa as seções).
 
 ## Acessórios ignorados — `ignoredAccessories.ts`
 

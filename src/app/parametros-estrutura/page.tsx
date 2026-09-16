@@ -518,16 +518,19 @@ export default function ParametrosEstruturaPage() {
 
   return (
     <div className="p-6">
-      {/* Sem max-w fixo — com 3 colunas (Parâmetros de Estrutura,
-          Classificação de Equipamentos, Acessórios Ignorados), o cap antigo
-          de 100rem (dimensionado pra só 2 colunas) sobrava área morta em
-          telas largas; mesmo raciocínio já aplicado às telas de DataTable
-          (ver specs/ui-componentes.md). */}
+      {/* Sem max-w fixo — mesmo raciocínio de qualquer tela de tabela larga
+          (ver specs/ui-componentes.md): um cap fixo deixaria a tela mais
+          estreita que o resto do app em painéis largos. */}
       <div className="mb-2">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em]">SISTEMA</div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
+      {/* Um bloco abaixo do outro, título no topo de cada um — pedido
+          explícito do usuário: "aplique este mesmo conceito de organização
+          um abaixo do outro" (mesmo espírito da aba Catálogos da
+          Calculadora de Autonomia de Nobreak). Antes eram 3 colunas lado a
+          lado (grid xl:grid-cols-3) — trocado por uma pilha vertical. */}
+      <div className="flex flex-col gap-10">
       <div>
       <h1 className="text-3xl font-bold text-on-surface mb-1">Parâmetros de Estrutura</h1>
       <p className="text-on-surface-variant text-base mb-3">
@@ -809,7 +812,7 @@ export default function ParametrosEstruturaPage() {
       )}
       </div>
 
-      <div className="xl:pl-12">
+      <div>
         <h1 className="text-3xl font-bold text-on-surface mb-1">Classificação de Equipamentos</h1>
         <p className="text-on-surface-variant text-base mb-3">
           Define o tipo de equipamento a partir da descrição da estrutura, usado para agrupar os resultados
@@ -928,7 +931,7 @@ export default function ParametrosEstruturaPage() {
         )}
       </div>
 
-      <div className="xl:pl-12">
+      <div>
         <h1 className="text-3xl font-bold text-on-surface mb-1">Acessórios Ignorados</h1>
         <p className="text-on-surface-variant text-base mb-3">
           Componentes marcados como &quot;nunca vou usar&quot; em Busc. Avanç. Acessórios Protheus — somem daquela
