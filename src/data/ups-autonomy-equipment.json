@@ -1,0 +1,656 @@
+{
+  "equipmentNames": [
+    "5030",
+    "5536",
+    "6040 SV",
+    "6040 DV",
+    "6550",
+    "7560",
+    "100100 SV",
+    "100100 DV",
+    "150180",
+    "180180 SV",
+    "180180 DV",
+    "Bodyscan SV",
+    "Bodyscan DV",
+    "Cargo Compact",
+    "Portal Garrett"
+  ],
+  "equipmentBom": [
+    {
+      "name": "Gerador RX 110 kV",
+      "unitVA": 110,
+      "standby": false,
+      "qtyByEquipment": {
+        "5030": 1
+      }
+    },
+    {
+      "name": "Gerador RX 150 kV",
+      "unitVA": 180,
+      "standby": false,
+      "qtyByEquipment": {}
+    },
+    {
+      "name": "Gerador RX 170 kV",
+      "unitVA": 247,
+      "standby": false,
+      "qtyByEquipment": {
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 2,
+        "6550": 1,
+        "7560": 1,
+        "100100 SV": 1,
+        "100100 DV": 2,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 2
+      }
+    },
+    {
+      "name": "Gerador RX 200 kV",
+      "unitVA": 350,
+      "standby": false,
+      "qtyByEquipment": {
+        "150180": 1
+      }
+    },
+    {
+      "name": "Gerador RX 320 kV",
+      "unitVA": 2995,
+      "standby": false,
+      "qtyByEquipment": {
+        "180180 SV": 0.35,
+        "180180 DV": 0.7,
+        "Cargo Compact": 0.52
+      }
+    },
+    {
+      "name": "Motopolia 80S",
+      "unitVA": 160,
+      "standby": false,
+      "qtyByEquipment": {
+        "5030": 1
+      }
+    },
+    {
+      "name": "Motopolia 113S 0.11kW",
+      "unitVA": 230,
+      "standby": false,
+      "qtyByEquipment": {
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1
+      }
+    },
+    {
+      "name": "Motopolia 113I 0.37kW",
+      "unitVA": 230,
+      "standby": false,
+      "qtyByEquipment": {
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1
+      }
+    },
+    {
+      "name": "Motor 1/2 HP BN71B",
+      "unitVA": 400,
+      "standby": false,
+      "qtyByEquipment": {
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 1
+      }
+    },
+    {
+      "name": "Inversor 1/2 HP",
+      "unitVA": 30,
+      "standby": true,
+      "qtyByEquipment": {
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 1,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1
+      }
+    },
+    {
+      "name": "XDAQ / XGCU",
+      "unitVA": 6,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1,
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 2,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "XCARD",
+      "unitVA": 0.7,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 8,
+        "5536": 9,
+        "6040 SV": 10,
+        "6040 DV": 19,
+        "6550": 11,
+        "7560": 13,
+        "100100 SV": 18,
+        "100100 DV": 36,
+        "150180": 18,
+        "180180 SV": 19,
+        "180180 DV": 38,
+        "Bodyscan SV": 16,
+        "Bodyscan DV": 23,
+        "Cargo Compact": 35
+      }
+    },
+    {
+      "name": "Placa Interface",
+      "unitVA": 5,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1,
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 1,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Placa MCB",
+      "unitVA": 3,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1,
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 1,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Placa LED",
+      "unitVA": 1.8,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 4,
+        "5536": 4,
+        "6040 SV": 4,
+        "6040 DV": 4,
+        "6550": 4,
+        "7560": 4,
+        "100100 SV": 4,
+        "100100 DV": 4,
+        "150180": 12,
+        "180180 SV": 12,
+        "180180 DV": 12,
+        "Bodyscan SV": 4,
+        "Bodyscan DV": 4
+      }
+    },
+    {
+      "name": "Placa Teclado",
+      "unitVA": 3,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1,
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 1
+      }
+    },
+    {
+      "name": "Sinaleiro LED",
+      "unitVA": 0.5,
+      "standby": false,
+      "qtyByEquipment": {
+        "Bodyscan SV": 2,
+        "Bodyscan DV": 2,
+        "Cargo Compact": 3
+      }
+    },
+    {
+      "name": "Sinaleiro xenon estroboscópico",
+      "unitVA": 2.2,
+      "standby": false,
+      "qtyByEquipment": {
+        "Cargo Compact": 2
+      }
+    },
+    {
+      "name": "Sirene XVS10BMW",
+      "unitVA": 3.5999999999999996,
+      "standby": false,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Relé JX2",
+      "unitVA": 0.4,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1,
+        "Bodyscan SV": 2,
+        "Bodyscan DV": 2,
+        "Cargo Compact": 4
+      }
+    },
+    {
+      "name": "Relé JZ",
+      "unitVA": 0.2,
+      "standby": true,
+      "qtyByEquipment": {
+        "Bodyscan SV": 2,
+        "Bodyscan DV": 3,
+        "Cargo Compact": 5
+      }
+    },
+    {
+      "name": "Relé SSD",
+      "unitVA": 0.3,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1
+      }
+    },
+    {
+      "name": "Sensor indutivo",
+      "unitVA": 0.3,
+      "standby": true,
+      "qtyByEquipment": {
+        "Bodyscan SV": 2,
+        "Bodyscan DV": 4,
+        "Cargo Compact": 2
+      }
+    },
+    {
+      "name": "Par Sensor fotoelétrico",
+      "unitVA": 0.6000000000000001,
+      "standby": false,
+      "qtyByEquipment": {
+        "5030": 2,
+        "5536": 2,
+        "6040 SV": 2,
+        "6040 DV": 2,
+        "6550": 2,
+        "7560": 2,
+        "100100 SV": 2,
+        "100100 DV": 2,
+        "150180": 4,
+        "180180 SV": 4,
+        "180180 DV": 4,
+        "Bodyscan SV": 7,
+        "Bodyscan DV": 7,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Cortina de Luz XUSL4E30H091N",
+      "unitVA": 24,
+      "standby": false,
+      "qtyByEquipment": {
+        "Cargo Compact": 3
+      }
+    },
+    {
+      "name": "Ventilador 120x120",
+      "unitVA": 15,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 2,
+        "5536": 2,
+        "6040 SV": 2,
+        "6040 DV": 2,
+        "6550": 2,
+        "7560": 2,
+        "100100 SV": 2,
+        "100100 DV": 2,
+        "150180": 5,
+        "180180 SV": 4,
+        "180180 DV": 4,
+        "Bodyscan SV": 2,
+        "Bodyscan DV": 2,
+        "Cargo Compact": 8
+      }
+    },
+    {
+      "name": "Solenóide C-025",
+      "unitVA": 17,
+      "standby": true,
+      "qtyByEquipment": {
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 2
+      }
+    },
+    {
+      "name": "Solenóide D-050",
+      "unitVA": 28,
+      "standby": true,
+      "qtyByEquipment": {
+        "Cargo Compact": 3
+      }
+    },
+    {
+      "name": "DAP",
+      "unitVA": 1.8,
+      "standby": true,
+      "qtyByEquipment": {
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 2
+      }
+    },
+    {
+      "name": "Monitor",
+      "unitVA": 30,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 2,
+        "6040 SV": 2,
+        "6040 DV": 2,
+        "6550": 2,
+        "7560": 2,
+        "100100 SV": 2,
+        "100100 DV": 2,
+        "150180": 2,
+        "180180 SV": 2,
+        "180180 DV": 2,
+        "Bodyscan SV": 2,
+        "Bodyscan DV": 2,
+        "Cargo Compact": 2
+      }
+    },
+    {
+      "name": "Computador",
+      "unitVA": 70,
+      "standby": true,
+      "qtyByEquipment": {
+        "5030": 1,
+        "5536": 1,
+        "6040 SV": 1,
+        "6040 DV": 1,
+        "6550": 1,
+        "7560": 1,
+        "100100 SV": 1,
+        "100100 DV": 1,
+        "150180": 1,
+        "180180 SV": 1,
+        "180180 DV": 1,
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Switch 8 portas",
+      "unitVA": 4,
+      "standby": false,
+      "qtyByEquipment": {
+        "Bodyscan SV": 1,
+        "Bodyscan DV": 1,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "NVR",
+      "unitVA": 10,
+      "standby": false,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Câmera",
+      "unitVA": 4,
+      "standby": true,
+      "qtyByEquipment": {
+        "Bodyscan SV": 3,
+        "Bodyscan DV": 3,
+        "Cargo Compact": 2
+      }
+    },
+    {
+      "name": "Amp/Mixer TOA A-2060",
+      "unitVA": 75,
+      "standby": false,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Trocador calor 180180",
+      "unitVA": 1400,
+      "standby": true,
+      "qtyByEquipment": {
+        "180180 SV": 1,
+        "180180 DV": 1,
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Contator LC1K",
+      "unitVA": 5,
+      "standby": true,
+      "qtyByEquipment": {
+        "180180 SV": 2,
+        "180180 DV": 2,
+        "Cargo Compact": 2
+      }
+    },
+    {
+      "name": "Contator LC1D",
+      "unitVA": 15,
+      "standby": false,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Portal Garret",
+      "unitVA": 45,
+      "standby": true,
+      "qtyByEquipment": {
+        "Portal Garrett": 1
+      }
+    },
+    {
+      "name": "Ar condicionado 20000 BTU",
+      "unitVA": 4975,
+      "standby": true,
+      "qtyByEquipment": {}
+    },
+    {
+      "name": "Luminária LED",
+      "unitVA": 25,
+      "standby": true,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Cancela Brasso",
+      "unitVA": 37.300000000000004,
+      "standby": true,
+      "qtyByEquipment": {
+        "Cargo Compact": 2
+      }
+    },
+    {
+      "name": "Semáforo Sistemath",
+      "unitVA": 10,
+      "standby": true,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    },
+    {
+      "name": "Indicador de velocidade IND-DMVR",
+      "unitVA": 10,
+      "standby": true,
+      "qtyByEquipment": {
+        "Cargo Compact": 1
+      }
+    }
+  ],
+  "equipmentLoadParams": {
+    "5030": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.3
+    },
+    "5536": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.5
+    },
+    "6040 SV": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.5
+    },
+    "6040 DV": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.4
+    },
+    "6550": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.5
+    },
+    "7560": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.5
+    },
+    "100100 SV": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.5
+    },
+    "100100 DV": {
+      "activeTimeS": 7,
+      "standbyTimeS": 3.5,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.4
+    },
+    "150180": {
+      "activeTimeS": 10,
+      "standbyTimeS": 110,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.4
+    },
+    "180180 SV": {
+      "activeTimeS": 10,
+      "standbyTimeS": 110,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.15
+    },
+    "180180 DV": {
+      "activeTimeS": 10,
+      "standbyTimeS": 110,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.15
+    },
+    "Bodyscan SV": {
+      "activeTimeS": 7,
+      "standbyTimeS": 23,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.5
+    },
+    "Bodyscan DV": {
+      "activeTimeS": 7,
+      "standbyTimeS": 23,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.4
+    },
+    "Cargo Compact": {
+      "activeTimeS": 4,
+      "standbyTimeS": 16,
+      "activePf": 0.95,
+      "standbyPf": 0.85,
+      "powerSafetyFactor": 0.4
+    },
+    "Portal Garrett": {
+      "activeTimeS": 10,
+      "standbyTimeS": 0,
+      "activePf": 0.9,
+      "standbyPf": 0,
+      "powerSafetyFactor": 0.4
+    }
+  }
+}

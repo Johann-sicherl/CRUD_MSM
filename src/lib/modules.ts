@@ -51,6 +51,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'duplo-check-queries',          label: 'Double-check de Queries',        href: '/duplo-check-queries',          group: 'Sistema' },
   { key: 'clonagem-estrutural-avancada', label: 'Clonagem Estrut. Avançada',      href: '/clonagem-estrutural-avancada', group: 'Sistema' },
   { key: 'depurador-solic-comercial',    label: 'Depurador Solic. Comercial',     href: '/depurador-solic-comercial',    group: 'Sistema' },
+  { key: 'calculadora-autonomia-nobreak', label: 'Calculadora de Autonomia de Nobreak', href: '/calculadora-autonomia-nobreak', group: 'Sistema' },
 
   { key: 'analisador-estruturas',        label: 'Busc. Itens Série Estrut. Protheus', href: '/analisador-estruturas',        group: 'Consulta Banco de Dados' },
   { key: 'busca-avancada-acessorios',    label: 'Busc. Avanc. Acessórios Protheus',   href: '/busca-avancada-acessorios',    group: 'Consulta Banco de Dados' },

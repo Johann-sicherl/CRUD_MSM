@@ -4,6 +4,124 @@ Todas as regras abaixo são JSON-file-backed (arquivo local, não tabela do
 Supabase) — mais simples de propósito, porque são configurações operacionais
 de um único usuário/máquina, não dados de negócio compartilhados.
 
+## Calculadora de Autonomia de Nobreak — `upsAutonomyCalc.ts`
+
+Tela `/calculadora-autonomia-nobreak` (grupo "Sistema", logo abaixo de
+"Depurador Solic. Comercial"). Pedido explícito do usuário: portar pro app
+uma calculadora de autonomia de nobreak (UPS) a partir de uma planilha de
+dimensionamento (`Dimensionamento_UPS_VMI_Rev_12.xlsm`) feita por um
+engenheiro da VMI, enviada como exemplo. A planilha inteira foi analisada
+(abas `Cálculos`, `Temperatura`, `Baterias`, `UPS`, `Bat. Externa`,
+`Escâneres`, `Parametros Carga Equipamento`) e portada por completo —
+motor de cálculo + os 3 catálogos de referência + o BOM de potência por
+equipamento —, decisão confirmada explicitamente com o usuário antes de
+implementar (as alternativas descartadas: só o motor sem catálogo, ou sem
+o preenchimento automático por modelo de equipamento).
+
+### Motor de cálculo — fiel à planilha, validado numericamente
+
+`src/lib/upsAutonomyCalc.ts` reimplementa a cadeia de fórmulas da aba
+`Cálculos` sem simplificar a física do modelo original:
+
+- **Potência ativa por segmento de carga** (`P = S·FP`) — a planilha
+  suporta até 5 segmentos (colunas C:G), mas só 2 têm dado real em
+  qualquer exemplo/uso real da planilha (Ativo/Stand By, vindos de
+  "Parametros Carga Equipamento") — portado como exatamente 2 segmentos
+  (`Ativo`/`Stand By`), não 5 genéricos, pra não construir UI pra um caso
+  que não existe nos dados de origem.
+- **Potência ativa máxima/média ponderada pelo tempo** de cada segmento —
+  usada tanto pra dimensionar o UPS mínimo quanto pra estimar consumo
+  médio da bateria.
+- **Curva de derating por temperatura**: `y = a·ln(b·x + c) + d·x + e`,
+  ajustada uma única vez a partir de um datasheet de fabricante
+  (`Temperatura!F17:F21` na planilha original, fonte citada:
+  upsbatterycenter.com) — os 5 coeficientes são fixos, não um input do
+  usuário (`TEMPERATURE_CURVE` em `ups-autonomy-catalog.json`).
+- **Curva de energia por bateria**: `E(P) = a·(e^(-P/b) + e^(-P/c) +
+  e^(-P/d)) + e/P`, uma curva DIFERENTE por capacidade de bateria (Ah),
+  ajustada a partir da tabela de descarga do fabricante daquele modelo
+  específico — 8 grupos de capacidade (7.2, 9, 17, 34, 40, 45, 58, 65 Ah),
+  cada um com seus próprios 5 coeficientes (`BATTERY_GROUPS`).
+- **Distribuição de potência entre banco interno e externo**: a potência
+  média consumida da bateria (`Pmb`) é repartida proporcionalmente à
+  capacidade total ponderada (série × linhas × Ah) de cada banco — replica
+  `Baterias!M26`/`M31` exatamente.
+- **Autonomia final** = `(energia total / Pmb) × (1 − FS Autonomia) ×
+  fator de derating(temperatura ambiente)`. Na planilha original esse
+  resultado ainda é dividido por 24 só porque a célula usa formatação de
+  hora do Excel (serial de fração de dia) — o port não precisa dessa
+  divisão, calcula horas diretamente e formata com `formatHoursAsHM`.
+- **Validado numericamente** contra o exemplo real gravado na planilha
+  (Bodyscan DV, UPS "Prime Online 3000 FP 0,9 96V 9Ah", banco interno 8
+  série × 1 linha × 9 Ah, sem banco externo, FP UPS 0,9, rendimento
+  bateria 0,95, FS Potência 0,4, FS Autonomia 0,2, 15°C) — toda variável
+  intermediária (Pmax, Pm, Pmb, potência mínima do UPS, potência por
+  bateria, energia por bateria, energia total) bateu exatamente com o
+  valor em cache da planilha, e o resultado final bateu com a autonomia
+  gravada (1h 22min) — script de validação rodado fora do repo (scratch),
+  não faz parte do código do app.
+
+### "Vf célula" da planilha original não foi portado — campo não usado na fórmula viva
+
+A planilha tinha um campo "Vf célula" (tensão final de corte da bateria,
+ex. 1,7 V) na seção de parâmetros do UPS — mas, conferido formula por
+fórmula, esse valor **não é referenciado em nenhum lugar da cadeia de
+cálculo viva** (`Cálculos!M15` e tudo que ele depende). Ele só aparecia
+noutra parte da aba `Baterias`, usada apenas pra VALIDAR o ajuste da curva
+de energia contra a tabela de descarga bruta do fabricante (calcular o
+erro do fit) — não pra calcular a autonomia de verdade. Confirmado esse
+comportamento antes de portar; o campo foi deliberadamente **omitido** da
+calculadora (não é um parâmetro real do modelo, é vestígio de
+documentação/validação da curva).
+
+### Catálogos portados — dados extraídos programaticamente da planilha, não digitados à mão
+
+- `src/data/ups-autonomy-catalog.json` — `ups` (46 modelos, todos os
+  campos da tabela "UPS" da planilha: marca, modelo, tecnologia, VA, FP, W,
+  tensão de bateria, capacidade do banco, expansão de bateria etc.),
+  `batteryGroups` (os 8 grupos de capacidade com curva de energia),
+  `temperatureCurve` (coeficientes fixos), `batteryExternal` (34 módulos
+  de bateria externa pré-configurados: marca, produto, tensão, nº de
+  baterias em série, nº de linhas, capacidade por bateria, energia total).
+- `src/data/ups-autonomy-equipment.json` — `equipmentNames` (15 modelos de
+  equipamento VMI: scanners de bagagem/carga, portal), `equipmentBom`
+  (lista de ~44 componentes com potência unitária em VA e a quantidade de
+  cada um por modelo de equipamento — replica a aba "Escâneres"),
+  `equipmentLoadParams` (tempo/FP/FS potência de cada equipamento nos
+  ciclos Ativo/Stand By — replica "Parametros Carga Equipamento").
+- Extração feita com um script Python fora do repo (openpyxl, lendo a
+  planilha original com `data_only=True` pra pegar os valores já
+  calculados pelo Excel) — a planilha original **não** foi commitada no
+  Git (é um arquivo proprietário de engenharia, enviado só como anexo da
+  conversa), só os dados já extraídos e limpos.
+
+### Potência do equipamento é recalculada a partir do BOM, não copiada literalmente da planilha
+
+Achado durante a extração: `Cálculos!C9`/`D9` (Potência aparente
+Ativo/Stand By pro exemplo "Bodyscan DV" gravado na planilha) são valores
+**fixos digitados** (732/255 VA) — não uma fórmula ligada à aba
+"Escâneres". Recalculando o BOM da própria aba "Escâneres" pra "Bodyscan
+DV" (∑ potência unitária × quantidade de cada componente, coluna "W" da
+matriz) dá um resultado bem diferente (~1003/280 VA) do valor gravado —
+ou seja, o vínculo entre "selecionar o equipamento" e "preencher a
+potência" na planilha original depende de uma macro VBA (não inspecionada
+aqui) que não foi executada de novo depois da última edição do BOM, então
+o exemplo ficou "dessincronizado" do BOM atual. Decisão pro port: em vez
+de tentar reproduzir o comportamento exato (e possivelmente desatualizado)
+da macro, `equipmentApparentPowerVA()` sempre recalcula a partir do BOM
+atual (`equipmentBom`) — é o cálculo estruturalmente correto e
+determinístico, mesmo que não bata com o número específico que ficou
+gravado nesse exemplo em particular. Como em toda tela do app, o campo
+continua editável depois do preenchimento automático.
+
+### UPS com bateria de capacidade sem curva própria — aproximação pela mais próxima
+
+Nem todo UPS do catálogo usa uma das 8 capacidades com curva ajustada — 3
+modelos usam 5 ou 7 Ah (a curva mais próxima é a de 7,2 Ah). `nearestBatteryGroup()`
+escolhe a curva de capacidade mais próxima nesses casos, e a tela mostra um
+aviso explícito ("usando a curva de X Ah como aproximação") — nunca falha
+silenciosamente nem trava o cálculo.
+
 ## Classificação de equipamentos — `equipmentClassification.ts` / `equipmentClassificationRules.ts`
 
 - `classifyEquipmentType(...)` aplica uma lista ordenada de regras
