@@ -232,6 +232,16 @@ acima) é renderizado dentro do bloco do grupo "Consulta Banco de Dados" —
 some junto com o resto do grupo quando colapsado, reaparece junto quando
 expandido, sem estado próprio.
 
+**"Colapsar tudo"/"Expandir tudo"**: pedido explícito do usuário, dois
+botões no topo do `<nav>` — `collapseAllGroups` grava `collapsedGroups`
+como o conjunto de **todos** os grupos realmente renderizados pra aquele
+perfil (`byGroup.map(g => g.group)`, já filtrado pelos grupos vazios, mais
+`'Administração'` só se `appUser.isAdmin`) e `expandAllGroups` zera pra um
+`Set` vazio. Calculado a partir de `byGroup` — nunca de `MODULE_GROUPS`
+direto — pra não deixar sobrando em `collapsedGroups` o nome de um grupo
+que nem aparece pra esse perfil (ex.: perfil sem nenhum módulo de
+"Parâmetros" liberado).
+
 **Rótulo do cabeçalho de grupo mais visível no tema Ciberpunk**: pedido
 explícito do usuário — a letra do nome do grupo (GERAL, ENGENHARIA,
 SISTEMA etc.) estava fina/pouco visível no tema Ciberpunk (`--c-outline:

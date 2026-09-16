@@ -51,6 +51,14 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
     items: MODULES.filter(m => m.group === group && (appUser.isAdmin || visible.has(m.key))),
   })).filter(g => g.items.length > 0)
 
+  // "Colapsar tudo"/"Expandir tudo" — pedido explícito do usuário. Só os
+  // grupos realmente renderizados pra este perfil (byGroup já filtrou os
+  // vazios) + "Administração" quando admin, pra não deixar um nome de
+  // grupo inexistente sobrando em collapsedGroups.
+  const allGroupKeys = [...byGroup.map(g => g.group), ...(appUser.isAdmin ? ['Administração'] : [])]
+  const collapseAllGroups = () => setCollapsedGroups(new Set(allGroupKeys))
+  const expandAllGroups = () => setCollapsedGroups(new Set())
+
   return (
     <>
       {/* Thin trigger strip — shown only when sidebar is fully collapsed */}
@@ -95,6 +103,24 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3">
+          {/* Colapsar tudo / Expandir tudo — pedido explícito do usuário */}
+          <div className="flex items-center gap-2 px-4 mb-2">
+            <button
+              type="button"
+              onClick={collapseAllGroups}
+              className="flex-1 px-2 py-1 rounded border border-outline-variant text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide hover:border-primary/50 hover:text-primary transition-colors"
+            >
+              Colapsar tudo
+            </button>
+            <button
+              type="button"
+              onClick={expandAllGroups}
+              className="flex-1 px-2 py-1 rounded border border-outline-variant text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide hover:border-primary/50 hover:text-primary transition-colors"
+            >
+              Expandir tudo
+            </button>
+          </div>
+
           {byGroup.map(({ group, items }) => {
             const isCollapsed = collapsedGroups.has(group)
             return (
