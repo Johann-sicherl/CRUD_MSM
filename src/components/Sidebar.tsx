@@ -101,8 +101,13 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-3">
+        {/* Nav — min-h-0 é obrigatório aqui: um filho flex com flex-1 +
+            overflow-y-auto, sem min-height explícito, usa min-height:auto
+            por padrão do CSS e cresce pra caber todo o conteúdo em vez de
+            rolar dentro da altura disponível. Bug real: ao "Expandir tudo",
+            a Sidebar inteira ficava mais alta que a tela em vez de mostrar
+            uma barra de rolagem interna. */}
+        <nav className="flex-1 min-h-0 overflow-y-auto py-3 px-2 flex flex-col gap-3">
           {byGroup.map(({ group, items }) => {
             const isCollapsed = collapsedGroups.has(group)
             return (

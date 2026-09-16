@@ -264,6 +264,19 @@ até o hover — mesmo espírito dos botões de tema em `ThemeZoomBar.tsx`.
 do bloco de perfil/Sair, a última coisa antes do fim da barra lateral),
 pra não competir visualmente com os grupos.
 
+**Bug real corrigido: "Expandir tudo" deixava a Sidebar inteira mais alta
+que a tela, sem barra de rolagem** — pedido explícito do usuário: "a
+expansão é maior que a área útil da tela, preciso de um scrollbar para
+rolar entre as janelas". Causa: `<nav>` já tinha `flex-1 overflow-y-auto`
+dentro do `<aside>` (`flex flex-col`), mas faltava `min-h-0` — um filho
+flex com `overflow-y-auto` usa `min-height: auto` por padrão do CSS
+(não `0`), então ele cresce pra caber todo o conteúdo em vez de respeitar
+a altura disponível e rolar internamente. Com poucos grupos abertos isso
+nunca aparecia (o conteúdo cabia sem esticar); só ficou visível com muitos
+grupos expandidos ao mesmo tempo (exatamente o caso de "Expandir tudo").
+Corrigido com `min-h-0` no `<nav>` — padrão CSS a replicar em qualquer
+área flex-scroll nova desta Sidebar.
+
 **Rótulo de grupo com nome longo ("Consulta Banco de Dados") quebrava
 centralizado** — bug real corrigido na mesma rodada: o cabeçalho de grupo é
 um `<button>`, e `<button>` tem `text-align: center` por padrão do
