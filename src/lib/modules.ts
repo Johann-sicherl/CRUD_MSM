@@ -25,7 +25,11 @@ const ENGINEERING_GROUP = 'Engenharia'
 
 export const MODULES: ModuleDef[] = [
   { key: 'dashboard',            label: 'Dashboard',                          href: '/',                     group: 'Geral' },
-  { key: 'inteligencia-produto', label: 'Inteligência do Produto',            href: '/inteligencia-produto', group: 'Geral' },
+  // 'inteligencia-produto' removida daqui de propósito — pedido explícito do
+  // usuário pra tirar a janela de navegação (ver specs/telas-auxiliares.md,
+  // "Inteligência do Produto — módulo desativado"). O código inteiro (rota,
+  // motor de regras, página) continua no repo, só não aparece mais na
+  // Sidebar nem no checklist de Configuração de Usuários.
   { key: 'explorador-relacoes',  label: 'Janela de Pesquisa Avançada',        href: '/explorador-relacoes',  group: 'Geral' },
   { key: 'atualizador-global',   label: 'Atualizador Global de Tabelas MSM',  href: '/atualizador-global',   group: 'Geral' },
   { key: 'importar-custos-locais', label: 'Importador de Custos Locais',      href: '/importar-custos-locais', group: 'Geral' },

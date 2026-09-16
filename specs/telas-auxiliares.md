@@ -483,7 +483,30 @@ por categoria dentro de `displayedGroups`, os dois resets
 essa, só o filtro) — hoje sempre mostra "ACESSÓRIO", mas fica como
 confirmação visual por linha, não como filtro redundante.
 
-### Inteligência do Produto (`/inteligencia-produto`)
+### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
+
+**Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de
+inteligência do produto. Está muito vago eu transferir meu conhecimento
+para uma IA atualmente, pode deixar o script pronto dentro do código,
+apenas deixe de exibir a janela." Depois de rodar a varredura completa
+(ver o relatório real discutido nesta sessão, 606 achados) e revisar o
+resultado, decisão de recuar da ideia — não pelo motor em si ter dado
+errado, mas por avaliar que o esforço de "ensinar" as regras de negócio
+pro sistema (a validação e o refinamento contínuo de cada uma das 20
+regras) não compensa agora.
+
+**Como foi desativado**: a entrada `{ key: 'inteligencia-produto', ... }`
+foi removida de `MODULES` (`src/lib/modules.ts`) — isso tira o link da
+Sidebar e a entrada do checklist "módulos visíveis" de Configuração de
+Usuários automaticamente (os dois são derivados de `MODULES`), sem
+precisar mexer em mais nada. **Nada foi apagado do código**: a rota
+`/inteligencia-produto` (página), `/api/product-intelligence` e
+`/api/product-intelligence/rules`, o motor de 20 regras
+(`productIntelligence.ts`), `productIntelligenceContext.ts` e
+`REGRAS_CATALOGO` continuam no repo intactos e continuam buildando/
+funcionando normalmente (confirmado com `npm run build`) — só não há mais
+como chegar na tela pela navegação normal do app. Se a ideia for retomada
+no futuro, basta devolver a linha em `MODULES`.
 
 Motor de regras que confronta as 9 tabelas de engenharia (`accessories`,
 `accessory_groups`, `dependant_items`, `equipments`, `general_alerts`,
