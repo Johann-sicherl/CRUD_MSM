@@ -232,10 +232,25 @@ acima) é renderizado dentro do bloco do grupo "Consulta Banco de Dados" —
 some junto com o resto do grupo quando colapsado, reaparece junto quando
 expandido, sem estado próprio.
 
+**Caixa própria por grupo** — pedido explícito do usuário: "está
+visivelmente confuso as letras, visualmente se mistura o que é o título
+do grupo das janelas... e quando expande um grupo, as janelas ficam
+próximas de janelas do outro grupo por causa da cor". Cada grupo (incluindo
+"Administração") agora é uma caixa com borda própria
+(`border border-outline-variant rounded-lg`, fundo levemente destacado do
+resto da Sidebar `bg-surface-container/40`) — o cabeçalho clicável tem um
+fundo mais forte (`bg-surface-container-high`) e uma borda inferior
+separando-o das janelas do próprio grupo enquanto expandido (some quando
+colapsado, já que não há conteúdo abaixo pra separar). Mesmo padrão visual
+de "caixa por grupo" já usado nos cards de grupo de Parâmetros de
+Estrutura/Busc. Avanç. Acessórios Protheus — só replicado aqui pra
+resolver a confusão visual entre título de grupo e nome de janela, e
+entre as janelas de grupos vizinhos.
+
 **"Colapsar tudo"/"Expandir tudo"**: pedido explícito do usuário, dois
-botões no topo do `<nav>` — `collapseAllGroups` grava `collapsedGroups`
-como o conjunto de **todos** os grupos realmente renderizados pra aquele
-perfil (`byGroup.map(g => g.group)`, já filtrado pelos grupos vazios, mais
+botões — `collapseAllGroups` grava `collapsedGroups` como o conjunto de
+**todos** os grupos realmente renderizados pra aquele perfil
+(`byGroup.map(g => g.group)`, já filtrado pelos grupos vazios, mais
 `'Administração'` só se `appUser.isAdmin`) e `expandAllGroups` zera pra um
 `Set` vazio. Calculado a partir de `byGroup` — nunca de `MODULE_GROUPS`
 direto — pra não deixar sobrando em `collapsedGroups` o nome de um grupo
@@ -244,6 +259,10 @@ que nem aparece pra esse perfil (ex.: perfil sem nenhum módulo de
 seguinte, depois da 1ª versão ter saído com borda cheia/negrito demais
 comparado ao resto da Sidebar): texto 9px, peso normal, borda transparente
 até o hover — mesmo espírito dos botões de tema em `ThemeZoomBar.tsx`.
+**Posição** (pedido explícito, mais uma rodada depois): ficavam no topo do
+`<nav>`, junto da lista de grupos — movidos pro rodapé da Sidebar (depois
+do bloco de perfil/Sair, a última coisa antes do fim da barra lateral),
+pra não competir visualmente com os grupos.
 
 **Rótulo de grupo com nome longo ("Consulta Banco de Dados") quebrava
 centralizado** — bug real corrigido na mesma rodada: o cabeçalho de grupo é

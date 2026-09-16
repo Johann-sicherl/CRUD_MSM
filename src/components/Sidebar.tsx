@@ -102,42 +102,28 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3">
-          {/* Colapsar tudo / Expandir tudo — pedido explícito do usuário.
-              Padrão "slim" da aplicação (mesmo espírito dos botões de tema
-              em ThemeZoomBar.tsx): texto pequeno, borda transparente até o
-              hover, nada de bloco cheio/negrito chamando atenção. */}
-          <div className="flex items-center gap-1.5 px-4 mb-2">
-            <button
-              type="button"
-              onClick={collapseAllGroups}
-              className="flex-1 px-2 py-1 rounded border border-transparent text-[9px] font-medium text-outline uppercase tracking-wide hover:border-outline-variant hover:text-primary hover:bg-surface-container transition-colors"
-            >
-              Colapsar tudo
-            </button>
-            <button
-              type="button"
-              onClick={expandAllGroups}
-              className="flex-1 px-2 py-1 rounded border border-transparent text-[9px] font-medium text-outline uppercase tracking-wide hover:border-outline-variant hover:text-primary hover:bg-surface-container transition-colors"
-            >
-              Expandir tudo
-            </button>
-          </div>
-
+        <nav className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-3">
           {byGroup.map(({ group, items }) => {
             const isCollapsed = collapsedGroups.has(group)
             return (
-              <div key={group} className="mt-5 first:mt-0">
+              // Caixa própria por grupo — pedido explícito do usuário: sem
+              // ela, o título do grupo se misturava visualmente com os
+              // nomes das janelas, e ao expandir um grupo as janelas dele
+              // ficavam coladas nas do grupo vizinho (mesma cor de fundo,
+              // sem nada separando um bloco do outro).
+              <div key={group} className="rounded-lg border border-outline-variant bg-surface-container/40 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => toggleGroupCollapsed(group)}
-                  className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
+                  className={`w-full flex items-center justify-between px-3 py-2 bg-surface-container-high text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors ${
+                    !isCollapsed ? 'border-b border-outline-variant' : ''
+                  }`}
                 >
                   <span className="text-left">{group}</span>
                   <GroupChevron collapsed={isCollapsed} />
                 </button>
                 {!isCollapsed && (
-                  <>
+                  <div className="py-2">
                     {items.map(m => {
                       const isActive = pathname === m.href
                       return (
@@ -178,24 +164,26 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                         <span className="truncate">Consulta PDM x Banco MSM</span>
                       </Link>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             )
           })}
 
           {appUser.isAdmin && (
-            <div className="mt-5">
+            <div className="rounded-lg border border-outline-variant bg-surface-container/40 overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleGroupCollapsed('Administração')}
-                className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors"
+                className={`w-full flex items-center justify-between px-3 py-2 bg-surface-container-high text-[11px] font-bold text-on-surface-variant uppercase tracking-[0.15em] font-mono hover:text-on-surface transition-colors ${
+                  !collapsedGroups.has('Administração') ? 'border-b border-outline-variant' : ''
+                }`}
               >
                 <span className="text-left">Administração</span>
                 <GroupChevron collapsed={collapsedGroups.has('Administração')} />
               </button>
               {!collapsedGroups.has('Administração') && (
-                <>
+                <div className="py-2">
                   <Link
                     href="/configuracao-usuarios"
                     prefetch={false}
@@ -207,7 +195,7 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                   >
                     <span className="truncate">Configuração de Usuários</span>
                   </Link>
-                </>
+                </div>
               )}
             </div>
           )}
@@ -264,6 +252,28 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
           <div className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-outline-variant text-[9px] font-mono">
             <span className="truncate text-outline" title={appUser.label}>👤 {appUser.label}</span>
             <button onClick={appLogout} className="shrink-0 text-outline hover:text-error transition-colors">Sair</button>
+          </div>
+
+          {/* Colapsar tudo / Expandir tudo — pedido explícito do usuário
+              pra ficar no rodapé da Sidebar, não misturado com a lista de
+              grupos. Padrão "slim" (mesmo espírito dos botões de tema em
+              ThemeZoomBar.tsx): texto pequeno, borda transparente até o
+              hover. */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={collapseAllGroups}
+              className="flex-1 px-2 py-1 rounded border border-transparent text-[9px] font-medium text-outline uppercase tracking-wide hover:border-outline-variant hover:text-primary hover:bg-surface-container transition-colors"
+            >
+              Colapsar tudo
+            </button>
+            <button
+              type="button"
+              onClick={expandAllGroups}
+              className="flex-1 px-2 py-1 rounded border border-transparent text-[9px] font-medium text-outline uppercase tracking-wide hover:border-outline-variant hover:text-primary hover:bg-surface-container transition-colors"
+            >
+              Expandir tudo
+            </button>
           </div>
         </div>
       </aside>
