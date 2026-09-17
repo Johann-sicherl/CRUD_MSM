@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
 import ColumnFilter from '@/components/ColumnFilter'
@@ -783,7 +784,7 @@ export default function BuscaAvancadaAcessoriosPage() {
         <p className="text-on-surface-variant text-base mt-1">
           Varre todo cabeçalho de estrutura no Protheus com o prefixo de NIVEL 1 informado (nunca listado
           diretamente), classifica cada um por tipo de equipamento usando as mesmas regras de{' '}
-          <a href="/parametros-estrutura" className="text-primary hover:underline">Classificação de Equipamentos</a>
+          <Link href="/parametros-estrutura" className="text-primary hover:underline">Classificação de Equipamentos</Link>
           {' '}(aplicadas sobre DESC_ESTRUTURA), e explora todos os itens de NIVEL 2 dessa estrutura — só abrindo
           para NIVEL 3 (o próprio equipamento e seus acessórios) os itens de nível 2 que combinem com o prefixo de
           NIVEL 2 informado. A lista mostra só a categoria &quot;ACESSÓRIO&quot; (a peça de verdade) — SubPA,
@@ -792,7 +793,7 @@ export default function BuscaAvancadaAcessoriosPage() {
           um texto dizendo se já está cadastrado no MSM (Cadastro de Equipamentos ou Cadastro de Componentes) —
           nada some por não estar cadastrado — mas você pode marcar &quot;Ignorar&quot; num componente que sabe
           que nunca vai usar: ele some desta lista (nesta busca e nas próximas) e pode ser revisto/removido em
-          {' '}<a href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</a>.
+          {' '}<Link href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</Link>.
           A busca também explora, em memória, toda a subestrutura de cada acessório até o último nível — sem
           misturar esses componentes mais profundos na lista principal: quando um item tem filhos na estrutura
           Protheus, a própria linha dele ganha uma seta à esquerda do código (única flag de &quot;tem filhos&quot;

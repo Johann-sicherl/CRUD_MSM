@@ -24,6 +24,25 @@ const CONNECTION_BASE = {
   requestTimeout: 20000,
 }
 
+// Testa se as credenciais realmente autenticam — usado pelo modal de login
+// (ProtheusAuthProvider) antes de marcar a conexão como "conectada". Achado
+// real, pedido explícito do usuário: digitar a senha errada ainda acendia
+// a flag verde "✓ Protheus conectado" no rodapé da Sidebar, porque o
+// `connect()` do contexto só guardava o texto digitado — nunca verificava
+// contra o banco de verdade. Query mínima (`SELECT 1`) — só interessa
+// confirmar que o login autentica, não faz nenhum trabalho de verdade.
+// Lança o erro do driver (ex.: "Login failed for user '...'") se falhar —
+// quem chama decide como mostrar isso pro usuário.
+export async function testProtheusConnection(creds: ProtheusCredentials): Promise<void> {
+  const pool = new sql.ConnectionPool({ ...CONNECTION_BASE, user: creds.user, password: creds.password })
+  try {
+    await pool.connect()
+    await pool.request().query('SELECT 1 AS ok')
+  } finally {
+    await pool.close()
+  }
+}
+
 // One ESTRUTURA→COMPONENTE query per BOM node meant hundreds of sequential
 // round trips over the WAN link to the Protheus server — the whole analysis
 // could take minutes and individual nodes were timing out at 20s. Instead,

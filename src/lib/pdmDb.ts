@@ -23,6 +23,19 @@ export const CONNECTION_BASE = {
   requestTimeout: 60000,
 }
 
+// Testa se as credenciais realmente autenticam — mesmo motivo/mesmo padrão
+// de testProtheusConnection em protheusDb.ts, usado pelo modal de login do
+// PDM (PdmAuthProvider) antes de marcar a conexão como "conectada".
+export async function testPdmConnection(creds: PdmCredentials): Promise<void> {
+  const pool = new sql.ConnectionPool({ ...CONNECTION_BASE, user: creds.user, password: creds.password })
+  try {
+    await pool.connect()
+    await pool.request().query('SELECT 1 AS ok')
+  } finally {
+    await pool.close()
+  }
+}
+
 // Query fornecida pelo usuário (mesmas CTEs/JOINs) — filtra AC_VALIDADO = 'S'
 // (só itens já validados no PDM) e, no PROPFIL, ConfigurationID = '2' (ver
 // auditoria: sem esse filtro, o MAX(RevisionNo) considerava revisões de

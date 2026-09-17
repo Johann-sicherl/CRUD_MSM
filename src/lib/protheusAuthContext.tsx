@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useState, type FormEvent, type ReactNode } from 'react'
 import { useAppAuth } from './appAuthContext'
 
 // Single, app-wide Protheus connection prompt — shown once when the app is
@@ -64,6 +64,35 @@ function ProtheusLoginModal({ onClose, onConnect }: {
 }) {
   const [user, setUser] = useState('')
   const [password, setPassword] = useState('')
+  // Achado real, pedido explícito do usuário: "teve vez que eu errei a
+  // senha e passou, deu a flag verde do canto esquerdo inferior como se
+  // tivesse dado certo" — antes, o submit só chamava onConnect direto, sem
+  // testar nada contra o Protheus de verdade. Agora testa primeiro
+  // (POST /api/protheus-test-connection, SELECT 1) e só marca como
+  // conectado se autenticar; senão mostra o erro do driver (ex.: "Login
+  // failed for user '...'") e deixa o modal aberto pra tentar de novo.
+  const [testing, setTesting] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setTesting(true)
+    setError('')
+    try {
+      const res = await fetch('/api/protheus-test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, password }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error || 'Usuário ou senha incorretos'); return }
+      onConnect(user, password)
+    } catch {
+      setError('Erro de comunicação ao testar a conexão')
+    } finally {
+      setTesting(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
@@ -74,13 +103,18 @@ function ProtheusLoginModal({ onClose, onConnect }: {
         </div>
         <form
           className="p-5 flex flex-col gap-3"
-          onSubmit={e => { e.preventDefault(); onConnect(user, password) }}
+          onSubmit={handleSubmit}
         >
           <p className="text-sm text-on-surface-variant">
             Informe seu usuário e senha do SQL Server (PROTHEUS12) uma única vez, no início da sessão — todas as
             telas que consultam o Protheus (verificação de status, buscas de estrutura, nomes de equipamento etc.)
             usam esta mesma conexão. Nada fica salvo; cada consulta abre e fecha sua própria conexão.
           </p>
+          {error && (
+            <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">
+              ⚠ {error}
+            </div>
+          )}
           <label className="text-xs font-semibold text-on-surface-variant">
             Usuário
             {/* autoComplete="username"/"current-password" (em vez de "off") —
@@ -111,15 +145,15 @@ function ProtheusLoginModal({ onClose, onConnect }: {
             />
           </label>
           <div className="flex items-center justify-end gap-2 mt-2">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+            <button type="button" onClick={onClose} disabled={testing} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
               Agora não
             </button>
             <button
               type="submit"
-              disabled={!user.trim() || !password}
+              disabled={!user.trim() || !password || testing}
               className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
             >
-              Conectar
+              {testing ? 'Conectando…' : 'Conectar'}
             </button>
           </div>
         </form>

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useProtheusAuth } from './protheusAuthContext'
 import { useAppAuth } from './appAuthContext'
 
@@ -69,6 +69,31 @@ function PdmLoginModal({ onClose, onConnect }: {
 }) {
   const [user, setUser] = useState('')
   const [password, setPassword] = useState('')
+  // Mesmo achado/mesmo padrão de ProtheusLoginModal (protheusAuthContext.tsx):
+  // testar a credencial de verdade (POST /api/pdm-test-connection) antes de
+  // marcar como conectado, em vez de aceitar qualquer usuário/senha digitado.
+  const [testing, setTesting] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setTesting(true)
+    setError('')
+    try {
+      const res = await fetch('/api/pdm-test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, password }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error || 'Usuário ou senha incorretos'); return }
+      onConnect(user, password)
+    } catch {
+      setError('Erro de comunicação ao testar a conexão')
+    } finally {
+      setTesting(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
@@ -79,12 +104,17 @@ function PdmLoginModal({ onClose, onConnect }: {
         </div>
         <form
           className="p-5 flex flex-col gap-3"
-          onSubmit={e => { e.preventDefault(); onConnect(user, password) }}
+          onSubmit={handleSubmit}
         >
           <p className="text-sm text-on-surface-variant">
             Informe seu usuário e senha do SQL Server do PDM (base VMI, servidor srvvmis03) — usada pela tela
             Consulta PDM x Banco MSM. Nada fica salvo; cada consulta abre e fecha sua própria conexão.
           </p>
+          {error && (
+            <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">
+              ⚠ {error}
+            </div>
+          )}
           <label className="text-xs font-semibold text-on-surface-variant">
             Usuário
             {/* autoComplete="username"/"current-password" (em vez de "off") —
@@ -115,15 +145,15 @@ function PdmLoginModal({ onClose, onConnect }: {
             />
           </label>
           <div className="flex items-center justify-end gap-2 mt-2">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+            <button type="button" onClick={onClose} disabled={testing} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
               Agora não
             </button>
             <button
               type="submit"
-              disabled={!user.trim() || !password}
+              disabled={!user.trim() || !password || testing}
               className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
             >
-              Conectar
+              {testing ? 'Conectando…' : 'Conectar'}
             </button>
           </div>
         </form>

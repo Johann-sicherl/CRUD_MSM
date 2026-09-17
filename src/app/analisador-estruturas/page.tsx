@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
 import { getListFields, tables, type Field } from '@/lib/schema'
@@ -636,7 +637,7 @@ function GroupMissingAlert({ groupName, onClose }: { groupName: string; onClose:
           <p className="text-sm text-on-surface-variant">
             Não foi encontrado nenhum Grupo de Equipamentos com o nome{' '}
             <strong className="text-on-surface">&quot;{groupName}&quot;</strong>. Cadastre esse grupo primeiro em{' '}
-            <a href="/equipments" className="text-primary hover:underline">Grupo de Equipamentos</a>, depois volte aqui
+            <Link href="/equipments" className="text-primary hover:underline">Grupo de Equipamentos</Link>, depois volte aqui
             para adicionar este item ao banco.
           </p>
           <div className="flex justify-end gap-2">
@@ -1140,7 +1141,7 @@ export default function AnalisadorEstruturasPage() {
           Busque a estrutura direto no banco Protheus (recomendado) ou envie um ou mais arquivos .xlsx de estrutura
           (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot; — nome do arquivo = código Protheus). Cada código da
           estrutura é comparado com as regras cadastradas em{' '}
-          <a href="/parametros-estrutura" className="text-primary hover:underline">Parâmetros de Estrutura</a>
+          <Link href="/parametros-estrutura" className="text-primary hover:underline">Parâmetros de Estrutura</Link>
           — todas as propriedades cadastradas são analisadas, não só as que tiveram código encontrado: se dois
           códigos do mesmo grupo indicarem valores diferentes, gera alerta de duplicidade; se o valor não bater
           com o cadastro do equipamento em Cadastro de Equipamentos, gera alerta de erro; se nenhum código do

@@ -19,6 +19,58 @@ variável de ambiente, nem em sessão). Cada chamada abre e fecha seu próprio
 `sql.ConnectionPool`. Mesmo padrão replicado de `protheusDb.ts` (a conexão
 Protheus já existente antes desta integração).
 
+## Bug real já corrigido: login "conectava" mesmo com senha errada
+
+Pedido explícito do usuário: "quando eu faço o login dos bancos de dados,
+quero que você faça uma verificação se está conectado realmente, porque
+teve vez que eu errei a senha e passou, deu a flag verde do canto esquerdo
+inferior como se tivesse dado certo." Causa: `connect()` em
+`protheusAuthContext.tsx`/`pdmAuthContext.tsx` só gravava o texto digitado
+em `creds` (estado React) e fechava o modal — nunca testava a credencial
+contra o banco de verdade, então qualquer usuário/senha "conectava" com
+sucesso, mesmo errados.
+
+Corrigido com uma checagem real antes de marcar como conectado:
+- `testProtheusConnection`/`testPdmConnection` (`protheusDb.ts`/`pdmDb.ts`)
+  — abrem um `sql.ConnectionPool` com a credencial informada, rodam
+  `SELECT 1` (não faz nenhum trabalho de verdade, só confirma que o login
+  autentica) e fecham a conexão no `finally`. Lançam o erro do driver
+  (ex.: "Login failed for user '...'") se a autenticação falhar.
+- `POST /api/protheus-test-connection` / `POST /api/pdm-test-connection`
+  (novas rotas) — chamam essas funções e devolvem `{ ok: true }` ou
+  `{ error }` com status 401.
+- `ProtheusLoginModal`/`PdmLoginModal` — o submit agora é assíncrono:
+  chama a rota de teste primeiro (`testing` = "Conectando…" no botão,
+  desabilita o form) e só chama `onConnect(user, password)` (o que de fato
+  marca como conectado, acende a flag verde) se a rota devolver `ok`. Se
+  falhar, mostra a mensagem de erro do driver dentro do próprio modal e
+  mantém ele aberto pra tentar de novo — nunca mais fecha/marca conectado
+  silenciosamente com credencial errada.
+
+## Bug real já corrigido: pedia pra reconectar de novo no meio da sessão
+
+Pedido explícito do usuário: "me pediu para Conectar ao Banco de Dados do
+Protheus e do PDM quando eu abri a aplicação, quando recalculei e quando
+eu cliquei na janela de consulta ao banco de dados novamente, teria que
+ser somente no ato de entrar na aplicação." As credenciais (`creds` em
+`ProtheusAuthProvider`/`PdmAuthProvider`) só existem em memória (estado
+React) — sobrevivem normalmente a navegação client-side (`<Link>`, SPA,
+não remonta os providers), mas somem inteiras numa navegação "dura" (o
+navegador troca de página de verdade, o app inteiro remonta do zero).
+
+Causa: `busca-avancada-acessorios/page.tsx` e `analisador-estruturas/page.tsx`
+(as duas telas do grupo "Consulta Banco de Dados" que citam outras telas
+no próprio texto de instrução) tinham links pra `/parametros-estrutura` e
+`/equipments` escritos como `<a href="...">` (HTML puro) em vez de
+`<Link href="...">` (`next/link`) — uma tag `<a>` sempre navega "duro"
+(recarrega o app inteiro), mesmo apontando pra uma rota interna do próprio
+Next. Clicar num desses links — e só então — derrubava a conexão Protheus
+(e a do PDM junto, já que `PdmAuthProvider` também remonta), fazendo os
+dois modais de login reabrirem na tela seguinte, mesmo já tendo conectado
+"no ato de entrar na aplicação" como esperado. Corrigido trocando as 4
+ocorrências (2 em cada arquivo) por `<Link>` — navegação client-side de
+verdade, os providers (e a conexão) nunca remontam.
+
 A tela "Consulta PDM x Banco MSM" (credenciais + comparação PDM x Supabase)
 é gated por `isAdmin || canConnectPdm` — Administrador sempre, qualquer
 outro perfil só se essa permissão estiver ligada em Configuração de
