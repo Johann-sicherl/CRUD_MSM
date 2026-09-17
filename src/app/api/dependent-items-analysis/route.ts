@@ -1,65 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { listAccessoryHierarchy, type AccessoryHierarchyChildNode } from '@/lib/protheusDb'
+import { listAccessoryHierarchy } from '@/lib/protheusDb'
 import { computeCooccurrence, type CooccurrenceOrder } from '@/lib/cooccurrenceAnalysis'
 import { supabaseAdmin } from '@/lib/supabase'
 
 // Feeds "Pesquisa de Itens Dependentes Avançada" — mesma coleta de
 // listAccessoryHierarchy já usada em Busc. Avanç. Acessórios Protheus
-// (26.xx → nível 2 → nível 3, mais a subárvore de `filhos` de cada nível
-// 3, até o último nível), mas em vez de listar os itens, monta o
+// (26.xx → nível 2 → nível 3), mas em vez de listar os itens, monta o
 // "conjunto de códigos por pedido" (cada 26.xx é um pedido) e roda a
 // mineração de coocorrência (cooccurrenceAnalysis.ts, mesma matemática
 // que a regra R080 usa) pra achar pares que sempre saem juntos — depois
 // cruza contra dependant_items pra marcar o que já é uma dependência
 // formal e o que é candidato novo.
 //
-// Diferente de R080 (que só olha o próprio nível 3), aqui o conjunto de
-// código por pedido inclui a subárvore de cada item — sinal mais rico,
-// "análise geral componente a componente" (pedido explícito do usuário),
-// sem alterar o comportamento já existente de R080.
+// **Nunca desce além de nível 3 — decisão final, depois de duas rodadas
+// de ajuste.** Pedido original: incluir a subárvore inteira de cada item
+// (nível 4+, "até o último nível") como sinal extra. 1ª correção: limitar
+// essa subárvore a 2 níveis (SUBTREE_MAX_DEPTH), depois do usuário
+// reportar ruído (parafuso/cabo/suporte virando "candidato a item
+// dependente"). 2ª correção, pedido explícito do usuário, mesmo sintoma
+// ainda acontecendo: "quero que desça somente nos NIVEL 1 e NIVEL 2,
+// apenas, não a máquina toda, estou encontrando todo tipo de componente
+// em níveis muito inferiores ainda, é para varrer somente o que tem em
+// 26. e 27.13, abaixo disso não." A subárvore (`others`/`filhos`) foi
+// **removida por completo** — o conjunto de código por pedido agora é só
+// os códigos de nível 3 (os itens diretamente dentro de 27.13, a peça de
+// verdade ofertada), exatamente como a regra R080 sempre fez. Nenhum
+// componente interno do BOM de um item (nível 4 em diante) entra na
+// análise, ponto final.
 //
-// **Profundidade da subárvore limitada a 2 níveis** — pedido explícito do
-// usuário, rodada seguinte: "quero que desça somente nos NIVEL 1 e NIVEL
-// 2, apenas, não a máquina toda, estou encontrando todo tipo de
-// componente." A 1ª versão descia até o último nível (mesma busca de
-// Busc. Avanç. Acessórios Protheus, sem limite) — pra essa tela isso
-// jogava parafuso/cabo/suporte (peças internas do BOM de um conjunto, não
-// decisões comerciais) como "candidato a item dependente" contra o
-// próprio conjunto, virando ruído. `SUBTREE_MAX_DEPTH = 2` limita
-// `flattenChildCodes` a só os filhos diretos do item de nível 3 (nível 1
-// da subárvore) e os netos (nível 2) — nunca mais fundo. `others` continua
-// existindo (nunca pareado consigo mesmo, ver CooccurrenceOrder), só o
-// alcance ficou mais raso.
-//
-// Achado real, pedido explícito do usuário ("a consulta está extremamente
-// demorada, as outras consultas de estrutura são mais rápidas"): os
-// códigos de nível 3 (as âncoras — itens de verdade ofertados) entram em
-// `anchors`, e toda a subárvore deles entra em `others` — nunca os dois
-// juntos num único conjunto achatado pra all-pairs O(n²)
-// (cooccurrenceAnalysis.ts nunca pareia dois códigos de `others` entre
-// si). Ver o comentário de `CooccurrenceOrder` pra a explicação completa
-// de por que isso era o gargalo real (não a query ao Protheus em si — a
-// mesma BomDetailCache/`filhos` que Busc. Avanç. Acessórios Protheus usa,
-// que nunca fica lento porque essa tela nunca cruza par nenhum).
-
-// Nível 1 da subárvore = filhos diretos do item de nível 3; nível 2 = os
-// netos. `depth` começa em 1 na primeira chamada (ver call site abaixo).
-const SUBTREE_MAX_DEPTH = 2
-
-function flattenChildCodes(
-  nodes: AccessoryHierarchyChildNode[],
-  out: Set<string>,
-  descriptions: Map<string, string>,
-  depth: number,
-) {
-  if (depth > SUBTREE_MAX_DEPTH) return
-  for (const n of nodes) {
-    const code = n.codigo.trim().toUpperCase()
-    out.add(code)
-    if (code && !descriptions.has(code)) descriptions.set(code, n.denominacao)
-    flattenChildCodes(n.filhos, out, descriptions, depth + 1)
-  }
-}
+// Achado real, mantido mesmo depois desta simplificação (pedido explícito
+// do usuário: "a consulta está extremamente demorada, as outras consultas
+// de estrutura são mais rápidas"): mesmo só com nível 3, o conjunto de
+// código por pedido continua indo pra `CooccurrenceOrder.anchors` — nunca
+// um único array achatado pra all-pairs O(n²) sem critério, mesmo padrão
+// que blindou o R080 original contra esse mesmo tipo de explosão.
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
@@ -86,16 +60,14 @@ export async function POST(request: NextRequest) {
     const orders: CooccurrenceOrder[] = []
     for (const g of groups) {
       const anchors = new Set<string>()
-      const others = new Set<string>()
       for (const row of g.rows) {
         if (row.nivel !== 3) continue
         const code = row.codigo.trim().toUpperCase()
         if (!code) continue
         anchors.add(code)
         if (!descriptions.has(code)) descriptions.set(code, row.denominacao)
-        flattenChildCodes(row.filhos ?? [], others, descriptions, 1)
       }
-      orders.push({ anchors: Array.from(anchors), others: Array.from(others) })
+      orders.push({ anchors: Array.from(anchors) })
     }
 
     const pairs = computeCooccurrence(orders, { minSupport, minConfidence })
