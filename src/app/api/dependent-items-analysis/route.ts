@@ -14,9 +14,22 @@ import { supabaseAdmin } from '@/lib/supabase'
 // formal e o que é candidato novo.
 //
 // Diferente de R080 (que só olha o próprio nível 3), aqui o conjunto de
-// código por pedido inclui TODA a subárvore de cada item — sinal mais
-// rico, "análise geral componente a componente" (pedido explícito do
-// usuário), sem alterar o comportamento já existente de R080.
+// código por pedido inclui a subárvore de cada item — sinal mais rico,
+// "análise geral componente a componente" (pedido explícito do usuário),
+// sem alterar o comportamento já existente de R080.
+//
+// **Profundidade da subárvore limitada a 2 níveis** — pedido explícito do
+// usuário, rodada seguinte: "quero que desça somente nos NIVEL 1 e NIVEL
+// 2, apenas, não a máquina toda, estou encontrando todo tipo de
+// componente." A 1ª versão descia até o último nível (mesma busca de
+// Busc. Avanç. Acessórios Protheus, sem limite) — pra essa tela isso
+// jogava parafuso/cabo/suporte (peças internas do BOM de um conjunto, não
+// decisões comerciais) como "candidato a item dependente" contra o
+// próprio conjunto, virando ruído. `SUBTREE_MAX_DEPTH = 2` limita
+// `flattenChildCodes` a só os filhos diretos do item de nível 3 (nível 1
+// da subárvore) e os netos (nível 2) — nunca mais fundo. `others` continua
+// existindo (nunca pareado consigo mesmo, ver CooccurrenceOrder), só o
+// alcance ficou mais raso.
 //
 // Achado real, pedido explícito do usuário ("a consulta está extremamente
 // demorada, as outras consultas de estrutura são mais rápidas"): os
@@ -29,16 +42,22 @@ import { supabaseAdmin } from '@/lib/supabase'
 // mesma BomDetailCache/`filhos` que Busc. Avanç. Acessórios Protheus usa,
 // que nunca fica lento porque essa tela nunca cruza par nenhum).
 
+// Nível 1 da subárvore = filhos diretos do item de nível 3; nível 2 = os
+// netos. `depth` começa em 1 na primeira chamada (ver call site abaixo).
+const SUBTREE_MAX_DEPTH = 2
+
 function flattenChildCodes(
   nodes: AccessoryHierarchyChildNode[],
   out: Set<string>,
   descriptions: Map<string, string>,
+  depth: number,
 ) {
+  if (depth > SUBTREE_MAX_DEPTH) return
   for (const n of nodes) {
     const code = n.codigo.trim().toUpperCase()
     out.add(code)
     if (code && !descriptions.has(code)) descriptions.set(code, n.denominacao)
-    flattenChildCodes(n.filhos, out, descriptions)
+    flattenChildCodes(n.filhos, out, descriptions, depth + 1)
   }
 }
 
@@ -74,7 +93,7 @@ export async function POST(request: NextRequest) {
         if (!code) continue
         anchors.add(code)
         if (!descriptions.has(code)) descriptions.set(code, row.denominacao)
-        flattenChildCodes(row.filhos ?? [], others, descriptions)
+        flattenChildCodes(row.filhos ?? [], others, descriptions, 1)
       }
       orders.push({ anchors: Array.from(anchors), others: Array.from(others) })
     }

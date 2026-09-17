@@ -681,6 +681,25 @@ ambos no processamento em memória depois da query:
    sem `others`) — comportamento idêntico a antes, já que R080 nunca usou
    subárvore.
 
+**3ª rodada, pedido explícito do usuário — a subárvore inteira virava
+ruído**: "quero que desça somente nos NIVEL 1 e NIVEL 2, apenas, não a
+máquina toda, estou encontrando todo tipo de componente." A subárvore de
+cada âncora (nível 3) ia até o último nível (mesma busca sem limite de
+Busc. Avanç. Acessórios Protheus) — pra esta tela especificamente, isso
+trazia parafuso/cabo/suporte (peças internas do BOM de um conjunto, não
+decisões comerciais) como "candidato a item dependente" contra o próprio
+conjunto que os contém, virando ruído demais pra ser útil. Corrigido
+com `SUBTREE_MAX_DEPTH = 2` em `flattenChildCodes`
+(`/api/dependent-items-analysis/route.ts`) — só os filhos diretos da
+âncora (nível 1 da subárvore) e os netos (nível 2) entram em `others`,
+nunca mais fundo que isso. `anchors` (os próprios itens de nível 3) e a
+separação âncora/profundo em `computeCooccurrence` (nunca pareia
+profundo×profundo, ver rodada anterior) não mudaram — só o alcance da
+subárvore ficou mais raso. Busc. Avanç. Acessórios Protheus **não foi
+tocada** — continua indo até o último nível de propósito, é uma tela
+diferente com um objetivo diferente (mostrar a árvore completa de um
+acessório, não minerar coocorrência).
+
 ### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
 
 **Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de
