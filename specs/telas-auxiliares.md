@@ -737,6 +737,45 @@ remover. "Limpar filtros" aparece assim que há alguma seleção OU texto
 digitado em qualquer caixa de busca de coluna (mesmo critério de
 `hasActiveColFilters` de `DataTable.tsx`, ver `specs/ui-componentes.md`).
 
+**6ª rodada — "pacote completo": nível 2 + nível 3 juntos, cruzamento
+completo dentro do pacote, não mais só nível 3**. Depois da 5ª rodada
+(filtro por coluna), o usuário perguntou por que códigos que "teriam que
+estar aparecendo" não apareciam — a resposta encontrada foi que a decisão
+da 4ª rodada (conjunto de código por pedido = só NIVEL 3) excluía por
+completo qualquer código de NIVEL 2 (a própria linha `27.13`, Embalagens,
+Gastos Gerais etc.) da mineração, mesmo sendo parte legítima do mesmo
+pedido — um código de NIVEL 2 nunca virava "âncora", nunca formava par
+com nada. Isso reabriu uma pergunta que tinha ficado pendente de
+confirmação numa rodada anterior: **"quando encontrar uma estrutura que
+começa com 26., tem que gerar o nível 26. e o 27.13 dela, isso resultará
+em um pacote de códigos... a partir daí se faz as análises dentro do
+pacote completo... não somente entre o nível 26. para 26. ou 27.13 para
+27.13, mas sim, pacote completo."** Pedido explícito do usuário,
+confirmado nesta rodada: "Sim, implementa."
+
+- **`/api/dependent-items-analysis/route.ts`** — o filtro `if (row.nivel
+  !== 3) continue` foi removido: o conjunto de código por pedido
+  (`orders[i].anchors`) agora é **todas** as linhas do grupo (`g.rows`,
+  NIVEL 2 e NIVEL 3 juntos, sem distinção), um único "pacote" por
+  cabeçalho 26.xx. `computeCooccurrence` já gera todos os pares
+  âncora×âncora dentro de `anchors` (não distingue nível nenhum, nunca
+  distinguiu) — então isso sozinho já entrega "pacote completo, cruzado
+  por completo entre si", sem precisar de nenhuma mudança em
+  `cooccurrenceAnalysis.ts`. Um NIVEL 2 fora do prefixo do campo
+  "Prefixo(s) para abrir NIVEL 2" continua sem ter seus filhos
+  explorados (nunca vira NIVEL 3 de ninguém) — mas agora **o próprio
+  código dele** entra no pacote e pode formar par com qualquer outro
+  código do mesmo pacote.
+- **O que NÃO mudou**: continua nunca descendo além de nível 3 (nenhuma
+  subárvore/nível 4+, decisão da 4ª rodada, inalterada) — "pacote
+  completo" aqui significa nível 2 + nível 3 do mesmo pedido, não "até o
+  último nível" (essa ideia já tinha sido tentada e revertida duas vezes
+  antes). Performance continua segura pelo mesmo motivo de antes: o
+  pacote de um pedido é pequeno (só os filhos diretos de NIVEL 2/3, nunca
+  a subárvore inteira), então o all-pairs dentro dele nunca reintroduz a
+  explosão combinatória que motivou a separação `anchors`/`others` — esta
+  tela simplesmente nunca usa o campo `others` de `CooccurrenceOrder`.
+
 ### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
 
 **Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de

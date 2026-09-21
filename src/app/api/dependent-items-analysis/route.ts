@@ -12,28 +12,42 @@ import { supabaseAdmin } from '@/lib/supabase'
 // cruza contra dependant_items pra marcar o que já é uma dependência
 // formal e o que é candidato novo.
 //
-// **Nunca desce além de nível 3 — decisão final, depois de duas rodadas
-// de ajuste.** Pedido original: incluir a subárvore inteira de cada item
-// (nível 4+, "até o último nível") como sinal extra. 1ª correção: limitar
-// essa subárvore a 2 níveis (SUBTREE_MAX_DEPTH), depois do usuário
-// reportar ruído (parafuso/cabo/suporte virando "candidato a item
-// dependente"). 2ª correção, pedido explícito do usuário, mesmo sintoma
-// ainda acontecendo: "quero que desça somente nos NIVEL 1 e NIVEL 2,
-// apenas, não a máquina toda, estou encontrando todo tipo de componente
-// em níveis muito inferiores ainda, é para varrer somente o que tem em
-// 26. e 27.13, abaixo disso não." A subárvore (`others`/`filhos`) foi
-// **removida por completo** — o conjunto de código por pedido agora é só
-// os códigos de nível 3 (os itens diretamente dentro de 27.13, a peça de
-// verdade ofertada), exatamente como a regra R080 sempre fez. Nenhum
-// componente interno do BOM de um item (nível 4 em diante) entra na
-// análise, ponto final.
+// **Nunca desce além de nível 3 — decisão final, mantida.** Pedido
+// original: incluir a subárvore inteira de cada item (nível 4+, "até o
+// último nível") como sinal extra. 1ª correção: limitar essa subárvore a
+// 2 níveis, depois do usuário reportar ruído (parafuso/cabo/suporte
+// virando "candidato a item dependente"). 2ª correção, mesmo sintoma
+// ainda acontecendo: "varrer somente o que tem em 26. e 27.13, abaixo
+// disso não" — a subárvore (`others`/`filhos`) foi removida por completo.
+// Nenhum componente interno do BOM de um item (nível 4 em diante) entra
+// na análise, ponto final — isso não mudou nesta rodada.
 //
-// Achado real, mantido mesmo depois desta simplificação (pedido explícito
-// do usuário: "a consulta está extremamente demorada, as outras consultas
-// de estrutura são mais rápidas"): mesmo só com nível 3, o conjunto de
-// código por pedido continua indo pra `CooccurrenceOrder.anchors` — nunca
-// um único array achatado pra all-pairs O(n²) sem critério, mesmo padrão
-// que blindou o R080 original contra esse mesmo tipo de explosão.
+// **"Pacote completo" — pedido explícito do usuário, rodada seguinte**:
+// "quando encontrar uma estrutura que começa com 26., tem que gerar o
+// nível 26. e o 27.13 dela, isso resultará em um pacote de códigos...
+// a partir daí se faz as análises dentro do pacote completo... não
+// somente entre o nível 26. para 26. ou 27.13 para 27.13, mas sim,
+// pacote completo." Até então o conjunto de código por pedido era só
+// NIVEL 3 (os itens diretamente dentro de 27.13) — um código de NIVEL 2
+// (a própria linha 27.13, Embalagens, Gastos Gerais etc.) nunca entrava
+// na mineração, mesmo sendo parte legítima do mesmo pedido. Corrigido:
+// o conjunto de código por pedido agora é TODAS as linhas do grupo
+// (`g.rows`, NIVEL 2 e NIVEL 3 juntos, sem distinção de nível) — um
+// único "pacote", cruzado por completo entre si (qualquer código do
+// pacote pode formar par com qualquer outro do mesmo pacote, não só
+// nível-com-nível). O nível 2 não expandido pra 3 (fora do prefixo do
+// campo "Prefixo(s) para abrir NIVEL 2") continua entrando como código
+// de pacote — só não tem filhos explorados, exatamente como antes.
+//
+// Achado real, mantido mesmo depois desta mudança de escopo (pedido
+// explícito do usuário: "a consulta está extremamente demorada, as
+// outras consultas de estrutura são mais rápidas"): o pacote de um
+// pedido continua pequeno (NIVEL 2 + NIVEL 3 diretos, nunca a subárvore
+// de nível 4+), então o all-pairs dentro dele nunca reintroduz a
+// explosão combinatória que motivou separar `anchors`/`others` em
+// `cooccurrenceAnalysis.ts` — aqui não há `others`, só um `anchors`
+// achatado por pedido, e isso é seguro justamente porque o tamanho do
+// pacote continua limitado ao mesmo nível 2/3 de sempre.
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
@@ -61,7 +75,6 @@ export async function POST(request: NextRequest) {
     for (const g of groups) {
       const anchors = new Set<string>()
       for (const row of g.rows) {
-        if (row.nivel !== 3) continue
         const code = row.codigo.trim().toUpperCase()
         if (!code) continue
         anchors.add(code)

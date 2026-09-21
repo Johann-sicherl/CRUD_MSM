@@ -226,9 +226,11 @@ export default function PesquisaItensDependentesAvancadaPage() {
         <p className="text-on-surface-variant text-base mt-1 max-w-4xl">
           Analisa a estrutura Protheus ao vivo (mesma varredura 26.xx → nível 2 → nível 3 de Busc. Avanç.
           Acessórios Protheus — nunca desce além do nível 3, nenhum componente interno do BOM de um item entra
-          na análise) procurando pares de código que sempre saem juntos nos pedidos — o mesmo estudo de caso por
-          trás de <span className="font-mono">Produtos Dependentes</span>: &quot;este componente sempre saiu com
-          este outro&quot;. Cada par encontrado é cruzado contra o que já está cadastrado em Produtos
+          na análise). Cada estrutura 26.xx forma um &quot;pacote&quot; com todos os seus códigos de nível 2 e
+          nível 3 juntos, e a busca cruza os pares dentro do pacote inteiro (não só nível 2 com nível 2 ou nível
+          3 com nível 3) procurando pares de código que sempre saem juntos nos pedidos — o mesmo estudo de caso
+          por trás de <span className="font-mono">Produtos Dependentes</span>: &quot;este componente sempre saiu
+          com este outro&quot;. Cada par encontrado é cruzado contra o que já está cadastrado em Produtos
           Dependentes — o que ainda não está declarado (nos dois sentidos) vira um candidato pra você decidir se
           cadastra.
         </p>
