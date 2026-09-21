@@ -20,6 +20,7 @@ dono do projeto. Convenção dos arquivos "oficiais" (com banner de cabeçalho
 | `msm_query_double_check.sql` | Tabelas `_check`, RLS e a RPC `run_query_double_check` do módulo Double-check de Queries (ver `specs/double-check-queries.md`). |
 | `msm_query_double_check_remove_fks.sql` | Remove as 7 foreign keys `_check → _check` criadas pela versão antiga de `msm_query_double_check.sql` — pedido explícito do usuário, ver `specs/double-check-queries.md`. |
 | `msm_add_read_only_check_mode.sql` | Coluna `read_only_check_mode` em `user_profiles` — perfil somente-leitura restrito às cópias `_check` (perfil "Analista de Dados", ver `specs/permissoes-e-perfis.md`). |
+| `msm_add_international_contribution_margin.sql` | Coluna `international_contribution_margin_ratio` em `equipments` (e, se já existir, `equipments_check`) — 11º campo de `FORCE_TO_ONE_FIELDS`, ver `specs/custeio-financeiro.md`. |
 
 ## Exceções à convenção — sem banner, scripts pontuais
 

@@ -4,13 +4,14 @@
 
 ```ts
 export const FORCE_TO_ONE_FIELDS = [
-  'cost_std', 'ipi_tax_rate', 'contribution_margin_ratio', 'seller_commission',
+  'cost_std', 'ipi_tax_rate', 'contribution_margin_ratio',
+  'international_contribution_margin_ratio', 'seller_commission',
   'manager_commission', 'director_commission', 'certification_cost',
   'labor_cost_rate', 'warranty_rate', 'parts_provision_rate',
 ]
 ```
 
-Por sigilo, o valor real desses 10 campos **nunca** é persistido no Supabase:
+Por sigilo, o valor real desses 11 campos **nunca** é persistido no Supabase:
 - Se o valor real é não-zero, o Supabase recebe sempre `1` (sentinela).
 - Se não há valor real, fica `0`/vazio — usado deliberadamente como sinal de
   "ainda não custeado".
@@ -43,6 +44,29 @@ salvos direto no Supabase antes de forçá-los a 1. Essa rota já não é chamad
 por nada no app (era estritamente para ser rodada uma vez) e foi removida
 nesta reestruturação de documentação — se precisar reaplicar uma migração
 semelhante para um campo novo, o padrão está no histórico do git.
+
+**Histórico**: `international_contribution_margin_ratio` (equipments/Grupo
+de Equipamentos) foi o 11º campo a entrar em `FORCE_TO_ONE_FIELDS` —
+achado como "1 coluna(s) extra(s) (ignorada(s))" no Atualizador Global
+(`csvTableDetect.ts`/`detectTable`): o CSV oficial já trazia essa coluna,
+mas o `schema.ts` ainda não a mapeava, então ela era só ignorada no
+import, sem entrar no app nem gerar alerta de erro (badge âmbar
+informativo, não bloqueia). Confirmado explicitamente com o usuário antes
+de mapear: (1) adicionar como campo novo de `equipments` (não deixar
+ignorada), e (2) tratar com a mesma proteção de sigilo da
+`contribution_margin_ratio` "doméstica" já existente — é uma margem de
+contribuição real, só que pro mercado internacional, então precisa do
+mesmo sentinela `1`/`0` que protege a margem normal. Nenhum código em
+`tableWrite.ts`/`localCostGuard.ts`/`localCostExtract.ts`/
+`RecordModal.tsx`/`DataTable.tsx`/telas do Atualizador Global precisou
+mudar — todos já iteram `FORCE_TO_ONE_FIELDS` dinamicamente, nunca uma
+lista de nomes duplicada em paralelo (mesmo motivo pelo qual
+`parts_provision_rate`, acima, também só precisou entrar nesse array).
+Migração da coluna real (`equipments` e, condicionalmente,
+`equipments_check` — ver `specs/double-check-queries.md`) em
+`msm_add_international_contribution_margin.sql` (ver
+`specs/sql-migrations.md`), `DECIMAL(10,4) NOT NULL DEFAULT 0`, mesmo tipo
+dos outros 10 campos financeiros em `msm_supabase.sql`.
 
 ## `TARGET_COST_PENDING_FIELD` / fila `pending_target_cost`
 

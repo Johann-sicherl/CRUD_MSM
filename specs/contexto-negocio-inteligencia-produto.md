@@ -167,6 +167,6 @@ documento).
 
 ## 6. Custo real nunca aparece num achado
 
-Os 10 campos financeiros (`FORCE_TO_ONE_FIELDS`) nunca saem do sentinela
+Os 11 campos financeiros (`FORCE_TO_ONE_FIELDS`) nunca saem do sentinela
 (`0`/`1`) em nenhum achado gerado pelo motor de regras — o valor real mora
 só em `local-data/`, fora do Git. Nenhuma regra lê nem expõe esse valor.

@@ -25,7 +25,7 @@ Next.js 14 (App Router) + TypeScript + Supabase, ferramenta administrativa inter
 
 ## Regras invioláveis
 
-- **Custos reais nunca vão para o Supabase.** Os 10 campos de `FORCE_TO_ONE_FIELDS` são sempre gravados como `1` (sentinela) ou `0`/vazio — o valor real fica só em `local-data/` (gitignored, nunca sobe pro Git). Ver `specs/custeio-financeiro.md` antes de tocar em qualquer fluxo de custo.
+- **Custos reais nunca vão para o Supabase.** Os 11 campos de `FORCE_TO_ONE_FIELDS` são sempre gravados como `1` (sentinela) ou `0`/vazio — o valor real fica só em `local-data/` (gitignored, nunca sobe pro Git). Ver `specs/custeio-financeiro.md` antes de tocar em qualquer fluxo de custo.
 - **Não existe sessão de servidor.** Login é escolha de perfil client-side (`sessionStorage`). Qualquer checagem de permissão no servidor deve usar `getProfileById(profileId)` — nunca confiar em um `isAdmin` enviado pelo cliente.
 - **Três mecanismos de import são distintos e não devem ser confundidos**: substituição total (admin, CSV-only), atualização restrita de Controladoria/Fiscal/Precificação (CSV/XLSX, só UPDATE), e fila de insert por tela (Importar Excel). Ver `specs/import-export.md`.
 - **`isControllershipTable`/`getControllershipPendingFields`** (schema.ts) são a única fonte de verdade sobre quais tabelas/campos são de Controladoria/Fiscal/Precificação — nunca reintroduzir lista hardcoded em outro arquivo.
