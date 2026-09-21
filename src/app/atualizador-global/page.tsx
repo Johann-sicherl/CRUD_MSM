@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { FORCE_TO_ONE_FIELDS } from '@/lib/schema'
+import { FORCE_TO_ONE_FIELDS, tables, EQUIPMENTS_CASCADE_DEPENDENT_TABLES } from '@/lib/schema'
 import { useAppAuth } from '@/lib/appAuthContext'
 import AtualizadorGlobalControladoria from '@/components/AtualizadorGlobalControladoria'
 import {
@@ -153,16 +153,51 @@ function AtualizadorGlobalAdmin() {
   const readyFiles = pendingFiles.filter(f => !isBlocking(f))
   const anyBlocking = pendingFiles.some(isBlocking)
 
+  // Achado real: equipments tem 5 tabelas com FK ON DELETE CASCADE
+  // apontando pra ela (ver EQUIPMENTS_CASCADE_DEPENDENT_TABLES, schema.ts)
+  // — substituir "Grupo de Equipamentos" dispara DELETE FROM equipments
+  // WHERE true, que apaga em cascata TODAS as linhas dessas 5 tabelas na
+  // hora, mesmo as que não mudaram nada. Se alguma delas não estiver
+  // também neste lote, ela fica vazia e nada a reinsere. Só se aplica
+  // quando "equipments" está de fato no lote — substituir só as tabelas
+  // dependentes, sem equipments, não corre esse risco.
+  const readyTableNames = new Set(readyFiles.map(f => f.detection!.tableName))
+  const cascadeMissingTables = readyTableNames.has('equipments')
+    ? EQUIPMENTS_CASCADE_DEPENDENT_TABLES.filter(t => !readyTableNames.has(t)).map(t => tables[t].label)
+    : []
+  const cascadeBlocked = cascadeMissingTables.length > 0
+
+  // equipments precisa ser processada ANTES das suas 5 tabelas dependentes
+  // dentro do mesmo lote — senão a substituição delas roda antes da
+  // cascata de equipments apagar tudo de novo, e o turno delas no lote já
+  // passou (nada reprocessa depois). Ordena só isso, preserva a ordem de
+  // upload pro resto.
+  const cascadeSafeOrder = (list: UploadedFile[]) =>
+    [...list].sort((a, b) => {
+      const aFirst = a.detection!.tableName === 'equipments' ? 0 : 1
+      const bFirst = b.detection!.tableName === 'equipments' ? 0 : 1
+      return aFirst - bFirst
+    })
+
   const runReplaceAll = async () => {
+    if (cascadeBlocked) {
+      window.alert(
+        `Substituição bloqueada: "Grupo de Equipamentos" está neste lote, mas ${cascadeMissingTables.join(', ')} ` +
+        `não está(ão) — substituir equipments apaga em cascata todas as linhas dessas tabelas, e elas ficariam ` +
+        `vazias sem esses arquivos no mesmo lote.`
+      )
+      return
+    }
+    const orderedFiles = cascadeSafeOrder(readyFiles)
     const ok = window.confirm(
-      `Tem certeza? Isso vai APAGAR todos os registros atuais de ${readyFiles.length} tabela(s) — ` +
-      `${readyFiles.map(f => f.detection!.schema.label).join(', ')} — e substituir pelo conteúdo destes arquivos. ` +
+      `Tem certeza? Isso vai APAGAR todos os registros atuais de ${orderedFiles.length} tabela(s) — ` +
+      `${orderedFiles.map(f => f.detection!.schema.label).join(', ')} — e substituir pelo conteúdo destes arquivos. ` +
       `Esta ação não pode ser desfeita.`
     )
     if (!ok) return
 
     setSendingAll(true)
-    for (const file of readyFiles) {
+    for (const file of orderedFiles) {
       await replaceOne(file)
     }
     setSendingAll(false)
@@ -422,10 +457,18 @@ function AtualizadorGlobalAdmin() {
             Comparar valores recebidos com o banco de dados atual antes de substituir — se houver
             qualquer diferença, a substituição é cancelada e um alerta detalhado é exibido.
           </label>
+          {cascadeBlocked && (
+            <div className="text-sm text-error bg-error-container/20 border border-error/30 rounded px-3 py-2">
+              ⚠ &quot;Grupo de Equipamentos&quot; está neste lote, mas {cascadeMissingTables.join(', ')} não está(ão) —
+              substituir Grupo de Equipamentos apaga em cascata (FK <code>ON DELETE CASCADE</code>) todas as linhas
+              dessas tabelas para qualquer equipamento, e elas ficariam vazias sem esses arquivos no mesmo lote.
+              Adicione os CSVs faltantes ao lote, ou remova o de Grupo de Equipamentos, antes de substituir.
+            </div>
+          )}
           <div>
             <button
               onClick={confirmReplaceAll}
-              disabled={readyFiles.length === 0 || !confirmChecked || sendingAll || comparing}
+              disabled={readyFiles.length === 0 || !confirmChecked || sendingAll || comparing || (cascadeBlocked && !compareChecked)}
               className="px-4 py-2 rounded-lg bg-error text-on-error text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
             >
               {comparing

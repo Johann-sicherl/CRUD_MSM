@@ -19,6 +19,56 @@ Existem **três mecanismos distintos** de import — não confundir:
   para permitir a comparação "CSV novo vs. banco atual" (ver
   `specs/csv-baseline-comparacao.md`).
 
+### Risco real achado: `ON DELETE CASCADE` de `equipments` pode esvaziar tabelas fora do lote
+
+Achado durante uma sessão de comparação real do usuário (primeira alteração
+de produção testada contra o Supabase) — a pergunta que expôs o risco:
+"preciso saber se as informações que estão nos CSVs resultarão no meu Banco
+de Dados que existe hoje no Supabase" (ou seja: os diffs de campo do
+"Comparar", sozinhos, não garantem isso).
+
+`msm_foreign_keys.sql` declara 5 FKs com `ON DELETE CASCADE` apontando pra
+`equipments(legacy_id)`: `standard_equipment_items`,
+`relationship_equip_accessory`, `non_combinable_comps`, `dependant_items`,
+`roller_tables`. `global_table_replace` faz `DELETE FROM equipments WHERE
+true` antes de recarregar — isso dispara a cascata **na hora**, apagando
+todas as linhas dessas 5 tabelas que referenciam qualquer equipamento,
+independente do que o lote atual contém. Duas consequências reais, sem
+nenhuma proteção antes desta mudança:
+
+1. Se `equipments` estiver no lote mas **alguma** das 5 dependentes não
+   estiver, o conteúdo dessa tabela é apagado pela cascata e **nada o
+   reinsere** — fica vazio até um import futuro dela.
+2. Se `equipments` estiver no lote mas for processada **depois** de
+   alguma das 5 dependentes (a ordem era só a ordem de upload dos
+   arquivos, sem nenhuma lógica), a substituição dessa dependente já
+   rodou antes da cascata apagar tudo de novo — o turno dela no lote já
+   passou, e ela também fica vazia.
+
+O checkbox "Comparar valores recebidos com o banco de dados atual" nunca
+detecta isso — ele compara tabela por tabela, isoladamente, nunca o
+efeito cascata entre elas.
+
+**Fix**: `EQUIPMENTS_CASCADE_DEPENDENT_TABLES` (`schema.ts`) — lista as 5
+tabelas acima, mantida manualmente em sincronia com
+`msm_foreign_keys.sql` (não há introspecção automática do banco neste
+projeto). Em `atualizador-global/page.tsx` (`AtualizadorGlobalAdmin`):
+- `cascadeMissingTables`/`cascadeBlocked` — só calculado quando
+  `equipments` está de fato no lote (`readyFiles`); lista as dependentes
+  que faltam. Bloqueia o botão "Confirmar e Substituir Tudo" (mas não
+  "Comparar", que é só leitura e não corre esse risco) e mostra um aviso
+  vermelho explícito, com os nomes das tabelas faltando, acima do botão.
+  Bloqueio replicado dentro de `runReplaceAll` (não só no `disabled` do
+  botão) — defesa em profundidade, já que o pop-up "Comparar" pode chamar
+  `runReplaceAll()` diretamente via `onProceed` quando não há diferenças,
+  sem passar pelo botão desabilitado.
+- `cascadeSafeOrder` — quando `equipments` está no lote, ela sempre é
+  processada **primeiro**, antes de qualquer outra tabela, independente
+  da ordem de upload — garante que as 5 tabelas dependentes (que só podem
+  estar no lote se todas estiverem presentes, pelo bloqueio acima) sejam
+  substituídas depois da cascata de `equipments` já ter acontecido, e não
+  antes.
+
 ## (b) Import restrito de Controladoria/Fiscal/Precificação
 
 - Mesma tela "Atualizador Global", mas para o perfil Gerente Adm Comercial —

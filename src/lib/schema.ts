@@ -130,6 +130,26 @@ export const FORCE_TO_ONE_FIELDS = [
 // coluna em accessories/standard_equipment_items.
 export const TARGET_COST_PENDING_FIELD = 'target_cost_pending'
 
+// Tabelas com FK ON DELETE CASCADE apontando pra equipments(legacy_id) —
+// ver msm_foreign_keys.sql. Achado real: o Atualizador Global de Tabelas
+// MSM (substituição total) faz DELETE FROM equipments WHERE true antes de
+// recarregar — isso dispara a cascata na hora e apaga TODAS as linhas
+// dessas 5 tabelas que referenciam qualquer equipamento, mesmo as que não
+// mudaram nada. Se equipments for substituído num lote sem TODAS essas 5
+// tabelas também presentes no mesmo lote (e processadas depois dela), o
+// conteúdo delas fica vazio e nada o reinsere. Usado por
+// AtualizadorGlobalAdmin (atualizador-global/page.tsx) pra bloquear um
+// lote perigoso e forçar equipments a rodar primeiro quando presente.
+// Precisa ser mantida manualmente em sincronia com msm_foreign_keys.sql —
+// não há introspecção automática do banco neste projeto.
+export const EQUIPMENTS_CASCADE_DEPENDENT_TABLES = [
+  'standard_equipment_items',
+  'relationship_equip_accessory',
+  'non_combinable_comps',
+  'dependant_items',
+  'roller_tables',
+]
+
 // Colunas de controladoria/fiscal/precificação desta tabela que ainda são um
 // sinal confiável de "pendente" — mesmo critério usado pelo filtro "Somente
 // Novos" de perfil restrito (DataTable.tsx) e pelo cartão de pendências do
