@@ -708,6 +708,35 @@ o último nível de propósito, é uma tela diferente com um objetivo
 diferente (mostrar a árvore completa de um acessório pra quem quer ver
 tudo, não minerar coocorrência pra sugerir uma dependência formal).
 
+**5ª rodada — filtro por coluna, estilo Excel, igual ao resto do app**:
+pedido explícito do usuário: "adicione o mesmo filtro em suas colunas para
+eu conseguir filtrar seus códigos." A tela tinha só uma caixa de texto
+genérica ("Componente:") que buscava substring em `codigoA`/`codigoB`.
+Substituída pelo mesmo `ColumnFilter.tsx` (dropdown multi-seleção via
+portal, ver `specs/ui-componentes.md`) já usado em `DataTable.tsx` — um
+filtro por coluna, em cascata (as opções de uma coluna refletem só as
+linhas que já passam pelos filtros das OUTRAS colunas), nas seis colunas
+de fato exibidas no cabeçalho da tabela: Código A, Código B,
+Coocorrências, Confiança A→B, Confiança B→A, Status (a coluna Ação não
+filtra, não tem dado). Denominação A/B não ganhou filtro — não é uma
+coluna própria do cabeçalho, só aparece empilhada dentro da célula do
+código.
+
+Implementado com o mesmo padrão de estado de `DataTable.tsx`
+(`colFilters`/`filterSearch`/`columnOptions`/`handleToggleFilter`/
+`handleClearFilter`), só que local à página em vez de vir de um schema —
+`getPairColValue(p, key)` formata cada coluna pro mesmo texto exibido na
+célula (`coOcorrencias` vira string, `confiancaAparaB`/`confiancaBparaA`
+formatadas com `formatPct`, `status` vira "Já declarado"/"Candidato
+novo"), e `applyPairColumnFilters` filtra por interseção de todas as
+colunas com seleção ativa. O toggle "Todos os pares"/"Só candidatos
+novos" (`showOnlyNew`) foi mantido como está — filtro independente,
+aplicado antes dos filtros de coluna (`baseFilteredPairs`), redundante em
+parte com o filtro de coluna "Status" mas já existia e não foi pedido pra
+remover. "Limpar filtros" aparece assim que há alguma seleção OU texto
+digitado em qualquer caixa de busca de coluna (mesmo critério de
+`hasActiveColFilters` de `DataTable.tsx`, ver `specs/ui-componentes.md`).
+
 ### Inteligência do Produto (`/inteligencia-produto`) — módulo desativado da navegação
 
 **Pedido explícito do usuário**: "Quero abandonar a ideia do módulo de

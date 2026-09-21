@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import RecordModal from '@/components/RecordModal'
+import ColumnFilter from '@/components/ColumnFilter'
 import { tables } from '@/lib/schema'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 
@@ -42,6 +43,42 @@ function formatPct(v: number): string {
   return `${Math.round(v * 100)}%`
 }
 
+// Mesmo padrão excel-style de filtro por coluna de DataTable.tsx (ColumnFilter,
+// colFilters/filterSearch/columnOptions em cascata) — pedido explícito do
+// usuário: "adicione o mesmo filtro em suas colunas para eu conseguir filtrar
+// seus códigos". Só as colunas de fato exibidas no cabeçalho da tabela (não
+// a denominação, que aparece só empilhada dentro da célula de código).
+type PairColKey = 'codigoA' | 'codigoB' | 'coOcorrencias' | 'confiancaAparaB' | 'confiancaBparaA' | 'status'
+
+const PAIR_COLUMN_LABELS: Record<PairColKey, string> = {
+  codigoA: 'Código A',
+  codigoB: 'Código B',
+  coOcorrencias: 'Coocorrências',
+  confiancaAparaB: 'Confiança A→B',
+  confiancaBparaA: 'Confiança B→A',
+  status: 'Status',
+}
+
+const PAIR_COLUMN_KEYS: PairColKey[] = ['codigoA', 'codigoB', 'coOcorrencias', 'confiancaAparaB', 'confiancaBparaA', 'status']
+
+function getPairColValue(p: CooccurrencePair, key: PairColKey): string {
+  switch (key) {
+    case 'codigoA': return p.codigoA
+    case 'codigoB': return p.codigoB
+    case 'coOcorrencias': return String(p.coOcorrencias)
+    case 'confiancaAparaB': return formatPct(p.confiancaAparaB)
+    case 'confiancaBparaA': return formatPct(p.confiancaBparaA)
+    case 'status': return p.jaDeclarado ? 'Já declarado' : 'Candidato novo'
+  }
+}
+
+function applyPairColumnFilters(list: CooccurrencePair[], filters: Record<string, string[]>): CooccurrencePair[] {
+  return list.filter(p => PAIR_COLUMN_KEYS.every(key => {
+    const sel = filters[key]
+    return !sel || sel.length === 0 || sel.includes(getPairColValue(p, key))
+  }))
+}
+
 export default function PesquisaItensDependentesAvancadaPage() {
   // Conexão única ao Protheus da aplicação inteira (Sidebar) — mesma base
   // de Busc. Avanç. Acessórios Protheus/Análise de Estruturas.
@@ -63,7 +100,8 @@ export default function PesquisaItensDependentesAvancadaPage() {
   // em Busc. Avanç. Acessórios Protheus: esconder o que já está declarado
   // em Produtos Dependentes, pra focar só no que ainda precisa de decisão.
   const [showOnlyNew, setShowOnlyNew] = useState(false)
-  const [codeFilter, setCodeFilter] = useState('')
+  const [colFilters, setColFilters] = useState<Record<string, string[]>>({})
+  const [filterSearch, setFilterSearch] = useState<Record<string, string>>({})
   const [copyFeedback, setCopyFeedback] = useState('')
 
   const [addModalPrefill, setAddModalPrefill] = useState<Record<string, string> | null>(null)
@@ -94,7 +132,8 @@ export default function PesquisaItensDependentesAvancadaPage() {
       setTotalPedidos(json.totalPedidos || 0)
       setHasScanned(true)
       setShowOnlyNew(false)
-      setCodeFilter('')
+      setColFilters({})
+      setFilterSearch({})
     } catch {
       setScanError('Erro de comunicação com o banco Protheus')
     } finally {
@@ -110,16 +149,51 @@ export default function PesquisaItensDependentesAvancadaPage() {
     setTotalPedidos(0)
     setHasScanned(false)
     setShowOnlyNew(false)
-    setCodeFilter('')
+    setColFilters({})
+    setFilterSearch({})
   }
 
-  const filteredPairs = useMemo(() => {
-    const q = codeFilter.trim().toUpperCase()
-    return pairs.filter(p =>
-      (!showOnlyNew || !p.jaDeclarado) &&
-      (!q || p.codigoA.includes(q) || p.codigoB.includes(q))
-    )
-  }, [pairs, showOnlyNew, codeFilter])
+  const baseFilteredPairs = useMemo(
+    () => pairs.filter(p => !showOnlyNew || !p.jaDeclarado),
+    [pairs, showOnlyNew]
+  )
+
+  const filteredPairs = useMemo(
+    () => applyPairColumnFilters(baseFilteredPairs, colFilters),
+    [baseFilteredPairs, colFilters]
+  )
+
+  // Mesmo comportamento em cascata de DataTable.tsx: as opções de uma coluna
+  // refletem só as linhas que já passam pelos filtros das OUTRAS colunas.
+  const columnOptions = useMemo(() => {
+    const result: Record<string, string[]> = {}
+    for (const key of PAIR_COLUMN_KEYS) {
+      const otherFilters = Object.fromEntries(Object.entries(colFilters).filter(([k]) => k !== key))
+      const candidates = applyPairColumnFilters(baseFilteredPairs, otherFilters)
+      const seen = new Set<string>()
+      for (const p of candidates) seen.add(getPairColValue(p, key))
+      result[key] = Array.from(seen).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+    }
+    return result
+  }, [baseFilteredPairs, colFilters])
+
+  const hasActiveColFilters = Object.values(colFilters).some(v => v.length > 0) || Object.values(filterSearch).some(v => v.trim() !== '')
+
+  const handleToggleFilter = useCallback((name: string, val: string) => {
+    setColFilters(prev => {
+      const cur = prev[name] ?? []
+      return { ...prev, [name]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] }
+    })
+  }, [])
+
+  const handleClearFilter = useCallback((name: string) => {
+    setColFilters(prev => ({ ...prev, [name]: [] }))
+  }, [])
+
+  const clearAllColumnFilters = () => {
+    setColFilters({})
+    setFilterSearch({})
+  }
 
   const openAddModal = (codigoA: string, codigoB: string) => {
     setAddModalPrefill({ protheus_code: codigoA, protheus_item_code: codigoB })
@@ -275,16 +349,14 @@ export default function PesquisaItensDependentesAvancadaPage() {
               Só candidatos novos
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-on-surface-variant">Componente:</span>
-            <input
-              type="text"
-              value={codeFilter}
-              onChange={e => setCodeFilter(e.target.value)}
-              placeholder="filtrar por código…"
-              className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm text-on-surface font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 w-48"
-            />
-          </div>
+          {hasActiveColFilters && (
+            <button
+              onClick={clearAllColumnFilters}
+              className="text-xs text-primary hover:underline whitespace-nowrap"
+            >
+              Limpar filtros
+            </button>
+          )}
           <button
             onClick={handleCopyList}
             disabled={copyRows.length === 0}
@@ -313,13 +385,22 @@ export default function PesquisaItensDependentesAvancadaPage() {
           <table className="text-xs w-full">
             <thead className="bg-surface-container-highest">
               <tr>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código A</th>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Código B</th>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Coocorrências</th>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Confiança A→B</th>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Confiança B→A</th>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Status</th>
-                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant">Ação</th>
+                {PAIR_COLUMN_KEYS.map(key => (
+                  <th key={key} className="text-left px-3 py-2 font-semibold text-on-surface-variant align-top min-w-[140px]">
+                    <div>{PAIR_COLUMN_LABELS[key]}</div>
+                    <div className="mt-1.5">
+                      <ColumnFilter
+                        searchValue={filterSearch[key] ?? ''}
+                        onSearchChange={v => setFilterSearch(prev => ({ ...prev, [key]: v }))}
+                        selectedValues={colFilters[key] ?? []}
+                        onToggleValue={v => handleToggleFilter(key, v)}
+                        onClearValues={() => handleClearFilter(key)}
+                        options={columnOptions[key] ?? []}
+                      />
+                    </div>
+                  </th>
+                ))}
+                <th className="text-left px-3 py-2 font-semibold text-on-surface-variant align-top">Ação</th>
               </tr>
             </thead>
             <tbody>
