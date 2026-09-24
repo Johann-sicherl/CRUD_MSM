@@ -6,6 +6,7 @@ import ThemeZoomBar from '@/components/ThemeZoomBar'
 import { ProtheusAuthProvider } from '@/lib/protheusAuthContext'
 import { PdmAuthProvider } from '@/lib/pdmAuthContext'
 import { AppAuthProvider } from '@/lib/appAuthContext'
+import AppDiagnosticsGate from '@/components/AppDiagnosticsGate'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [pinned, setPinned] = useState(true)
@@ -48,6 +49,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <AppAuthProvider>
       <ProtheusAuthProvider>
         <PdmAuthProvider>
+          <AppDiagnosticsGate />
           <Sidebar pinned={pinned} onPinChange={handlePinChange} />
           <main
             className={`relative z-10 min-h-screen flex flex-col transition-[margin-left] duration-200 ${
