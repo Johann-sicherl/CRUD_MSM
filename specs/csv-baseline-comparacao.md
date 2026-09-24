@@ -2,11 +2,19 @@
 
 ## `src/lib/csvBaseline.ts`
 
-Compartilhado entre o destaque amarelo de "campo mudou" nas telas de
-Cadastro (`DataTable`) e a comparação "CSV novo vs. banco atual" do
-Atualizador Global — as duas telas precisam decidir "esse campo mudou?" da
-mesma forma exata, senão uma destacaria uma diferença que a outra
-consideraria irrelevante.
+Usado pelo destaque amarelo de "campo mudou" nas telas de Cadastro
+(`DataTable`) — decide "esse campo mudou desde o último import?" de forma
+consistente entre todas as tabelas.
+
+**Histórico**: até uma sessão posterior, este módulo também era usado pela
+janela "Comparar valores recebidos com o banco de dados atual" do
+Atualizador Global (`POST /api/global-update/[table]/compare`) — comparava
+o CSV a ser importado contra o banco de dados MSM ao vivo antes de liberar
+a substituição. Essa janela foi **removida a pedido explícito do
+usuário** ("quero excluir esta função de Comparar... para isso dar
+problema pouco custa" — ver `specs/import-export.md`). `csvBaseline.ts`
+em si não foi tocado — continua com o mesmo papel de sempre pro destaque
+amarelo, que nunca dependeu da janela removida.
 
 - `shouldCompareField(field)` — decide se um campo entra na comparação.
   Exclui: campos que não são coluna real (`isRealColumnField`), PK, tipo
@@ -37,7 +45,7 @@ consideraria irrelevante.
 ## `msm_csv_baseline_snapshots.sql`
 
 Guarda o retrato exato de cada tabela no momento do último import feito pelo
-Atualizador Global — usado para (a) a comparação "CSV novo vs. banco atual"
-mostrar exatamente o que vai mudar antes de confirmar, e (b) permitir
-auditoria histórica de quando/o que mudou no último import. Ver o cabeçalho
-do próprio arquivo SQL para o propósito completo.
+Atualizador Global — usado pelo destaque amarelo de "campo mudou desde o
+último import" nas telas de Cadastro e para permitir auditoria histórica de
+quando/o que mudou no último import. Ver o cabeçalho do próprio arquivo SQL
+para o propósito completo.

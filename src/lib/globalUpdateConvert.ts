@@ -1,10 +1,8 @@
 import { FORCE_TO_ONE_FIELDS, getRealColumnFields, type Field, type TableSchema } from './schema'
 
-// Compartilhado entre a rota de substituição (POST /api/global-update/[table])
-// e a rota de comparação (POST /api/global-update/[table]/compare) — as duas
-// precisam converter as linhas do CSV exatamente da mesma forma, senão a
-// comparação poderia apontar diferenças que na verdade não existiriam depois
-// da substituição real (ou vice-versa).
+// Compartilhado entre a rota de substituição real (POST /api/global-update/[table])
+// e a rota de import pro Double-check de Queries (POST /api/global-update-check/[table])
+// — as duas precisam converter as linhas do CSV exatamente da mesma forma.
 
 // Official CSV exports often spell an absent value out as the literal text
 // "NULL" instead of leaving the cell empty — treat both as no value.

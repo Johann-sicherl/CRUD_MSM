@@ -16,16 +16,50 @@ Existem **três mecanismos distintos** de import — não confundir:
 - Aplica `extractRealCosts` (`localCostExtract.ts`) e o forçamento de
   `FORCE_TO_ONE_FIELDS` a 1 antes de persistir (ver `specs/custeio-financeiro.md`).
 - Guarda um snapshot da tabela pré-import (`msm_csv_baseline_snapshots.sql`)
-  para permitir a comparação "CSV novo vs. banco atual" (ver
-  `specs/csv-baseline-comparacao.md`).
+  — usado pelo destaque amarelo de "campo mudou desde o último import" nas
+  telas de Cadastro (`DataTable.tsx`, ver `specs/csv-baseline-comparacao.md`).
+
+### Removido: comparação "CSV novo vs. banco atual" antes de substituir
+
+A tela teve, por um tempo, um checkbox "Comparar valores recebidos com o
+banco de dados atual antes de substituir" — buscava a tabela ao vivo no
+banco de dados MSM, casava linha por linha pela chave de negócio
+(`groupRowsByKey`/`getRowKey`, `csvBaseline.ts`) e mostrava um pop-up com
+toda diferença (`changed`/`new`/`missing`/`ambiguous`) antes de liberar a
+substituição real. **Removido a pedido explícito do usuário**: "quero
+excluir esta função de Comparar o Banco de Dados recebido com o banco de
+dados do supabase. Para isso dar problema pouco custa" — decisão de que o
+custo de manter essa checagem (e a confusão de reportar sempre as mesmas
+diferenças entre uma comparação e outra, sem nada ter mudado no meio) não
+compensava o benefício.
+
+Removidos por completo: `POST /api/global-update/[table]/compare/route.ts`
+(rota inteira), e em `atualizador-global/page.tsx` — o checkbox, os estados
+`compareChecked`/`comparing`/`compareAlerts`, `runCompare`, o componente
+`ComparePopup`, e os tipos locais `CompareDiff`/`CompareAlert`. O botão
+final voltou a ser sempre "Confirmar e Substituir Tudo", sem ramificação.
+
+**O que NÃO foi removido**: `csvBaseline.ts` (`shouldCompareField`,
+`valuesEqual`, `groupRowsByKey`, `getRowLabel` etc.) continua intacto — é
+compartilhado com `DataTable.tsx` pro destaque amarelo de "campo mudou"
+(ver `specs/csv-baseline-comparacao.md`), nunca foi exclusivo da
+comparação removida. `formatDiffValue` (`csvBaseline.ts`) ficou sem
+nenhum consumidor depois desta remoção — mantido mesmo assim, é uma
+função pura pequena e documentada como parte da API do módulo; não vale a
+pena reintroduzir o mesmo tipo de checagem depois só porque a função
+existe.
 
 ### Risco real achado: `ON DELETE CASCADE` de `equipments` pode esvaziar tabelas fora do lote
 
 Achado durante uma sessão de comparação real do usuário (primeira alteração
-de produção testada contra o Supabase) — a pergunta que expôs o risco:
-"preciso saber se as informações que estão nos CSVs resultarão no meu Banco
-de Dados que existe hoje no Supabase" (ou seja: os diffs de campo do
-"Comparar", sozinhos, não garantem isso).
+de produção testada contra o banco de dados MSM), na época em que a tela
+ainda tinha o checkbox "Comparar" (ver seção "Removido" acima) — a
+pergunta que expôs o risco: "preciso saber se as informações que estão
+nos CSVs resultarão no meu Banco de Dados que existe hoje no Supabase"
+(ou seja: os diffs de campo do "Comparar", sozinhos, não garantiam isso).
+**Esta proteção continua valendo mesmo depois do "Comparar" ter sido
+removido** — o risco de cascata nunca teve relação com aquele checkbox,
+só compartilhava a mesma tela.
 
 `msm_foreign_keys.sql` declara 5 FKs com `ON DELETE CASCADE` apontando pra
 `equipments(legacy_id)`: `standard_equipment_items`,
@@ -45,23 +79,16 @@ nenhuma proteção antes desta mudança:
    rodou antes da cascata apagar tudo de novo — o turno dela no lote já
    passou, e ela também fica vazia.
 
-O checkbox "Comparar valores recebidos com o banco de dados atual" nunca
-detecta isso — ele compara tabela por tabela, isoladamente, nunca o
-efeito cascata entre elas.
-
 **Fix**: `EQUIPMENTS_CASCADE_DEPENDENT_TABLES` (`schema.ts`) — lista as 5
 tabelas acima, mantida manualmente em sincronia com
 `msm_foreign_keys.sql` (não há introspecção automática do banco neste
 projeto). Em `atualizador-global/page.tsx` (`AtualizadorGlobalAdmin`):
 - `cascadeMissingTables`/`cascadeBlocked` — só calculado quando
   `equipments` está de fato no lote (`readyFiles`); lista as dependentes
-  que faltam. Bloqueia o botão "Confirmar e Substituir Tudo" (mas não
-  "Comparar", que é só leitura e não corre esse risco) e mostra um aviso
-  vermelho explícito, com os nomes das tabelas faltando, acima do botão.
-  Bloqueio replicado dentro de `runReplaceAll` (não só no `disabled` do
-  botão) — defesa em profundidade, já que o pop-up "Comparar" pode chamar
-  `runReplaceAll()` diretamente via `onProceed` quando não há diferenças,
-  sem passar pelo botão desabilitado.
+  que faltam. Bloqueia o botão "Confirmar e Substituir Tudo" e mostra um
+  aviso vermelho explícito, com os nomes das tabelas faltando, acima do
+  botão. Bloqueio replicado dentro de `runReplaceAll` (não só no
+  `disabled` do botão) — defesa em profundidade.
 - `cascadeSafeOrder` — quando `equipments` está no lote, ela sempre é
   processada **primeiro**, antes de qualquer outra tabela, independente
   da ordem de upload — garante que as 5 tabelas dependentes (que só podem
