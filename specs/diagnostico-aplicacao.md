@@ -119,6 +119,33 @@ comece" por uma tabela, deixando claro que mais viriam depois.
   implementar: o bloco `"Cadastrado, sem erros"` contém a palavra "erro"
   dentro de si, então um `.includes('erro')` ingênuo pintaria esse bloco
   de vermelho por engano.
+- **Caixinha por equipamento (`EquipmentBox`)** — pedido explícito do
+  usuário, rodada seguinte: "não separou cada equipamento em 'Caixinhas'
+  e quando eu clico no equipamento ele me mostra os erro dele." Dentro de
+  cada bloco, cada equipamento agora é seu próprio card clicável, recolhido
+  por padrão — clicar expande e mostra os erros **dele** (não o bloco
+  inteiro de uma vez). Estado de expandido/recolhido é por linha
+  (`expandedRows`, chave `${section.key}::${group}::${rowLabel}::${índice}`
+  — nunca colide entre blocos/seções diferentes), completamente
+  independente do estado de expandido/recolhido da seção (`expanded`) e
+  dos outros equipamentos.
+  - `DiagnosticIssue.details?: DiagnosticIssueDetail[]`
+    (`appDiagnostics.ts`) — quando presente, a caixinha expandida renderiza
+    a mesma mini-tabela **Propriedade / Valor Esperado (Estrutura) /
+    Código(s) que Geraram / Valor no Banco** já usada em Busc. Itens Série
+    Estrut. Protheus, em vez de só texto. `checkReverseSearchStructures`
+    preenche isso só no bloco "Com erro(s) de propriedade" — um item de
+    `details` por propriedade divergente (`property`/`expected`/`via`/
+    `dbValue`, os mesmos 4 dados que a tela viva mostra por linha). Os
+    outros dois blocos ("Não cadastrado"/"Cadastrado, sem erros") não têm
+    `details` — a caixinha, ao expandir, cai no fallback e só mostra
+    `issue.message` (agora mais curta: `'Sem erros de propriedade.'`, sem
+    repetir "Já cadastrado em Cadastro de Equipamentos" — isso já fica
+    óbvio pelo nome do bloco).
+  - Cabeçalho da caixinha (recolhida): código do equipamento + badge — "N
+    erro(s)" em vermelho quando tem `details`, ou a própria `message`
+    (curta) quando não tem. Nenhum dado é escondido do usuário antes de
+    clicar — o resumo já dá o essencial, o clique só abre o detalhe.
 - **`DiagnosticSection.mode`** (`'problems'` padrão, ou `'summary'`) —
   achado necessário ao adicionar a Checagem #3 (abaixo): nem toda seção é
   "problema vs sem erros". Uma seção `'summary'` é inventário puro (ex.:
@@ -204,15 +231,15 @@ cada um também um `issue.group` (ver "Agrupamento em 'Blocos'" acima —
   nesse caso (sem linha em Cadastro de Equipamentos não há "valor no
   banco" nenhum pra comparar, então o passo caro — explodir a estrutura
   inteira — é evitado à toa).
-- **Cadastrada, sem erro** (`group: ok`) — mensagem `'Já cadastrado em
-  Cadastro de Equipamentos. Sem erros de propriedade.'`
-- **Cadastrada, com erro(s)** (`group: errors`) — mensagem `'N erro(s) de
-  propriedade: <Propriedade> (esperado "X" via <código> → <valor>, banco
-  tem "Y"); ...'` — um item por propriedade divergente dentro da mesma
-  mensagem, no mesmo formato de "Valor Esperado (Estrutura)"/"Código(s)
-  que Geraram"/"Valor no Banco" da tabela da tela viva. Não repete "Já
-  cadastrado em Cadastro de Equipamentos" no texto — isso já fica implícito
-  pelo sub-cabeçalho do bloco ("Com erro(s) de propriedade").
+- **Cadastrada, sem erro** (`group: ok`) — mensagem curta `'Sem erros de
+  propriedade.'` (não repete "Já cadastrado em Cadastro de Equipamentos" —
+  já fica implícito pelo nome do bloco).
+- **Cadastrada, com erro(s)** (`group: errors`) — mensagem curta `'N
+  erro(s) de propriedade.'` **e** `details: DiagnosticIssueDetail[]` — um
+  item por propriedade divergente (`property`/`expected`/`via`/`dbValue`),
+  renderizado como mini-tabela dentro da caixinha do equipamento (ver
+  "Caixinha por equipamento" acima), não mais concatenado dentro da
+  própria `message` como antes.
 
 Pra cada código já cadastrado, reusa exatamente o mesmo motor de
 comparação da tela viva — `fetchStructureCodes` (`protheusDb.ts`, explode
@@ -227,10 +254,12 @@ código novo não replicou esse padrão, foi direto na fonte).
 
 `AppDiagnosticsPopup.tsx` diferencia os três estados **em blocos**
 separados dentro da lista expandida (a seção em si nunca fica vermelha, só
-os blocos/linhas individuais mudam de cor — ver "Agrupamento em 'Blocos'"
-acima): "Com erro(s) de propriedade" primeiro (vermelho, `text-error`, o
-achado mais sério), depois "Não cadastrado em Cadastro de Equipamentos"
-(âmbar), depois "Cadastrado, sem erros" por último (neutro).
+os blocos mudam de cor — ver "Agrupamento em 'Blocos'" acima): "Com
+erro(s) de propriedade" primeiro (vermelho, `text-error`, o achado mais
+sério), depois "Não cadastrado em Cadastro de Equipamentos" (âmbar),
+depois "Cadastrado, sem erros" por último (neutro). Dentro de cada bloco,
+cada equipamento é sua própria caixinha (ver "Caixinha por equipamento"
+acima) — o clique é por equipamento, nunca por bloco inteiro.
 
 ## O que NÃO faz parte disto
 

@@ -15,15 +15,18 @@ import { REVERSE_SEARCH_GROUPS, REVERSE_SEARCH_GROUP_ORDER } from '@/lib/appDiag
 // que esteja vermelho esmaecido o dropdown completo".
 //
 // Rodada seguinte, pedidos explícitos do usuário: (1) fonte maior em todo
-// o pop-up — os tamanhos abaixo foram todos aumentados um degrau (ex.
-// text-xs → text-sm, text-sm → text-base) em relação à versão original;
-// (2) dentro do dropdown de Busca Reversa, separar os resultados em
-// "Blocos" pra ver o que está errado mais facilmente — ver
-// `REVERSE_SEARCH_GROUP_ORDER` (appDiagnostics.ts), que define ordem
-// (erro primeiro) e nome de cada bloco; `groupTone` abaixo mapeia cada
-// bloco pra uma cor. Uma seção sem nenhum `issue.group` definido (as duas
-// checagens de status Protheus) continua com a lista única de sempre —
-// o agrupamento só entra em ação quando a checagem de fato usa `group`.
+// o pop-up; (2) dentro do dropdown de Busca Reversa, separar os resultados
+// em "Blocos" (ver `REVERSE_SEARCH_GROUP_ORDER`, `appDiagnosticsGroups.ts`
+// — ordem erro-primeiro e nome de cada bloco); (3) "não separou cada
+// equipamento em 'Caixinhas' e quando eu clico no equipamento ele me
+// mostra os erro dele" — dentro de cada bloco, cada equipamento agora é
+// sua própria caixinha clicável (`EquipmentBox` abaixo), com estado de
+// expandido/recolhido independente por linha (nunca por seção inteira) —
+// ao expandir, mostra a mesma mini-tabela Propriedade/Valor Esperado
+// (Estrutura)/Código(s) que Geraram/Valor no Banco já usada em Busc. Itens
+// Série Estrut. Protheus, a partir de `issue.details` (appDiagnostics.ts)
+// — nunca reconstrói isso de `message`, que agora é só um resumo curto
+// ("N erro(s) de propriedade.") pro cabeçalho da caixinha recolhida.
 
 // Comparação exata contra as constantes (nunca substring — "Cadastrado,
 // sem erros" também contém a palavra "erro", então um .includes('erro')
@@ -43,6 +46,73 @@ function IssueRow({ issue, messageTone }: { issue: DiagnosticIssue; messageTone:
   )
 }
 
+// Uma "caixinha" por equipamento, dentro de um bloco da Busca Reversa —
+// clique expande e mostra os erros de propriedade dele (ou, se não tiver
+// `details`, só a mensagem curta — caso de "não cadastrado"/"sem erros").
+function EquipmentBox({
+  issue,
+  tone,
+  isOpen,
+  onToggle,
+}: {
+  issue: DiagnosticIssue
+  tone: string
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  const hasDetails = !!issue.details && issue.details.length > 0
+  return (
+    <div className="rounded border border-outline-variant/60 bg-surface-container overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-surface-container-high transition-colors"
+      >
+        <span className="font-mono text-base text-on-surface">{issue.rowLabel}</span>
+        <span className="flex items-center gap-2 shrink-0">
+          <span className={`text-sm font-mono px-2 py-0.5 rounded-full border ${
+            hasDetails
+              ? 'text-error border-error/30 bg-error-container/20'
+              : 'text-outline border-outline-variant bg-surface-container-low'
+          }`}>
+            {hasDetails ? `${issue.details!.length} erro(s)` : issue.message}
+          </span>
+          <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
+        </span>
+      </button>
+      {isOpen && (
+        <div className="border-t border-outline-variant/40 px-3 py-2">
+          {hasDetails ? (
+            <div className="overflow-auto border border-outline-variant rounded">
+              <table className="text-sm w-full">
+                <thead className="bg-surface-container-highest">
+                  <tr>
+                    <th className="text-left px-2 py-1.5 font-semibold text-on-surface-variant whitespace-nowrap">Propriedade</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-on-surface-variant whitespace-nowrap">Valor Esperado (Estrutura)</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-on-surface-variant whitespace-nowrap">Código(s) que Geraram</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-on-surface-variant whitespace-nowrap">Valor no Banco</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {issue.details!.map((d, i) => (
+                    <tr key={i} className="border-t border-outline-variant/50 bg-error-container/10">
+                      <td className="px-2 py-1.5 font-semibold text-on-surface whitespace-nowrap">{d.property}</td>
+                      <td className="px-2 py-1.5 text-on-surface">{d.expected ?? '—'}</td>
+                      <td className="px-2 py-1.5 text-outline font-mono">{d.via || '—'}</td>
+                      <td className="px-2 py-1.5 text-on-surface">{d.dbValue ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className={`text-base ${tone}`}>{issue.message}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AppDiagnosticsPopup({
   sections,
   loading,
@@ -55,9 +125,22 @@ export default function AppDiagnosticsPopup({
   onClose: () => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Estado das caixinhas de equipamento, independente do estado das
+  // seções/blocos — chave própria (seção+bloco+código+índice) pra nunca
+  // colidir entre blocos ou seções diferentes.
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   const toggle = (key: string) => {
     setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const toggleRow = (key: string) => {
+    setExpandedRows(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
@@ -166,11 +249,20 @@ export default function AppDiagnosticsPopup({
                                 <div className={`text-sm font-bold uppercase tracking-wide mb-2 ${groupTone(group)}`}>
                                   {group} ({grouped.get(group)!.length})
                                 </div>
-                                <ul className="flex flex-col gap-2">
-                                  {grouped.get(group)!.map((issue, i) => (
-                                    <IssueRow key={i} issue={issue} messageTone={groupTone(group)} />
-                                  ))}
-                                </ul>
+                                <div className="flex flex-col gap-2">
+                                  {grouped.get(group)!.map((issue, i) => {
+                                    const rowKey = `${section.key}::${group}::${issue.rowLabel}::${i}`
+                                    return (
+                                      <EquipmentBox
+                                        key={rowKey}
+                                        issue={issue}
+                                        tone={groupTone(group)}
+                                        isOpen={expandedRows.has(rowKey)}
+                                        onToggle={() => toggleRow(rowKey)}
+                                      />
+                                    )
+                                  })}
+                                </div>
                               </div>
                             ))}
                           </div>

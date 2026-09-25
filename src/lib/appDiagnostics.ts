@@ -13,6 +13,20 @@ import { REVERSE_SEARCH_GROUPS } from './appDiagnosticsGroups'
 // hoje só tem a primeira, mais podem ser adicionadas em CHECKS abaixo, sem
 // mexer no pop-up nem no gatilho.
 
+// Uma linha da tabela Propriedade/Valor Esperado/Código(s) que Geraram/
+// Valor no Banco já usada por Busc. Itens Série Estrut. Protheus — pedido
+// explícito do usuário: "quando eu clico no equipamento ele me mostra os
+// erro dele" (numa caixinha própria por equipamento, ver
+// AppDiagnosticsPopup.tsx). Guardado estruturado (não só uma frase
+// concatenada em `message`) pra UI poder renderizar a mesma mini-tabela da
+// tela viva.
+export interface DiagnosticIssueDetail {
+  property: string
+  expected: string | null
+  via: string
+  dbValue: string | null
+}
+
 export interface DiagnosticIssue {
   rowLabel: string
   message: string
@@ -23,6 +37,11 @@ export interface DiagnosticIssue {
   // (as duas checagens de status Protheus continuam assim). Ver
   // GROUP_ORDER/GROUP_TONE em AppDiagnosticsPopup.tsx para ordem e cor.
   group?: string
+  // Quando presente, a UI renderiza cada equipamento como uma caixinha
+  // própria (clicável, "mostra os erro dele" ao expandir) com esta tabela
+  // em vez de só o texto de `message`. Ausente = a caixinha, se houver,
+  // mostra só `message` ao expandir.
+  details?: DiagnosticIssueDetail[]
 }
 
 export interface DiagnosticSection {
@@ -144,18 +163,21 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
       .filter(r => r.status === 'mismatch')
 
     if (mismatches.length === 0) {
-      issues.push({ rowLabel: code, message: 'Já cadastrado em Cadastro de Equipamentos. Sem erros de propriedade.', group: REVERSE_SEARCH_GROUPS.ok })
+      issues.push({ rowLabel: code, message: 'Sem erros de propriedade.', group: REVERSE_SEARCH_GROUPS.ok })
       continue
     }
 
-    const details = mismatches.map(m => {
-      const via = m.matched.map(x => `${x.code} → ${x.value}`).join(', ')
-      return `${structurePropertyFieldLabel(m.field)} (esperado "${m.computedValue}" via ${via}, banco tem "${m.dbValue ?? '—'}")`
-    }).join('; ')
+    const details: DiagnosticIssueDetail[] = mismatches.map(m => ({
+      property: structurePropertyFieldLabel(m.field),
+      expected: m.computedValue,
+      via: m.matched.map(x => `${x.code} → ${x.value}`).join(', '),
+      dbValue: m.dbValue,
+    }))
     issues.push({
       rowLabel: code,
-      message: `${mismatches.length} erro(s) de propriedade: ${details}.`,
+      message: `${mismatches.length} erro(s) de propriedade.`,
       group: REVERSE_SEARCH_GROUPS.errors,
+      details,
     })
   }
   return issues
