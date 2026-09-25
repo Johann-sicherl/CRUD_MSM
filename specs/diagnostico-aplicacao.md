@@ -1,4 +1,4 @@
-# Diagnóstico da Aplicação
+# Diagnóstico da Aplicação ("Visão Geral Avançada Global")
 
 Pop-up automático que varre a base procurando inconsistências que o
 Administrador precisa saber de cara, sem abrir tela por tela. Pedido
@@ -8,6 +8,16 @@ follow up completo de como está tudo que eu preciso saber, através de um
 pop-up... primeiro comece varrendo Cadastro de Equipamentos, analisando se
 tem algo bloqueado no Protheus... e com STATUS igual active, sempre que
 tiver bolinha vermelha tem que estar deactive."
+
+**Nome visível do pop-up**: renomeado pra "Visão Geral Avançada Global" a
+pedido explícito do usuário ("mudo o nome deste pop-up para Visão Geral
+Avançada Global, ou nome parecido") — só o título (`<h3>` em
+`AppDiagnosticsPopup.tsx`) mudou. Nomes de arquivo/componente/função
+(`AppDiagnosticsPopup`, `AppDiagnosticsGate`, `appDiagnostics.ts`,
+`app-diagnostics` na rota) e o título deste próprio documento continuam
+com o nome original "Diagnóstico da Aplicação" — renomear isso também não
+foi pedido, e trocaria referências espalhadas por vários arquivos sem
+nenhum ganho pro usuário (que só vê o título na tela).
 
 ## Quando aparece
 
@@ -66,6 +76,49 @@ comece" por uma tabela, deixando claro que mais viriam depois.
   problemas → cabeçalho inteiro com fundo/borda/texto em tom de erro
   esmaecido (`border-error/30 bg-error-container/10`, texto do título em
   `text-error`), badge com a contagem.
+- **Fonte maior** — pedido explícito do usuário, rodada seguinte: "aumente
+  a letra da fonte deste pop-up". Todo tamanho de texto do pop-up subiu um
+  degrau em relação à versão original (`text-xs` → `text-sm`, `text-sm` →
+  `text-base`, título `text-base` → `text-xl`, ✕ de fechar e chevron
+  `text-xl`/`text-2xl`) — extraído em `IssueRow` (componente pequeno,
+  reusado tanto na lista simples quanto nos blocos abaixo) pra não deixar
+  o tamanho de fonte de cada linha divergir entre os dois modos de
+  renderização.
+- **`src/lib/appDiagnosticsGroups.ts`** (novo arquivo, só constantes) —
+  `REVERSE_SEARCH_GROUPS`/`REVERSE_SEARCH_GROUP_ORDER` moraram
+  originalmente dentro de `appDiagnostics.ts`, mas **precisaram ser
+  extraídas pra um arquivo à parte**: `appDiagnostics.ts` é server-only
+  (importa `protheusDb.ts`, que importa `mssql`) — um componente `'use
+  client'` como `AppDiagnosticsPopup.tsx` importando um **valor de
+  runtime** de lá (não só um `type`) arrasta o módulo `mssql` inteiro pro
+  bundle do navegador, e o build quebra (`Module not found: Can't resolve
+  'dns'`, dependência Node-only de dentro do `tedious`/`mssql`). Erro real
+  encontrado ao implementar o agrupamento por blocos abaixo — corrigido
+  extraindo as duas constantes (sem nenhum import de `protheusDb`/
+  `supabase`) pro arquivo novo, importado tanto por `appDiagnostics.ts`
+  quanto por `AppDiagnosticsPopup.tsx`. `import type { DiagnosticSection,
+  DiagnosticIssue }` continua vindo de `appDiagnostics.ts` normalmente —
+  um `import type` é sempre apagado em tempo de compilação, nunca arrasta
+  o módulo de verdade pro bundle; só importar um **valor** (`const`,
+  função) de um módulo server-only é que é perigoso num componente
+  cliente.
+- **Agrupamento em "Blocos"** — pedido explícito do usuário: "faça a
+  separação dos equipamentos por 'Blocos', assim, o que está errado, que
+  eu veja nesta caixa dropdown". `DiagnosticIssue.group?: string`
+  (`appDiagnostics.ts`) — campo opcional; ausente = lista única de sempre
+  (as duas checagens de status Protheus continuam assim, nunca setam
+  `group`). Quando pelo menos um `issue` da seção tem `group`,
+  `AppDiagnosticsPopup.tsx` agrupa a lista expandida em blocos, cada um
+  com um sub-cabeçalho (`"<nome do bloco> (N)"`, cor conforme o bloco) em
+  vez da lista plana. Ordem dos blocos vem de `REVERSE_SEARCH_GROUP_ORDER`
+  — erro primeiro (é o que o usuário quer ver de cara), depois não
+  cadastrado, depois OK por último; qualquer `group` fora dessa lista
+  (nenhum hoje) cairia no final, na ordem que aparecer. `groupTone(group)`
+  compara **igualdade exata** contra as constantes de
+  `REVERSE_SEARCH_GROUPS`, nunca `.includes()`/substring — achado real ao
+  implementar: o bloco `"Cadastrado, sem erros"` contém a palavra "erro"
+  dentro de si, então um `.includes('erro')` ingênuo pintaria esse bloco
+  de vermelho por engano.
 - **`DiagnosticSection.mode`** (`'problems'` padrão, ou `'summary'`) —
   achado necessário ao adicionar a Checagem #3 (abaixo): nem toda seção é
   "problema vs sem erros". Uma seção `'summary'` é inventário puro (ex.:
@@ -143,20 +196,23 @@ sem limite de quantidade de estruturas analisadas.
 
 Cada estrutura encontrada vira **uma linha** (uma por código, não uma por
 propriedade divergente — mantém a contagem "N encontrada(s)" do badge
-igual ao número de estruturas de verdade), com três estados possíveis na
-mensagem:
-- **Não cadastrada** — `'NÃO cadastrado em Cadastro de Equipamentos.'` —
-  não roda a comparação de propriedade nesse caso (sem linha em Cadastro
-  de Equipamentos não há "valor no banco" nenhum pra comparar, então o
-  passo caro — explodir a estrutura inteira — é evitado à toa).
-- **Cadastrada, sem erro** — `'Já cadastrado em Cadastro de Equipamentos.
-  Sem erros de propriedade.'`
-- **Cadastrada, com erro(s)** — `'Já cadastrado em Cadastro de
-  Equipamentos. N erro(s) de propriedade: <Propriedade> (esperado "X" via
-  <código> → <valor>, banco tem "Y"); ...'` — um item por propriedade
-  divergente dentro da mesma mensagem, no mesmo formato de "Valor Esperado
-  (Estrutura)"/"Código(s) que Geraram"/"Valor no Banco" da tabela da tela
-  viva.
+igual ao número de estruturas de verdade), com três estados possíveis,
+cada um também um `issue.group` (ver "Agrupamento em 'Blocos'" acima —
+`REVERSE_SEARCH_GROUPS` em `appDiagnosticsGroups.ts`):
+- **Não cadastrada** (`group: notRegistered`) — mensagem `'NÃO cadastrado
+  em Cadastro de Equipamentos.'` — não roda a comparação de propriedade
+  nesse caso (sem linha em Cadastro de Equipamentos não há "valor no
+  banco" nenhum pra comparar, então o passo caro — explodir a estrutura
+  inteira — é evitado à toa).
+- **Cadastrada, sem erro** (`group: ok`) — mensagem `'Já cadastrado em
+  Cadastro de Equipamentos. Sem erros de propriedade.'`
+- **Cadastrada, com erro(s)** (`group: errors`) — mensagem `'N erro(s) de
+  propriedade: <Propriedade> (esperado "X" via <código> → <valor>, banco
+  tem "Y"); ...'` — um item por propriedade divergente dentro da mesma
+  mensagem, no mesmo formato de "Valor Esperado (Estrutura)"/"Código(s)
+  que Geraram"/"Valor no Banco" da tabela da tela viva. Não repete "Já
+  cadastrado em Cadastro de Equipamentos" no texto — isso já fica implícito
+  pelo sub-cabeçalho do bloco ("Com erro(s) de propriedade").
 
 Pra cada código já cadastrado, reusa exatamente o mesmo motor de
 comparação da tela viva — `fetchStructureCodes` (`protheusDb.ts`, explode
@@ -169,11 +225,12 @@ fonte única de verdade), nunca um mapa duplicado à parte (a tela viva tem
 o próprio `FIELD_LABELS` hardcoded — pré-existente, não tocado; este
 código novo não replicou esse padrão, foi direto na fonte).
 
-`AppDiagnosticsPopup.tsx` diferencia os três estados **dentro** da lista
-expandida de uma seção `'summary'` (a seção em si nunca fica vermelha,
-só as linhas individuais mudam de cor): não cadastrado → âmbar (como já
-era); cadastrado com erro de propriedade → vermelho (`text-error`, achado
-mais sério que "não cadastrado" ainda); cadastrado sem erro → neutro.
+`AppDiagnosticsPopup.tsx` diferencia os três estados **em blocos**
+separados dentro da lista expandida (a seção em si nunca fica vermelha, só
+os blocos/linhas individuais mudam de cor — ver "Agrupamento em 'Blocos'"
+acima): "Com erro(s) de propriedade" primeiro (vermelho, `text-error`, o
+achado mais sério), depois "Não cadastrado em Cadastro de Equipamentos"
+(âmbar), depois "Cadastrado, sem erros" por último (neutro).
 
 ## O que NÃO faz parte disto
 

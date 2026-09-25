@@ -3,6 +3,7 @@ import { listProductStatuses, listStructureHeaders, fetchStructureCodes, type Pr
 import { readStructurePropertyRules } from './structurePropertyRules'
 import { computeStructurePropertyResults } from './structurePropertyMatch'
 import { tables } from './schema'
+import { REVERSE_SEARCH_GROUPS } from './appDiagnosticsGroups'
 
 // Diagnóstico da Aplicação — pedido explícito do usuário: um pop-up que
 // roda sozinho na primeira abertura do app (ou depois de uma atualização,
@@ -15,6 +16,13 @@ import { tables } from './schema'
 export interface DiagnosticIssue {
   rowLabel: string
   message: string
+  // Só usado por checagens que precisam separar os resultados em blocos
+  // dentro do mesmo dropdown (ex. Busca Reversa — pedido explícito do
+  // usuário: "faça a separação dos equipamentos por 'Blocos', assim, o
+  // que está errado, que eu veja"). Ausente = sem agrupamento, lista única
+  // (as duas checagens de status Protheus continuam assim). Ver
+  // GROUP_ORDER/GROUP_TONE em AppDiagnosticsPopup.tsx para ordem e cor.
+  group?: string
 }
 
 export interface DiagnosticSection {
@@ -127,7 +135,7 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
     const equipmentRow = rowByCode.get(code)
 
     if (!equipmentRow) {
-      issues.push({ rowLabel: code, message: 'NÃO cadastrado em Cadastro de Equipamentos.' })
+      issues.push({ rowLabel: code, message: 'NÃO cadastrado em Cadastro de Equipamentos.', group: REVERSE_SEARCH_GROUPS.notRegistered })
       continue
     }
 
@@ -136,7 +144,7 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
       .filter(r => r.status === 'mismatch')
 
     if (mismatches.length === 0) {
-      issues.push({ rowLabel: code, message: 'Já cadastrado em Cadastro de Equipamentos. Sem erros de propriedade.' })
+      issues.push({ rowLabel: code, message: 'Já cadastrado em Cadastro de Equipamentos. Sem erros de propriedade.', group: REVERSE_SEARCH_GROUPS.ok })
       continue
     }
 
@@ -146,7 +154,8 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
     }).join('; ')
     issues.push({
       rowLabel: code,
-      message: `Já cadastrado em Cadastro de Equipamentos. ${mismatches.length} erro(s) de propriedade: ${details}.`,
+      message: `${mismatches.length} erro(s) de propriedade: ${details}.`,
+      group: REVERSE_SEARCH_GROUPS.errors,
     })
   }
   return issues
