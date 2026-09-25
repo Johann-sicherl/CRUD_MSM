@@ -66,6 +66,19 @@ comece" por uma tabela, deixando claro que mais viriam depois.
   problemas → cabeçalho inteiro com fundo/borda/texto em tom de erro
   esmaecido (`border-error/30 bg-error-container/10`, texto do título em
   `text-error`), badge com a contagem.
+- **`DiagnosticSection.mode`** (`'problems'` padrão, ou `'summary'`) —
+  achado necessário ao adicionar a Checagem #3 (abaixo): nem toda seção é
+  "problema vs sem erros". Uma seção `'summary'` é inventário puro (ex.:
+  "aqui está tudo que a Busca Reversa achou") — `AppDiagnosticsPopup.tsx`
+  nunca acende vermelho nela só por ter itens (`flagged = hasIssues &&
+  !isSummary`); o badge mostra "N encontrada(s)"/"nenhuma encontrada" em
+  vez de "N problema(s)"/"sem erros", e a contagem do subtítulo do topo do
+  pop-up (`totalProblems`) ignora seções `'summary'` de propósito — uma
+  seção informativa cheia de itens não deve inflar "N problema(s)
+  encontrado(s)" no resumo geral. Um erro ao RODAR uma checagem `'summary'`
+  continua contando como problema de verdade (`runAppDiagnostics` sempre
+  grava esse tipo de entrada sem `mode`, então cai no padrão `'problems'`)
+  — a distinção é só pro resultado normal da checagem, nunca pra uma falha.
 
 ## Checagens #1 e #2 — bolinha vermelha vs. Status "Ativo"
 
@@ -92,6 +105,33 @@ Registradas em `CHECKS`:
    Componentes" — mesma regra, tabela diferente, sem nenhuma variação
    (`accessories` tem exatamente o mesmo par `protheus_code`/`status` de
    `standard_equipment_items`).
+
+## Checagem #3 — Busca Reversa (Protheus) 27.04 / 27.03
+
+Pedido explícito do usuário: "faça uma pesquisa que é realizada em Busc.
+Itens Série Estrut. Protheus, Busca Reversa (Protheus) 27.04, 27.03, e me
+dê um resumo de todas as estruturas encontradas." O usuário inicialmente
+pediu pra eu rodar essa busca diretamente nesta conversa — esclarecido que
+isso é tecnicamente impossível (Claude não tem navegador, conector pro app
+publicado, nem rede até o Protheus a partir do ambiente de sessão) — e o
+pedido real, confirmado explicitamente, era outro: adicionar isso como uma
+checagem nova neste mesmo pop-up automático, rodando com a credencial que
+o próprio Admin já forneceu no navegador dele.
+
+`checkReverseSearchStructures` (`appDiagnostics.ts`) — reusa
+`listStructureHeaders(['27.04', '27.03'], creds)` (`protheusDb.ts`), a
+mesma função por trás do campo "Busca Reversa (Protheus)" de
+`analisador-estruturas/page.tsx` (que, aliás, já vem pré-preenchido com
+exatamente `27.04, 27.03` por padrão — `reversePrefixInput`) — nenhuma
+lógica de busca nova. Cada estrutura encontrada é cruzada contra
+`standard_equipment_items.protheus_code` (Cadastro de Equipamentos) e vira
+uma linha no resumo, dizendo se já está cadastrada ou não. `mode:
+'summary'` (ver acima) — é um inventário de tudo que a busca encontrou,
+não uma lista de "coisas erradas"; a tela nunca marca essa seção como
+vermelha só por ter itens (o normal é ter muitos). Dentro da lista
+expandida, só a mensagem "NÃO cadastrado em Cadastro de Equipamentos"
+ganha destaque âmbar — chamando atenção pro que de fato pode precisar de
+ação, sem colorir a seção inteira de vermelho.
 
 ## O que NÃO faz parte disto
 

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabase'
-import { listProductStatuses, type ProtheusCredentials } from './protheusDb'
+import { listProductStatuses, listStructureHeaders, type ProtheusCredentials } from './protheusDb'
 
 // Diagnóstico da Aplicação — pedido explícito do usuário: um pop-up que
 // roda sozinho na primeira abertura do app (ou depois de uma atualização,
@@ -17,12 +17,18 @@ export interface DiagnosticIssue {
 export interface DiagnosticSection {
   key: string
   tableLabel: string
+  // 'problems' (default) — seção vermelha esmaecida quando issues.length>0,
+  // "sem erros" quando vazia (as duas checagens de status Protheus abaixo).
+  // 'summary' — inventário informativo (ex.: Busca Reversa), nunca fica
+  // vermelha só por ter itens; ver AppDiagnosticsPopup.tsx.
+  mode?: 'problems' | 'summary'
   issues: DiagnosticIssue[]
 }
 
 type Check = {
   key: string
   tableLabel: string
+  mode?: 'problems' | 'summary'
   run: (creds: ProtheusCredentials) => Promise<DiagnosticIssue[]>
 }
 
@@ -62,9 +68,48 @@ function checkProtheusStatusVsActive(tableName: string, tableLabel: string) {
   }
 }
 
+// Busca Reversa (Protheus) 27.04 / 27.03 — pedido explícito do usuário:
+// "faça uma pesquisa que é realizada em Busc. Itens Série Estrut. Protheus,
+// Busca Reversa (Protheus) 27.04, 27.03, e me dê um resumo de todas as
+// estruturas encontradas." Mesma função (`listStructureHeaders`,
+// `protheusDb.ts`) e os mesmos prefixos que já vêm pré-preenchidos por
+// padrão nesse campo da tela (`analisador-estruturas/page.tsx`,
+// `reversePrefixInput`) — nenhuma lógica de busca nova, só reaproveitada
+// aqui pro pop-up. Diferente das duas checagens acima, esta não é
+// "problema vs sem erros" — o usuário pediu um resumo de **todas** as
+// estruturas encontradas, cadastradas ou não, por isso `mode: 'summary'`:
+// toda estrutura encontrada vira uma linha (nunca fica vermelho esmaecido
+// só por ter itens — ver AppDiagnosticsPopup.tsx), com a mensagem dizendo
+// se já está ou não em Cadastro de Equipamentos.
+const REVERSE_SEARCH_PREFIXES = ['27.04', '27.03']
+
+async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise<DiagnosticIssue[]> {
+  const headers = await listStructureHeaders(REVERSE_SEARCH_PREFIXES, creds)
+  if (headers.length === 0) return []
+
+  const { data, error } = await supabaseAdmin
+    .from('standard_equipment_items')
+    .select('protheus_code')
+    .range(0, 24999)
+  if (error) throw new Error(`Falha ao ler Cadastro de Equipamentos: ${error.message}`)
+
+  const registered = new Set((data || []).map(r => String(r.protheus_code ?? '').trim().toUpperCase()))
+
+  return headers.map(code => {
+    const normalized = code.trim().toUpperCase()
+    return {
+      rowLabel: normalized,
+      message: registered.has(normalized)
+        ? 'Já cadastrado em Cadastro de Equipamentos.'
+        : 'NÃO cadastrado em Cadastro de Equipamentos.',
+    }
+  })
+}
+
 const CHECKS: Check[] = [
   { key: 'standard_equipment_items', tableLabel: 'Cadastro de Equipamentos', run: checkProtheusStatusVsActive('standard_equipment_items', 'Cadastro de Equipamentos') },
   { key: 'accessories', tableLabel: 'Cadastro de Componentes', run: checkProtheusStatusVsActive('accessories', 'Cadastro de Componentes') },
+  { key: 'reverse_search_27_04_27_03', tableLabel: 'Busca Reversa (Protheus) 27.04 / 27.03', mode: 'summary', run: checkReverseSearchStructures },
 ]
 
 // Roda todas as checagens registradas, em sequência (não Promise.all — uma
@@ -76,9 +121,12 @@ export async function runAppDiagnostics(creds: ProtheusCredentials): Promise<Dia
   for (const check of CHECKS) {
     try {
       const issues = await check.run(creds)
-      sections.push({ key: check.key, tableLabel: check.tableLabel, issues })
+      sections.push({ key: check.key, tableLabel: check.tableLabel, mode: check.mode, issues })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido ao rodar esta checagem'
+      // Uma falha ao rodar a checagem é sempre tratada como problema (modo
+      // padrão 'problems'), mesmo numa checagem 'summary' — o usuário
+      // precisa ver que algo deu errado, não que "não achou nada".
       sections.push({ key: check.key, tableLabel: check.tableLabel, issues: [{ rowLabel: '—', message }] })
     }
   }

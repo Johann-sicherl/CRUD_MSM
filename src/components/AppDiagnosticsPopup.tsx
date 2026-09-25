@@ -32,7 +32,9 @@ export default function AppDiagnosticsPopup({
     })
   }
 
-  const totalIssues = sections.reduce((sum, s) => sum + s.issues.length, 0)
+  // "summary" não conta como problema no resumo do topo — é inventário
+  // (ex.: Busca Reversa), não uma lista de coisas erradas.
+  const totalProblems = sections.reduce((sum, s) => sum + (s.mode === 'summary' ? 0 : s.issues.length), 0)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
@@ -45,9 +47,9 @@ export default function AppDiagnosticsPopup({
                 ? 'Analisando…'
                 : error
                 ? 'Falha ao rodar o diagnóstico.'
-                : totalIssues === 0
+                : totalProblems === 0
                 ? 'Nenhum problema encontrado.'
-                : `${totalIssues} problema(s) encontrado(s).`}
+                : `${totalProblems} problema(s) encontrado(s).`}
             </p>
           </div>
           <button onClick={onClose} className="text-outline hover:text-on-surface text-xl leading-none shrink-0">✕</button>
@@ -69,30 +71,40 @@ export default function AppDiagnosticsPopup({
             <div className="flex flex-col gap-3">
               {sections.map(section => {
                 const isOpen = expanded.has(section.key)
+                const isSummary = section.mode === 'summary'
                 const hasIssues = section.issues.length > 0
+                // "summary" nunca fica vermelho esmaecido só por ter itens
+                // — é um inventário (ex.: Busca Reversa), não uma lista de
+                // problemas. Só sections de 'problems' (padrão) acendem
+                // vermelho quando têm algo.
+                const flagged = hasIssues && !isSummary
                 return (
                   <div
                     key={section.key}
                     className={`rounded-lg border overflow-hidden ${
-                      hasIssues ? 'border-error/30 bg-error-container/10' : 'border-outline-variant bg-surface-container-low'
+                      flagged ? 'border-error/30 bg-error-container/10' : 'border-outline-variant bg-surface-container-low'
                     }`}
                   >
                     <button
                       onClick={() => toggle(section.key)}
                       className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
-                        hasIssues ? 'hover:bg-error-container/20' : 'hover:bg-surface-container-high'
+                        flagged ? 'hover:bg-error-container/20' : 'hover:bg-surface-container-high'
                       }`}
                     >
-                      <span className={`text-sm font-semibold ${hasIssues ? 'text-error' : 'text-on-surface'}`}>
+                      <span className={`text-sm font-semibold ${flagged ? 'text-error' : 'text-on-surface'}`}>
                         {section.tableLabel}
                       </span>
                       <span className="flex items-center gap-2 shrink-0">
                         <span className={`text-xs font-mono px-2 py-0.5 rounded-full border ${
-                          hasIssues
+                          flagged
                             ? 'text-error border-error/30 bg-error-container/20'
                             : 'text-outline border-outline-variant bg-surface-container'
                         }`}>
-                          {hasIssues ? `${section.issues.length} problema(s)` : 'sem erros'}
+                          {flagged
+                            ? `${section.issues.length} problema(s)`
+                            : isSummary
+                            ? (hasIssues ? `${section.issues.length} encontrada(s)` : 'nenhuma encontrada')
+                            : 'sem erros'}
                         </span>
                         <span className={`text-outline text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
                       </span>
@@ -104,12 +116,14 @@ export default function AppDiagnosticsPopup({
                             {section.issues.map((issue, i) => (
                               <li key={i} className="flex flex-col">
                                 <span className="font-mono text-on-surface">{issue.rowLabel}</span>
-                                <span className="text-on-surface-variant">{issue.message}</span>
+                                <span className={isSummary && issue.message.startsWith('NÃO') ? 'text-amber-400' : 'text-on-surface-variant'}>
+                                  {issue.message}
+                                </span>
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <div className="text-sm text-outline italic">Sem erros.</div>
+                          <div className="text-sm text-outline italic">{isSummary ? 'Nenhuma estrutura encontrada.' : 'Sem erros.'}</div>
                         )}
                       </div>
                     )}
