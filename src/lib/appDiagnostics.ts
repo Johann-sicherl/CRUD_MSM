@@ -26,38 +26,45 @@ type Check = {
   run: (creds: ProtheusCredentials) => Promise<DiagnosticIssue[]>
 }
 
-// Cadastro de Equipamentos (standard_equipment_items) — pedido explícito do
-// usuário: "analisando se tem algo bloqueado no Protheus... e com STATUS
-// igual active, sempre que tiver bolinha vermelha tem que estar deactive."
-// Mesma fonte de status (SB1010, ATIVO/BLOQUEADO) que já alimenta a
-// "bolinha" de DataTable.tsx (getProtheusStatus) — reaproveitada aqui, sem
-// query nova ao Protheus além da já existente em listProductStatuses.
-async function checkStandardEquipmentItemsStatus(creds: ProtheusCredentials): Promise<DiagnosticIssue[]> {
-  const { data, error } = await supabaseAdmin
-    .from('standard_equipment_items')
-    .select('protheus_code, status')
-    .range(0, 24999)
-  if (error) throw new Error(`Falha ao ler Cadastro de Equipamentos: ${error.message}`)
+// Regra compartilhada, pedido explícito do usuário — primeiro pra Cadastro
+// de Equipamentos (standard_equipment_items), depois replicada tal e qual
+// pra Cadastro de Componentes (accessories): "analisando se tem algo
+// bloqueado no Protheus... e com STATUS igual active, sempre que tiver
+// bolinha vermelha tem que estar deactive." Mesma fonte de status (SB1010,
+// ATIVO/BLOQUEADO) que já alimenta a "bolinha" de DataTable.tsx
+// (getProtheusStatus) — reaproveitada aqui, sem query nova ao Protheus além
+// da já existente em listProductStatuses. As duas tabelas têm exatamente a
+// mesma forma (protheus_code + status com opções active/deactive), por
+// isso uma função genérica em vez de duplicar a lógica por tabela.
+function checkProtheusStatusVsActive(tableName: string, tableLabel: string) {
+  return async (creds: ProtheusCredentials): Promise<DiagnosticIssue[]> => {
+    const { data, error } = await supabaseAdmin
+      .from(tableName)
+      .select('protheus_code, status')
+      .range(0, 24999)
+    if (error) throw new Error(`Falha ao ler ${tableLabel}: ${error.message}`)
 
-  const statusByCode = await listProductStatuses(creds)
+    const statusByCode = await listProductStatuses(creds)
 
-  const issues: DiagnosticIssue[] = []
-  for (const row of (data || [])) {
-    const code = String(row.protheus_code ?? '').trim().toUpperCase()
-    if (!code) continue
-    const protheusStatus = statusByCode.get(code)
-    if (protheusStatus === 'BLOQUEADO' && row.status === 'active') {
-      issues.push({
-        rowLabel: `Código Protheus: ${code}`,
-        message: 'BLOQUEADO no Protheus, mas o Status aqui está "Ativo" — deveria estar "Inativo".',
-      })
+    const issues: DiagnosticIssue[] = []
+    for (const row of (data || [])) {
+      const code = String(row.protheus_code ?? '').trim().toUpperCase()
+      if (!code) continue
+      const protheusStatus = statusByCode.get(code)
+      if (protheusStatus === 'BLOQUEADO' && row.status === 'active') {
+        issues.push({
+          rowLabel: `Código Protheus: ${code}`,
+          message: 'BLOQUEADO no Protheus, mas o Status aqui está "Ativo" — deveria estar "Inativo".',
+        })
+      }
     }
+    return issues
   }
-  return issues
 }
 
 const CHECKS: Check[] = [
-  { key: 'standard_equipment_items', tableLabel: 'Cadastro de Equipamentos', run: checkStandardEquipmentItemsStatus },
+  { key: 'standard_equipment_items', tableLabel: 'Cadastro de Equipamentos', run: checkProtheusStatusVsActive('standard_equipment_items', 'Cadastro de Equipamentos') },
+  { key: 'accessories', tableLabel: 'Cadastro de Componentes', run: checkProtheusStatusVsActive('accessories', 'Cadastro de Componentes') },
 ]
 
 // Roda todas as checagens registradas, em sequência (não Promise.all — uma

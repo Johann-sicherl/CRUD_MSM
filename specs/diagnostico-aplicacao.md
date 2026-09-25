@@ -67,21 +67,31 @@ comece" por uma tabela, deixando claro que mais viriam depois.
   esmaecido (`border-error/30 bg-error-container/10`, texto do título em
   `text-error`), badge com a contagem.
 
-## Checagem #1 — Cadastro de Equipamentos vs. status Protheus
+## Checagens #1 e #2 — bolinha vermelha vs. Status "Ativo"
 
-`checkStandardEquipmentItemsStatus` (`appDiagnostics.ts`) — pra cada linha
-de `standard_equipment_items` (Cadastro de Equipamentos), resolve o status
-Protheus (`ATIVO`/`BLOQUEADO`, SB1010) via `protheus_code`, reusando
+`checkProtheusStatusVsActive(tableName, tableLabel)` (`appDiagnostics.ts`)
+— fábrica de checagem genérica, reusada por duas tabelas que têm
+exatamente a mesma forma (`protheus_code` + `status` com opções
+`active`/`deactive`): pra cada linha, resolve o status Protheus
+(`ATIVO`/`BLOQUEADO`, SB1010) via `protheus_code`, reusando
 `listProductStatuses` (`protheusDb.ts`) — a mesma fonte que já alimenta a
 "bolinha" verde/vermelha de `DataTable.tsx` (`getProtheusStatus`,
 `schema.protheusStatusCheckField`), nenhuma query nova ao Protheus além da
 que essa função já fazia. Regra, exatamente como pedida pelo usuário: se o
 status no Protheus é `BLOQUEADO` (bolinha vermelha) **e** o campo `status`
-interno (`standard_equipment_items.status`, opções `active`/`deactive`) diz
-`active`, isso é um achado — o esperado é `status = deactive` sempre que
-Protheus estiver `BLOQUEADO`. Não verifica a direção inversa (`ATIVO` no
-Protheus com `status = deactive` aqui) — não foi pedido, e implementar sem
-pedido seria inventar uma regra de negócio nova.
+interno diz `active`, isso é um achado — o esperado é `status = deactive`
+sempre que Protheus estiver `BLOQUEADO`. Não verifica a direção inversa
+(`ATIVO` no Protheus com `status = deactive` aqui) — não foi pedido, e
+implementar sem pedido seria inventar uma regra de negócio nova.
+
+Registradas em `CHECKS`:
+1. **Cadastro de Equipamentos** (`standard_equipment_items`) — a primeira,
+   pedido original.
+2. **Cadastro de Componentes** (`accessories`) — pedido explícito do
+   usuário na rodada seguinte, "faça esta mesma rotina... em Cadastro de
+   Componentes" — mesma regra, tabela diferente, sem nenhuma variação
+   (`accessories` tem exatamente o mesmo par `protheus_code`/`status` de
+   `standard_equipment_items`).
 
 ## O que NÃO faz parte disto
 
