@@ -1,5 +1,8 @@
 import { supabaseAdmin } from './supabase'
-import { listProductStatuses, listStructureHeaders, type ProtheusCredentials } from './protheusDb'
+import { listProductStatuses, listStructureHeaders, fetchStructureCodes, type ProtheusCredentials } from './protheusDb'
+import { readStructurePropertyRules } from './structurePropertyRules'
+import { computeStructurePropertyResults } from './structurePropertyMatch'
+import { tables } from './schema'
 
 // Diagnóstico da Aplicação — pedido explícito do usuário: um pop-up que
 // roda sozinho na primeira abertura do app (ou depois de uma atualização,
@@ -79,9 +82,26 @@ function checkProtheusStatusVsActive(tableName: string, tableLabel: string) {
 // "problema vs sem erros" — o usuário pediu um resumo de **todas** as
 // estruturas encontradas, cadastradas ou não, por isso `mode: 'summary'`:
 // toda estrutura encontrada vira uma linha (nunca fica vermelho esmaecido
-// só por ter itens — ver AppDiagnosticsPopup.tsx), com a mensagem dizendo
-// se já está ou não em Cadastro de Equipamentos.
+// só por ter itens — ver AppDiagnosticsPopup.tsx).
+//
+// Rodada seguinte, pedido explícito do usuário: além de cadastrado/não
+// cadastrado, também listar os "N erro(s)" de propriedade de cada
+// estrutura — o mesmo flag e a mesma tabela (Propriedade/Valor Esperado/
+// Código(s) que Geraram/Valor no Banco/Status) que já existem por código
+// na tela viva. Reaproveita `fetchStructureCodes` (explosão da árvore de
+// componentes) + `computeStructurePropertyResults` (`structurePropertyMatch.ts`,
+// o mesmo motor de comparação usado por /api/analisador-estruturas e por
+// R090 de Inteligência do Produto) — nenhuma lógica de comparação nova.
+// Só roda a explosão de estrutura (o passo caro) pras estruturas que JÁ
+// estão cadastradas — sem uma linha em Cadastro de Equipamentos não há
+// "valor no banco" nenhum pra comparar, então o custo é evitado à toa.
+// Decisão confirmada com o usuário: aceitar que esta seção demore mais que
+// as outras duas (sem limite de quantidade de estruturas analisadas).
 const REVERSE_SEARCH_PREFIXES = ['27.04', '27.03']
+
+function structurePropertyFieldLabel(fieldName: string): string {
+  return tables.standard_equipment_items.fields.find(f => f.name === fieldName)?.label ?? fieldName
+}
 
 async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise<DiagnosticIssue[]> {
   const headers = await listStructureHeaders(REVERSE_SEARCH_PREFIXES, creds)
@@ -89,21 +109,47 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
 
   const { data, error } = await supabaseAdmin
     .from('standard_equipment_items')
-    .select('protheus_code')
+    .select('*')
     .range(0, 24999)
   if (error) throw new Error(`Falha ao ler Cadastro de Equipamentos: ${error.message}`)
 
-  const registered = new Set((data || []).map(r => String(r.protheus_code ?? '').trim().toUpperCase()))
+  const rowByCode = new Map<string, Record<string, unknown>>()
+  for (const row of (data || [])) {
+    const code = String(row.protheus_code ?? '').trim().toUpperCase()
+    if (code) rowByCode.set(code, row)
+  }
 
-  return headers.map(code => {
-    const normalized = code.trim().toUpperCase()
-    return {
-      rowLabel: normalized,
-      message: registered.has(normalized)
-        ? 'Já cadastrado em Cadastro de Equipamentos.'
-        : 'NÃO cadastrado em Cadastro de Equipamentos.',
+  const rules = readStructurePropertyRules()
+
+  const issues: DiagnosticIssue[] = []
+  for (const rawCode of headers) {
+    const code = rawCode.trim().toUpperCase()
+    const equipmentRow = rowByCode.get(code)
+
+    if (!equipmentRow) {
+      issues.push({ rowLabel: code, message: 'NÃO cadastrado em Cadastro de Equipamentos.' })
+      continue
     }
-  })
+
+    const { codes: componentCodes } = await fetchStructureCodes(code, creds)
+    const mismatches = computeStructurePropertyResults(new Set(componentCodes), equipmentRow, rules)
+      .filter(r => r.status === 'mismatch')
+
+    if (mismatches.length === 0) {
+      issues.push({ rowLabel: code, message: 'Já cadastrado em Cadastro de Equipamentos. Sem erros de propriedade.' })
+      continue
+    }
+
+    const details = mismatches.map(m => {
+      const via = m.matched.map(x => `${x.code} → ${x.value}`).join(', ')
+      return `${structurePropertyFieldLabel(m.field)} (esperado "${m.computedValue}" via ${via}, banco tem "${m.dbValue ?? '—'}")`
+    }).join('; ')
+    issues.push({
+      rowLabel: code,
+      message: `Já cadastrado em Cadastro de Equipamentos. ${mismatches.length} erro(s) de propriedade: ${details}.`,
+    })
+  }
+  return issues
 }
 
 const CHECKS: Check[] = [

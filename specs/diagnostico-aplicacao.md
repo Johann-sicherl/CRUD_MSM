@@ -123,15 +123,57 @@ o próprio Admin já forneceu no navegador dele.
 mesma função por trás do campo "Busca Reversa (Protheus)" de
 `analisador-estruturas/page.tsx` (que, aliás, já vem pré-preenchido com
 exatamente `27.04, 27.03` por padrão — `reversePrefixInput`) — nenhuma
-lógica de busca nova. Cada estrutura encontrada é cruzada contra
-`standard_equipment_items.protheus_code` (Cadastro de Equipamentos) e vira
-uma linha no resumo, dizendo se já está cadastrada ou não. `mode:
-'summary'` (ver acima) — é um inventário de tudo que a busca encontrou,
-não uma lista de "coisas erradas"; a tela nunca marca essa seção como
-vermelha só por ter itens (o normal é ter muitos). Dentro da lista
-expandida, só a mensagem "NÃO cadastrado em Cadastro de Equipamentos"
-ganha destaque âmbar — chamando atenção pro que de fato pode precisar de
-ação, sem colorir a seção inteira de vermelho.
+lógica de busca nova. `mode: 'summary'` (ver acima) — é um inventário de
+tudo que a busca encontrou, não uma lista de "coisas erradas"; a tela
+nunca marca essa seção como vermelha só por ter itens (o normal é ter
+muitos).
+
+**Rodada seguinte, pedido explícito do usuário**: depois de eu explicar
+(sem mexer em código) os 5 flags que a tela viva mostra por código
+(`Equipamento encontrado`, `Encontrado no Protheus`, `Tudo OK`, `N
+erro(s)`, `Possui MP sem custo`) e como a tabela de divergência de
+propriedade (`Propriedade`/`Valor Esperado (Estrutura)`/`Código(s) que
+Geraram`/`Valor no Banco`/`Status`) é montada, o usuário perguntou "Já
+implementou no novo pop-up?" — não, aquela resposta foi só explicação.
+Confirmado então (`AskUserQuestion`, duas perguntas): (1) escopo — só
+`N erro(s)` + listar quais propriedades divergem (não `Possui MP sem
+custo`, que exigiria calcular o BOM inteiro por código — fora do pedido);
+(2) performance — tudo bem essa seção demorar mais que as outras duas,
+sem limite de quantidade de estruturas analisadas.
+
+Cada estrutura encontrada vira **uma linha** (uma por código, não uma por
+propriedade divergente — mantém a contagem "N encontrada(s)" do badge
+igual ao número de estruturas de verdade), com três estados possíveis na
+mensagem:
+- **Não cadastrada** — `'NÃO cadastrado em Cadastro de Equipamentos.'` —
+  não roda a comparação de propriedade nesse caso (sem linha em Cadastro
+  de Equipamentos não há "valor no banco" nenhum pra comparar, então o
+  passo caro — explodir a estrutura inteira — é evitado à toa).
+- **Cadastrada, sem erro** — `'Já cadastrado em Cadastro de Equipamentos.
+  Sem erros de propriedade.'`
+- **Cadastrada, com erro(s)** — `'Já cadastrado em Cadastro de
+  Equipamentos. N erro(s) de propriedade: <Propriedade> (esperado "X" via
+  <código> → <valor>, banco tem "Y"); ...'` — um item por propriedade
+  divergente dentro da mesma mensagem, no mesmo formato de "Valor Esperado
+  (Estrutura)"/"Código(s) que Geraram"/"Valor no Banco" da tabela da tela
+  viva.
+
+Pra cada código já cadastrado, reusa exatamente o mesmo motor de
+comparação da tela viva — `fetchStructureCodes` (`protheusDb.ts`, explode
+a árvore de componentes) + `computeStructurePropertyResults`
+(`structurePropertyMatch.ts`, o mesmo motor compartilhado com
+`/api/analisador-estruturas` e a regra R090 de Inteligência do Produto) —
+nenhuma lógica de comparação nova, só reaproveitada. O rótulo de cada
+propriedade vem de `tables.standard_equipment_items.fields` (`schema.ts`,
+fonte única de verdade), nunca um mapa duplicado à parte (a tela viva tem
+o próprio `FIELD_LABELS` hardcoded — pré-existente, não tocado; este
+código novo não replicou esse padrão, foi direto na fonte).
+
+`AppDiagnosticsPopup.tsx` diferencia os três estados **dentro** da lista
+expandida de uma seção `'summary'` (a seção em si nunca fica vermelha,
+só as linhas individuais mudam de cor): não cadastrado → âmbar (como já
+era); cadastrado com erro de propriedade → vermelho (`text-error`, achado
+mais sério que "não cadastrado" ainda); cadastrado sem erro → neutro.
 
 ## O que NÃO faz parte disto
 

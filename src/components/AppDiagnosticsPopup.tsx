@@ -113,14 +113,28 @@ export default function AppDiagnosticsPopup({
                       <div className="border-t border-outline-variant/50 px-4 py-3">
                         {hasIssues ? (
                           <ul className="flex flex-col gap-2 text-sm">
-                            {section.issues.map((issue, i) => (
-                              <li key={i} className="flex flex-col">
-                                <span className="font-mono text-on-surface">{issue.rowLabel}</span>
-                                <span className={isSummary && issue.message.startsWith('NÃO') ? 'text-amber-400' : 'text-on-surface-variant'}>
-                                  {issue.message}
-                                </span>
-                              </li>
-                            ))}
+                            {section.issues.map((issue, i) => {
+                              // Dentro de uma seção 'summary' (ex. Busca Reversa), cada
+                              // linha pode ser um de três estados — nunca cadastrado
+                              // (âmbar), cadastrado mas com erro de propriedade
+                              // divergente (vermelho, é o achado mais sério), ou
+                              // cadastrado e sem erro (neutro). Fora de 'summary', a
+                              // seção inteira já é 'problems' e toda linha é neutra
+                              // (o vermelho já está no cabeçalho, ver `flagged` acima).
+                              const messageTone = !isSummary
+                                ? 'text-on-surface-variant'
+                                : issue.message.startsWith('NÃO')
+                                ? 'text-amber-400'
+                                : issue.message.includes('erro(s) de propriedade:')
+                                ? 'text-error'
+                                : 'text-on-surface-variant'
+                              return (
+                                <li key={i} className="flex flex-col">
+                                  <span className="font-mono text-on-surface">{issue.rowLabel}</span>
+                                  <span className={messageTone}>{issue.message}</span>
+                                </li>
+                              )
+                            })}
                           </ul>
                         ) : (
                           <div className="text-sm text-outline italic">{isSummary ? 'Nenhuma estrutura encontrada.' : 'Sem erros.'}</div>
