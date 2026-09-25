@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { DiagnosticSection, DiagnosticIssue } from '@/lib/appDiagnostics'
-import { REVERSE_SEARCH_GROUPS, REVERSE_SEARCH_GROUP_ORDER } from '@/lib/appDiagnosticsGroups'
+import { REVERSE_SEARCH_GROUPS, REVERSE_SEARCH_GROUP_ORDER, PDM_COMPARE_GROUPS, PDM_COMPARE_GROUP_ORDER } from '@/lib/appDiagnosticsGroups'
 
 // Pop-up "Visão Geral Avançada Global" (nome anterior: "Diagnóstico da
 // Aplicação" — pedido explícito do usuário pra renomear; código/arquivo
@@ -33,12 +33,25 @@ import { REVERSE_SEARCH_GROUPS, REVERSE_SEARCH_GROUP_ORDER } from '@/lib/appDiag
 // 90°, `expandedGroups`), não mais um sub-cabeçalho sempre visível com a
 // lista logo abaixo.
 
+// Duas famílias de blocos hoje (Busca Reversa e Consulta PDM x Banco MSM,
+// cada uma com seus próprios nomes de grupo, nunca sobrepostos) — reunidas
+// numa única ordem de prioridade pra qualquer seção nova que use `group`
+// não precisar de nenhum código específico aqui: cada seção só tem issues
+// da própria família, então filtrar por `grouped.has(g)` já isola e ordena
+// certo por seção, sem precisar saber qual família é qual.
+const ALL_GROUP_ORDER: string[] = [...REVERSE_SEARCH_GROUP_ORDER, ...PDM_COMPARE_GROUP_ORDER]
+
 // Comparação exata contra as constantes (nunca substring — "Cadastrado,
 // sem erros" também contém a palavra "erro", então um .includes('erro')
 // pintaria esse bloco de vermelho por engano).
 function groupTone(group: string): string {
   if (group === REVERSE_SEARCH_GROUPS.errors) return 'text-error'
   if (group === REVERSE_SEARCH_GROUPS.notRegistered) return 'text-amber-400'
+  if (group === REVERSE_SEARCH_GROUPS.ok) return 'text-on-surface-variant'
+  if (group === PDM_COMPARE_GROUPS.mismatch) return 'text-error'
+  if (group === PDM_COMPARE_GROUPS.pdmOnly) return 'text-amber-400'
+  if (group === PDM_COMPARE_GROUPS.supabaseOnly) return 'text-amber-400'
+  if (group === PDM_COMPARE_GROUPS.ok) return 'text-on-surface-variant'
   return 'text-on-surface-variant'
 }
 
@@ -226,7 +239,7 @@ export default function AppDiagnosticsPopup({
                 }
                 const useGroups = grouped.size > 0
                 const groupKeys = useGroups
-                  ? [...REVERSE_SEARCH_GROUP_ORDER.filter(g => grouped.has(g)), ...Array.from(grouped.keys()).filter(g => !REVERSE_SEARCH_GROUP_ORDER.includes(g))]
+                  ? [...ALL_GROUP_ORDER.filter(g => grouped.has(g)), ...Array.from(grouped.keys()).filter(g => !ALL_GROUP_ORDER.includes(g))]
                   : []
                 return (
                   <div

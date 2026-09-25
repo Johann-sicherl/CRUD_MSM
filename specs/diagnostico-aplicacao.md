@@ -274,6 +274,109 @@ depois "Cadastrado, sem erros" por último (neutro). Dentro de cada bloco,
 cada equipamento é sua própria caixinha (ver "Caixinha por equipamento"
 acima) — o clique é por equipamento, nunca por bloco inteiro.
 
+## Checagem #4 — Consulta PDM x Banco MSM
+
+Pedido explícito do usuário: "traga a análise de Consulta PDM x Banco MSM,
+1 ok / 161 divergentes / 21 só no PDM / 130 só no Banco MSM — mesmo estilo,
+linha a linha, caixa a caixa, segundo código a código. Separe grupo também
+por dropdown." Réplica, dentro do pop-up, das mesmas 4 categorias que a
+tela viva `pdm-consulta-acessorios/page.tsx` já calcula (`comparePdmWithSupabase`,
+`pdmCompare.ts`) — nenhuma lógica de comparação nova, `checkPdmVsSupabase`
+(`appDiagnostics.ts`) reaproveita `fetchPdmAccessories` (`pdmDb.ts`) e
+`comparePdmWithSupabase`/`PDM_FIELD_MAP` (`pdmCompare.ts`) tal e qual —
+mesmo padrão de reuso das checagens anteriores. `mode: 'summary'` (é um
+inventário das 4 categorias, não uma lista de "coisas erradas" só; a
+própria seção nunca fica vermelha sozinha, só os blocos, mesmo padrão de
+Busca Reversa). Fonte do lado banco de dados MSM é só `Cadastro de
+Componentes` (`accessories`) — a mesma tabela que a tela viva usa do lado
+Supabase (`accessory_groups`, ali, é só pra rótulo de grupo — não entra na
+comparação em si).
+
+### PDM é uma segunda conexão, à parte do Protheus — comportamento quando ainda não conectado
+
+Diferente do Protheus (credencial obrigatória pra o pop-up disparar), a
+conexão ao PDM é oferecida automaticamente só **depois** que o Protheus já
+conectou (`pdmAuthContext.tsx`, `offeredRef`) — e exige um passo à parte do
+Admin pra completar (preencher usuário/senha no modal que abre sozinho).
+Como o pop-up de Diagnóstico dispara no mesmo instante em que o Protheus
+conecta, o PDM tipicamente **ainda não** está conectado nesse momento.
+
+Decisão deliberada (não bloquear o diagnóstico inteiro, nem pular a seção
+em silêncio): `checkPdmVsSupabase` verifica `creds.pdm` no início e, se
+`null`, devolve um único aviso informativo sem `group` (cai na lista
+simples, não nos blocos) — `'PDM não conectado nesta sessão — conecte ao
+Banco PDM (oferecido após o Protheus) para incluir esta checagem.'` As
+outras 3 seções continuam rodando normalmente (mesmo `try/catch` por
+checagem já existente em `runAppDiagnostics`, ver "Arquitetura" acima) —
+uma checagem que depende de uma credencial ainda não disponível não é
+tratada como erro, só como "nada a reportar ainda".
+
+**Limitação aceita conscientemente**: como o pop-up só dispara uma vez por
+build (`app-diagnostics-seen-build` em `localStorage`), se o PDM não
+estiver conectado na primeira vez que o pop-up abre, esta seção continua
+mostrando "PDM não conectado" até o próximo `npm run build` em produção —
+não há re-execução automática quando o PDM conecta depois. Não implementado
+porque não foi pedido; se isso incomodar no uso real, a correção natural
+seria re-rodar só esta seção quando o PDM conectar, sem depender do gate de
+build inteiro — mudança à parte, não implementada aqui.
+
+### Threading de credencial — mudança de assinatura compartilhada por todas as checagens
+
+Antes desta checagem, `Check.run` recebia só `ProtheusCredentials`. Como o
+PDM é uma credencial nova e opcional, `DiagnosticsCredentials` (`appDiagnostics.ts`)
+passou a ser `{ protheus: ProtheusCredentials; pdm: PdmCredentials | null }`
+— **todas** as checagens existentes (`checkProtheusStatusVsActive`,
+`checkReverseSearchStructures`) foram ajustadas pra ler `creds.protheus`
+em vez de `creds` direto; nenhuma mudou de comportamento, só a forma de
+acessar a credencial Protheus. `AppDiagnosticsGate.tsx` (já renderizado
+dentro de `PdmAuthProvider`, ver nesting de providers em
+`specs/permissoes-e-perfis.md`) passou a também ler `usePdmAuth().creds` e
+enviar `pdmUser`/`pdmPassword` (opcionais) no POST pra
+`/api/app-diagnostics`; a rota monta `pdm: null` quando ausentes.
+
+### Blocos — segunda família de grupos, popup generalizado pra não colidir com a de Busca Reversa
+
+`PDM_COMPARE_GROUPS`/`PDM_COMPARE_GROUP_ORDER` (`appDiagnosticsGroups.ts`,
+mesmo arquivo client-safe da Busca Reversa, mesmo motivo de extração — ver
+"Arquitetura" acima) — ordem "o que está errado primeiro": `Divergentes` →
+`Só no PDM` → `Só no Banco MSM` → `OK` por último. Cada linha do resultado
+de `comparePdmWithSupabase` vira uma `DiagnosticIssue` com o `group`
+correspondente:
+- **`ok`** (`group: 'OK'`) — mensagem `'Sem divergência.'`, sem `details`.
+- **`mismatch`** (`group: 'Divergentes'`) — mensagem `'N campo(s)
+  divergente(s).'` **e** `details: DiagnosticIssueDetail[]`, um item por
+  campo de `PDM_FIELD_MAP` que diverge (`row.diffs`, já calculado por
+  `comparePdmWithSupabase`) — `property = diff.label`, `expected =
+  diff.pdmDisplay`, `via = 'PDM'` (fixo — diferente da Busca Reversa, aqui
+  não há "código(s) que geraram" o valor, é uma comparação direta campo a
+  campo contra o PDM), `dbValue = diff.supabaseDisplay`. Renderiza na mesma
+  mini-tabela da caixinha de equipamento (`EquipmentBox`), sem nenhuma
+  mudança na UI — o componente já era genérico o bastante.
+- **`pdm-only`** (`group: 'Só no PDM'`) — mensagem `'Existe no PDM, não
+  cadastrado em Cadastro de Componentes.'`.
+- **`supabase-only`** (`group: 'Só no Banco MSM'`) — mensagem `'Cadastrado
+  em Cadastro de Componentes, não encontrado no PDM.'`.
+
+Como `AppDiagnosticsPopup.tsx` já tinha `groupTone`/a ordenação de blocos
+(`groupKeys`) hardcoded pra só reconhecer `REVERSE_SEARCH_GROUP_ORDER`
+(achado ao implementar esta checagem — a Busca Reversa foi a primeira e
+única seção agrupada até aqui), os dois foram generalizados: `ALL_GROUP_ORDER
+= [...REVERSE_SEARCH_GROUP_ORDER, ...PDM_COMPARE_GROUP_ORDER]` — como os
+nomes de grupo das duas famílias nunca se sobrepõem e cada seção só produz
+issues da própria família, filtrar `ALL_GROUP_ORDER` por `grouped.has(g)`
+já isola e ordena corretamente por seção, sem nenhuma checagem "qual
+família é esta" — qualquer checagem futura que precise de blocos só
+precisa adicionar sua própria constante de grupos a este array, sem tocar
+no resto da lógica de ordenação. `groupTone` idem: comparação exata contra
+as 4 constantes novas, mesmo cuidado de nunca usar substring já documentado
+acima (mismatch/pdmOnly/supabaseOnly em tom vermelho/âmbar, `ok` neutro).
+
+Mesmo "caixinha por código, expande pra ver o erro dele" da Busca Reversa —
+pedido explícito do usuário ("caixa a caixa, segundo código a código") —
+nenhum componente novo foi criado, `EquipmentBox` já era genérico o
+bastante (rótulo = `rowLabel`, badge = `details.length` erro(s) ou a
+`message`, mini-tabela a partir de `details`).
+
 ## O que NÃO faz parte disto
 
 - Não é a mesma coisa que o "Comparar" removido do Atualizador Global (ver

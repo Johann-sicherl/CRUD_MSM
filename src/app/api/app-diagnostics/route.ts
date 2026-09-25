@@ -19,8 +19,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Informe usuário e senha do banco Protheus' }, { status: 400 })
   }
 
+  // PDM é opcional — a Checagem #4 (Consulta PDM x Banco MSM) só roda se o
+  // Admin já tiver conectado ao PDM nesta sessão (conexão à parte, ver
+  // pdmAuthContext.tsx); sem credencial, a checagem reporta isso sozinha,
+  // sem bloquear as demais (ver checkPdmVsSupabase, appDiagnostics.ts).
+  const pdmUser = String(body?.pdmUser ?? '').trim()
+  const pdmPassword = String(body?.pdmPassword ?? '')
+  const pdm = pdmUser && pdmPassword ? { user: pdmUser, password: pdmPassword } : null
+
   try {
-    const sections = await runAppDiagnostics({ user, password })
+    const sections = await runAppDiagnostics({ protheus: { user, password }, pdm })
     return NextResponse.json({ sections })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao rodar o diagnóstico'

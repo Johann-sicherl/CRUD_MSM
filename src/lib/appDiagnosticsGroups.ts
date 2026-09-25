@@ -19,3 +19,20 @@ export const REVERSE_SEARCH_GROUP_ORDER: string[] = [
   REVERSE_SEARCH_GROUPS.notRegistered,
   REVERSE_SEARCH_GROUPS.ok,
 ]
+
+// Blocos da Checagem #4 (Consulta PDM x Banco MSM) — mesmo motivo de
+// extração acima. Mesma convenção de ordem "o que está errado primeiro":
+// divergente > só num lado > OK por último.
+export const PDM_COMPARE_GROUPS = {
+  mismatch: 'Divergentes',
+  pdmOnly: 'Só no PDM',
+  supabaseOnly: 'Só no Banco MSM',
+  ok: 'OK',
+} as const
+
+export const PDM_COMPARE_GROUP_ORDER: string[] = [
+  PDM_COMPARE_GROUPS.mismatch,
+  PDM_COMPARE_GROUPS.pdmOnly,
+  PDM_COMPARE_GROUPS.supabaseOnly,
+  PDM_COMPARE_GROUPS.ok,
+]

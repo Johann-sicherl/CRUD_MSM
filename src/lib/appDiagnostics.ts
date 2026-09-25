@@ -1,9 +1,11 @@
 import { supabaseAdmin } from './supabase'
 import { listProductStatuses, listStructureHeaders, fetchStructureCodes, type ProtheusCredentials } from './protheusDb'
+import { fetchPdmAccessories, type PdmCredentials } from './pdmDb'
+import { comparePdmWithSupabase } from './pdmCompare'
 import { readStructurePropertyRules } from './structurePropertyRules'
 import { computeStructurePropertyResults } from './structurePropertyMatch'
 import { tables } from './schema'
-import { REVERSE_SEARCH_GROUPS } from './appDiagnosticsGroups'
+import { REVERSE_SEARCH_GROUPS, PDM_COMPARE_GROUPS } from './appDiagnosticsGroups'
 
 // Diagnóstico da Aplicação — pedido explícito do usuário: um pop-up que
 // roda sozinho na primeira abertura do app (ou depois de uma atualização,
@@ -55,11 +57,24 @@ export interface DiagnosticSection {
   issues: DiagnosticIssue[]
 }
 
+// Credencial combinada — Protheus é sempre exigida pra abrir o pop-up (ver
+// AppDiagnosticsGate.tsx), PDM é opcional: a checagem #4 (Consulta PDM x
+// Banco MSM) só roda de verdade se o Admin já tiver conectado ao PDM nesta
+// sessão (a conexão é oferecida automaticamente logo depois do Protheus,
+// mas exige um passo à parte — ver pdmAuthContext.tsx); se ainda não
+// conectou no exato momento em que o pop-up dispara, a seção reporta isso
+// de forma transparente em vez de travar o diagnóstico inteiro ou fingir
+// que rodou.
+export interface DiagnosticsCredentials {
+  protheus: ProtheusCredentials
+  pdm: PdmCredentials | null
+}
+
 type Check = {
   key: string
   tableLabel: string
   mode?: 'problems' | 'summary'
-  run: (creds: ProtheusCredentials) => Promise<DiagnosticIssue[]>
+  run: (creds: DiagnosticsCredentials) => Promise<DiagnosticIssue[]>
 }
 
 // Regra compartilhada, pedido explícito do usuário — primeiro pra Cadastro
@@ -73,14 +88,14 @@ type Check = {
 // mesma forma (protheus_code + status com opções active/deactive), por
 // isso uma função genérica em vez de duplicar a lógica por tabela.
 function checkProtheusStatusVsActive(tableName: string, tableLabel: string) {
-  return async (creds: ProtheusCredentials): Promise<DiagnosticIssue[]> => {
+  return async (creds: DiagnosticsCredentials): Promise<DiagnosticIssue[]> => {
     const { data, error } = await supabaseAdmin
       .from(tableName)
       .select('protheus_code, status')
       .range(0, 24999)
     if (error) throw new Error(`Falha ao ler ${tableLabel}: ${error.message}`)
 
-    const statusByCode = await listProductStatuses(creds)
+    const statusByCode = await listProductStatuses(creds.protheus)
 
     const issues: DiagnosticIssue[] = []
     for (const row of (data || [])) {
@@ -130,8 +145,8 @@ function structurePropertyFieldLabel(fieldName: string): string {
   return tables.standard_equipment_items.fields.find(f => f.name === fieldName)?.label ?? fieldName
 }
 
-async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise<DiagnosticIssue[]> {
-  const headers = await listStructureHeaders(REVERSE_SEARCH_PREFIXES, creds)
+async function checkReverseSearchStructures(creds: DiagnosticsCredentials): Promise<DiagnosticIssue[]> {
+  const headers = await listStructureHeaders(REVERSE_SEARCH_PREFIXES, creds.protheus)
   if (headers.length === 0) return []
 
   const { data, error } = await supabaseAdmin
@@ -158,7 +173,7 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
       continue
     }
 
-    const { codes: componentCodes } = await fetchStructureCodes(code, creds)
+    const { codes: componentCodes } = await fetchStructureCodes(code, creds.protheus)
     const mismatches = computeStructurePropertyResults(new Set(componentCodes), equipmentRow, rules)
       .filter(r => r.status === 'mismatch')
 
@@ -183,17 +198,85 @@ async function checkReverseSearchStructures(creds: ProtheusCredentials): Promise
   return issues
 }
 
+// Consulta PDM x Banco MSM — pedido explícito do usuário: "traga a análise
+// de Consulta PDM x Banco MSM... mesmo estilo, linha a linha, caixa a
+// caixa, segundo código a código. Separe grupo também por dropdown" — as
+// mesmas 4 categorias da tela viva (pdm-consulta-acessorios/page.tsx):
+// OK, Divergentes, Só no PDM, Só no Banco MSM. Reaproveita
+// `comparePdmWithSupabase`/`PDM_FIELD_MAP` (pdmCompare.ts) e
+// `fetchPdmAccessories` (pdmDb.ts) tal e qual — nenhuma lógica de
+// comparação nova, mesmo padrão de reuso já estabelecido nas checagens
+// acima. Fonte Supabase é só `accessories` (mesma tabela que a tela viva
+// usa do lado do banco MSM — accessory_groups ali é só pra rótulo de
+// grupo, não entra na comparação em si).
+//
+// PDM é uma conexão à parte, oferecida automaticamente só depois que o
+// Protheus já conectou (ver pdmAuthContext.tsx) — no instante em que este
+// pop-up dispara (junto com a conexão ao Protheus), o PDM tipicamente
+// ainda não foi conectado. Em vez de bloquear o diagnóstico inteiro ou
+// pular a seção em silêncio, reporta isso como um único aviso informativo
+// (sem `group`, cai na lista simples) — mesmo espírito "best-effort,
+// nunca trava o resto" já usado em runAppDiagnostics abaixo.
+async function checkPdmVsSupabase(creds: DiagnosticsCredentials): Promise<DiagnosticIssue[]> {
+  if (!creds.pdm) {
+    return [{
+      rowLabel: '—',
+      message: 'PDM não conectado nesta sessão — conecte ao Banco PDM (oferecido após o Protheus) para incluir esta checagem.',
+    }]
+  }
+
+  const pdmRows = await fetchPdmAccessories(creds.pdm)
+
+  const { data, error } = await supabaseAdmin
+    .from('accessories')
+    .select('*')
+    .range(0, 24999)
+  if (error) throw new Error(`Falha ao ler Cadastro de Componentes: ${error.message}`)
+
+  const comparison = comparePdmWithSupabase(pdmRows, data || [])
+
+  const issues: DiagnosticIssue[] = []
+  for (const row of comparison) {
+    if (row.status === 'ok') {
+      issues.push({ rowLabel: row.protheusCode, message: 'Sem divergência.', group: PDM_COMPARE_GROUPS.ok })
+      continue
+    }
+    if (row.status === 'mismatch') {
+      const details: DiagnosticIssueDetail[] = row.diffs.map(d => ({
+        property: d.label,
+        expected: d.pdmDisplay,
+        via: 'PDM',
+        dbValue: d.supabaseDisplay,
+      }))
+      issues.push({
+        rowLabel: row.protheusCode,
+        message: `${row.diffs.length} campo(s) divergente(s).`,
+        group: PDM_COMPARE_GROUPS.mismatch,
+        details,
+      })
+      continue
+    }
+    if (row.status === 'pdm-only') {
+      issues.push({ rowLabel: row.protheusCode, message: 'Existe no PDM, não cadastrado em Cadastro de Componentes.', group: PDM_COMPARE_GROUPS.pdmOnly })
+      continue
+    }
+    issues.push({ rowLabel: row.protheusCode, message: 'Cadastrado em Cadastro de Componentes, não encontrado no PDM.', group: PDM_COMPARE_GROUPS.supabaseOnly })
+  }
+  return issues
+}
+
 const CHECKS: Check[] = [
   { key: 'standard_equipment_items', tableLabel: 'Cadastro de Equipamentos', run: checkProtheusStatusVsActive('standard_equipment_items', 'Cadastro de Equipamentos') },
   { key: 'accessories', tableLabel: 'Cadastro de Componentes', run: checkProtheusStatusVsActive('accessories', 'Cadastro de Componentes') },
   { key: 'reverse_search_27_04_27_03', tableLabel: 'Busca Reversa (Protheus) 27.04 / 27.03', mode: 'summary', run: checkReverseSearchStructures },
+  { key: 'pdm_vs_supabase', tableLabel: 'Consulta PDM x Banco MSM', mode: 'summary', run: checkPdmVsSupabase },
 ]
 
 // Roda todas as checagens registradas, em sequência (não Promise.all — uma
 // falha isolada numa checagem não deve impedir as outras de rodar; o erro
 // vira uma seção com um único "issue" descrevendo a falha, em vez de
 // derrubar o diagnóstico inteiro).
-export async function runAppDiagnostics(creds: ProtheusCredentials): Promise<DiagnosticSection[]> {
+export async function runAppDiagnostics(creds: DiagnosticsCredentials): Promise<DiagnosticSection[]> {
   const sections: DiagnosticSection[] = []
   for (const check of CHECKS) {
     try {

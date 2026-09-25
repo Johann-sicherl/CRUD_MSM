@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAppAuth } from '@/lib/appAuthContext'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
+import { usePdmAuth } from '@/lib/pdmAuthContext'
 import type { DiagnosticSection } from '@/lib/appDiagnostics'
 import AppDiagnosticsPopup from './AppDiagnosticsPopup'
 
@@ -26,6 +27,10 @@ const STORAGE_KEY = 'app-diagnostics-seen-build'
 export default function AppDiagnosticsGate() {
   const { user: appUser } = useAppAuth()
   const { creds: protheusCreds } = useProtheusAuth()
+  // PDM é opcional pra este pop-up — usado só se já conectado no instante
+  // em que o Protheus dispara o diagnóstico (ver checkPdmVsSupabase,
+  // appDiagnostics.ts, pra o que acontece quando ainda não está).
+  const { creds: pdmCreds } = usePdmAuth()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -45,7 +50,13 @@ export default function AppDiagnosticsGate() {
     fetch('/api/app-diagnostics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profileId: appUser.id, user: protheusCreds.user, password: protheusCreds.password }),
+      body: JSON.stringify({
+        profileId: appUser.id,
+        user: protheusCreds.user,
+        password: protheusCreds.password,
+        pdmUser: pdmCreds?.user,
+        pdmPassword: pdmCreds?.password,
+      }),
     })
       .then(async res => {
         const json = await res.json()
@@ -54,7 +65,7 @@ export default function AppDiagnosticsGate() {
       })
       .catch(() => setError('Falha de rede ao rodar o diagnóstico'))
       .finally(() => setLoading(false))
-  }, [triggered, appUser, protheusCreds])
+  }, [triggered, appUser, protheusCreds, pdmCreds])
 
   const handleClose = () => {
     setOpen(false)
