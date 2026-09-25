@@ -26,7 +26,12 @@ import { REVERSE_SEARCH_GROUPS, REVERSE_SEARCH_GROUP_ORDER } from '@/lib/appDiag
 // (Estrutura)/Código(s) que Geraram/Valor no Banco já usada em Busc. Itens
 // Série Estrut. Protheus, a partir de `issue.details` (appDiagnostics.ts)
 // — nunca reconstrói isso de `message`, que agora é só um resumo curto
-// ("N erro(s) de propriedade.") pro cabeçalho da caixinha recolhida.
+// ("N erro(s) de propriedade.") pro cabeçalho da caixinha recolhida;
+// (4) "agrupe para dentro de dropdowns os itens de Com erro(s) de
+// propriedade (N), Não cadastrado... e Cadastrado, sem erros (N)" — os
+// próprios blocos viraram dropdowns (recolhidos por padrão, chevron gira
+// 90°, `expandedGroups`), não mais um sub-cabeçalho sempre visível com a
+// lista logo abaixo.
 
 // Comparação exata contra as constantes (nunca substring — "Cadastrado,
 // sem erros" também contém a palavra "erro", então um .includes('erro')
@@ -129,9 +134,25 @@ export default function AppDiagnosticsPopup({
   // seções/blocos — chave própria (seção+bloco+código+índice) pra nunca
   // colidir entre blocos ou seções diferentes.
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  // Estado dos próprios blocos (dropdown "Com erro(s) de propriedade (N)"
+  // etc.) — pedido explícito do usuário: "agrupe para dentro de dropdowns
+  // os itens de Com erro(s) de propriedade (N), Não cadastrado... e
+  // Cadastrado, sem erros (N)". Chave `${section.key}::${group}`,
+  // recolhido por padrão (mesmo espírito "colapsado no primeiro acesso" já
+  // usado nos grupos da Sidebar — ver specs/permissoes-e-perfis.md).
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const toggle = (key: string) => {
     setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
@@ -243,28 +264,40 @@ export default function AppDiagnosticsPopup({
                         {!hasIssues ? (
                           <div className="text-base text-outline italic">{isSummary ? 'Nenhuma estrutura encontrada.' : 'Sem erros.'}</div>
                         ) : useGroups ? (
-                          <div className="flex flex-col gap-4">
-                            {groupKeys.map(group => (
-                              <div key={group}>
-                                <div className={`text-sm font-bold uppercase tracking-wide mb-2 ${groupTone(group)}`}>
-                                  {group} ({grouped.get(group)!.length})
+                          <div className="flex flex-col gap-2">
+                            {groupKeys.map(group => {
+                              const groupKey = `${section.key}::${group}`
+                              const isGroupOpen = expandedGroups.has(groupKey)
+                              return (
+                                <div key={group} className="rounded border border-outline-variant/60 overflow-hidden">
+                                  <button
+                                    onClick={() => toggleGroup(groupKey)}
+                                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left bg-surface-container-low hover:bg-surface-container-high transition-colors"
+                                  >
+                                    <span className={`text-sm font-bold uppercase tracking-wide ${groupTone(group)}`}>
+                                      {group} ({grouped.get(group)!.length})
+                                    </span>
+                                    <span className={`text-outline text-lg leading-none transition-transform ${isGroupOpen ? 'rotate-90' : ''}`}>›</span>
+                                  </button>
+                                  {isGroupOpen && (
+                                    <div className="flex flex-col gap-2 px-3 py-3 border-t border-outline-variant/40">
+                                      {grouped.get(group)!.map((issue, i) => {
+                                        const rowKey = `${groupKey}::${issue.rowLabel}::${i}`
+                                        return (
+                                          <EquipmentBox
+                                            key={rowKey}
+                                            issue={issue}
+                                            tone={groupTone(group)}
+                                            isOpen={expandedRows.has(rowKey)}
+                                            onToggle={() => toggleRow(rowKey)}
+                                          />
+                                        )
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="flex flex-col gap-2">
-                                  {grouped.get(group)!.map((issue, i) => {
-                                    const rowKey = `${section.key}::${group}::${issue.rowLabel}::${i}`
-                                    return (
-                                      <EquipmentBox
-                                        key={rowKey}
-                                        issue={issue}
-                                        tone={groupTone(group)}
-                                        isOpen={expandedRows.has(rowKey)}
-                                        onToggle={() => toggleRow(rowKey)}
-                                      />
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         ) : (
                           <ul className="flex flex-col gap-2">

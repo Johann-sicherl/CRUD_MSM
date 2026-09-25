@@ -146,6 +146,19 @@ comece" por uma tabela, deixando claro que mais viriam depois.
     erro(s)" em vermelho quando tem `details`, ou a própria `message`
     (curta) quando não tem. Nenhum dado é escondido do usuário antes de
     clicar — o resumo já dá o essencial, o clique só abre o detalhe.
+- **Blocos também são dropdowns** — pedido explícito do usuário, rodada
+  seguinte: "agrupe para dentro de dropdowns os itens de Com erro(s) de
+  propriedade (N), Não cadastrado em Cadastro de Equipamentos (N) e
+  Cadastrado, sem erros (N)." Antes disso, o sub-cabeçalho de cada bloco
+  era só um rótulo estático — a lista de caixinhas de equipamento
+  aparecia sempre logo abaixo, sem precisar clicar em nada. Agora cada
+  bloco em si é um dropdown recolhido por padrão (`expandedGroups`, chave
+  `${section.key}::${group}`), com o mesmo padrão de chevron que gira 90°
+  usado em todo o resto do app — clicar no cabeçalho do bloco expande a
+  lista de caixinhas dele. É o terceiro nível de recolher/expandir dentro
+  da mesma tela: **seção** (`expanded`) → **bloco** (`expandedGroups`) →
+  **equipamento** (`expandedRows`), cada nível com seu próprio estado
+  independente, nunca um afeta o outro.
 - **`DiagnosticSection.mode`** (`'problems'` padrão, ou `'summary'`) —
   achado necessário ao adicionar a Checagem #3 (abaixo): nem toda seção é
   "problema vs sem erros". Uma seção `'summary'` é inventário puro (ex.:
