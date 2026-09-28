@@ -286,6 +286,33 @@ com seu próprio título/descrição/tabela/botões, só a disposição mudou; o
 `xl:pl-12` que espaçava as colunas foi removido (não faz mais sentido em
 pilha vertical, o `gap-10` do container já separa as seções).
 
+## Parâmetros de Estrutura / Classificação de Equipamentos — texto sempre em maiúsculo ao digitar
+
+Pedido explícito do usuário: "quando eu escrever ou editar alguma
+propriedade, já escreva textos em maiúsculo". Todo campo de texto de
+**edição** (não os de filtro/busca) das duas primeiras seções de
+`parametros-estrutura/page.tsx` força maiúsculo direto no `onChange`
+(`e.target.value.toUpperCase()`, mesmo padrão já usado em `/options`) —
+sem `.trim()` no meio da digitação, só ao salvar (como já era):
+- **Parâmetros de Estrutura**: `component_code` e `expected_value` (as
+  duas colunas da tabela — código e "Output"), `newGroupName` (criar um
+  grupo/propriedade novo) e `GroupNameInput` (renomear um grupo existente,
+  o campo abre em edição ao clicar no ✎).
+- **Classificação de Equipamentos**: `patternsText` (padrões, ex.:
+  "GARRETT") e `equip` (o equipamento resultante). O `<select>` de
+  combinador (OR/AND) não é texto livre, não foi tocado.
+
+**Acessórios Ignorados (3ª seção) não foi tocada** — o pedido citou só
+Parâmetros de Estrutura e Classificação de Equipamentos; essa seção é
+só-leitura + remoção (sem campo de texto livre pra editar), não se
+aplicaria mesmo se tivesse sido pedida.
+
+Os campos de **filtro/busca** de cada seção (`filter`, `groupFilters`,
+`classFilter`, `ignoredFilter`) continuam sem forçar maiúsculo — a busca
+já compara em minúsculo dos dois lados (`.toLowerCase()`), forçar
+maiúsculo ali não mudaria o resultado, só atrapalharia quem prefere digitar
+o filtro em minúsculo.
+
 ## Acessórios ignorados — `ignoredAccessories.ts`
 
 A busca recursiva 26.xx/27.13 de Busc. Avanç. Acessórios Protheus está

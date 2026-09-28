@@ -110,7 +110,7 @@ function GroupNameInput({ value, onCommit, onDone }: {
     <input
       ref={inputRef}
       value={draft}
-      onChange={e => setDraft(e.target.value)}
+      onChange={e => setDraft(e.target.value.toUpperCase())}
       onBlur={commit}
       onKeyDown={e => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
@@ -707,7 +707,7 @@ export default function ParametrosEstruturaPage() {
                               <td className="p-1">
                                 <input
                                   value={rows[i].component_code}
-                                  onChange={e => updateCell(i, 'component_code', e.target.value)}
+                                  onChange={e => updateCell(i, 'component_code', e.target.value.toUpperCase())}
                                   readOnly={codeLocked}
                                   title={codeLocked ? 'Código já salvo — pra corrigir, remova a linha e cadastre de novo' : undefined}
                                   className={`w-full px-2 py-2 rounded focus:outline-none font-mono text-base ${
@@ -720,7 +720,7 @@ export default function ParametrosEstruturaPage() {
                               <td className="p-1">
                                 <input
                                   value={rows[i].expected_value}
-                                  onChange={e => updateCell(i, 'expected_value', e.target.value)}
+                                  onChange={e => updateCell(i, 'expected_value', e.target.value.toUpperCase())}
                                   className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
                                 />
                               </td>
@@ -781,7 +781,7 @@ export default function ParametrosEstruturaPage() {
             <input
               type="text"
               value={newGroupName}
-              onChange={e => setNewGroupName(e.target.value)}
+              onChange={e => setNewGroupName(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && addGroup()}
               placeholder="NOME DO NOVO GRUPO..."
               className="bg-surface-container border border-outline-variant rounded px-3 py-2 text-base text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
@@ -857,7 +857,7 @@ export default function ParametrosEstruturaPage() {
                       <td className="p-1">
                         <input
                           value={classRows[i].patternsText}
-                          onChange={e => updateClassCell(i, 'patternsText', e.target.value)}
+                          onChange={e => updateClassCell(i, 'patternsText', e.target.value.toUpperCase())}
                           placeholder="ex: GARRETT"
                           className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
                         />
@@ -875,7 +875,7 @@ export default function ParametrosEstruturaPage() {
                       <td className="p-1">
                         <input
                           value={classRows[i].equip}
-                          onChange={e => updateClassCell(i, 'equip', e.target.value)}
+                          onChange={e => updateClassCell(i, 'equip', e.target.value.toUpperCase())}
                           className="w-full bg-transparent px-2 py-2 rounded hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none font-mono text-on-surface text-base"
                         />
                       </td>
