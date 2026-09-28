@@ -217,15 +217,21 @@ async function checkReverseSearchStructures(creds: DiagnosticsCredentials): Prom
 // pular a seção em silêncio, reporta isso como um único aviso informativo
 // (sem `group`, cai na lista simples) — mesmo espírito "best-effort,
 // nunca trava o resto" já usado em runAppDiagnostics abaixo.
-async function checkPdmVsSupabase(creds: DiagnosticsCredentials): Promise<DiagnosticIssue[]> {
-  if (!creds.pdm) {
+//
+// Recebe só `pdm` (não `DiagnosticsCredentials` inteiro) de propósito —
+// esta é a única checagem que também precisa rodar sozinha, fora do loop
+// de CHECKS, quando o PDM conecta depois do pop-up já ter rodado (ver
+// runPdmDiagnosticSection/AppDiagnosticsGate.tsx) — sem isso precisaria
+// inventar um ProtheusCredentials vazio só pra montar o objeto combinado.
+async function checkPdmVsSupabase(pdm: PdmCredentials | null): Promise<DiagnosticIssue[]> {
+  if (!pdm) {
     return [{
       rowLabel: '—',
       message: 'PDM não conectado nesta sessão — conecte ao Banco PDM (oferecido após o Protheus) para incluir esta checagem.',
     }]
   }
 
-  const pdmRows = await fetchPdmAccessories(creds.pdm)
+  const pdmRows = await fetchPdmAccessories(pdm)
 
   const { data, error } = await supabaseAdmin
     .from('accessories')
@@ -265,12 +271,41 @@ async function checkPdmVsSupabase(creds: DiagnosticsCredentials): Promise<Diagno
   return issues
 }
 
+// Chave/rótulo da Checagem #4 extraídos em constantes — reusados tanto no
+// registro em CHECKS quanto em runPdmDiagnosticSection (re-execução
+// avulsa, abaixo), pra nunca divergir entre os dois.
+const PDM_CHECK_KEY = 'pdm_vs_supabase'
+const PDM_CHECK_LABEL = 'Consulta PDM x Banco MSM'
+
 const CHECKS: Check[] = [
   { key: 'standard_equipment_items', tableLabel: 'Cadastro de Equipamentos', run: checkProtheusStatusVsActive('standard_equipment_items', 'Cadastro de Equipamentos') },
   { key: 'accessories', tableLabel: 'Cadastro de Componentes', run: checkProtheusStatusVsActive('accessories', 'Cadastro de Componentes') },
   { key: 'reverse_search_27_04_27_03', tableLabel: 'Busca Reversa (Protheus) 27.04 / 27.03', mode: 'summary', run: checkReverseSearchStructures },
-  { key: 'pdm_vs_supabase', tableLabel: 'Consulta PDM x Banco MSM', mode: 'summary', run: checkPdmVsSupabase },
+  { key: PDM_CHECK_KEY, tableLabel: PDM_CHECK_LABEL, mode: 'summary', run: creds => checkPdmVsSupabase(creds.pdm) },
 ]
+
+// Roda uma checagem (já resolvida pra uma função sem argumento) e embrulha
+// o resultado (ou a falha) na seção pronta pro pop-up — nível mais baixo
+// que `runCheck` abaixo, pra `runPdmDiagnosticSection` conseguir reusar o
+// mesmo try/catch sem precisar montar um `DiagnosticsCredentials`
+// (Protheus) só pra satisfazer um parâmetro que a Checagem #4, rodando
+// sozinha, nunca usa.
+async function runCheckResult(key: string, tableLabel: string, mode: 'problems' | 'summary' | undefined, run: () => Promise<DiagnosticIssue[]>): Promise<DiagnosticSection> {
+  try {
+    const issues = await run()
+    return { key, tableLabel, mode, issues }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro desconhecido ao rodar esta checagem'
+    // Uma falha ao rodar a checagem é sempre tratada como problema (modo
+    // padrão 'problems'), mesmo numa checagem 'summary' — o usuário
+    // precisa ver que algo deu errado, não que "não achou nada".
+    return { key, tableLabel, issues: [{ rowLabel: '—', message }] }
+  }
+}
+
+function runCheck(check: Check, creds: DiagnosticsCredentials): Promise<DiagnosticSection> {
+  return runCheckResult(check.key, check.tableLabel, check.mode, () => check.run(creds))
+}
 
 // Roda todas as checagens registradas, em sequência (não Promise.all — uma
 // falha isolada numa checagem não deve impedir as outras de rodar; o erro
@@ -279,16 +314,20 @@ const CHECKS: Check[] = [
 export async function runAppDiagnostics(creds: DiagnosticsCredentials): Promise<DiagnosticSection[]> {
   const sections: DiagnosticSection[] = []
   for (const check of CHECKS) {
-    try {
-      const issues = await check.run(creds)
-      sections.push({ key: check.key, tableLabel: check.tableLabel, mode: check.mode, issues })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido ao rodar esta checagem'
-      // Uma falha ao rodar a checagem é sempre tratada como problema (modo
-      // padrão 'problems'), mesmo numa checagem 'summary' — o usuário
-      // precisa ver que algo deu errado, não que "não achou nada".
-      sections.push({ key: check.key, tableLabel: check.tableLabel, issues: [{ rowLabel: '—', message }] })
-    }
+    sections.push(await runCheck(check, creds))
   }
   return sections
+}
+
+// Re-executa só a Checagem #4 — pedido explícito do usuário: "faz o PDM
+// re-rodar sozinho quando conectar". Como o PDM conecta bem depois do
+// Protheus (passo à parte do Admin, ver checkPdmVsSupabase acima), o
+// pop-up normalmente já disparou (e já rodou as outras 3 checagens) antes
+// do PDM ficar disponível — reexecutar o diagnóstico inteiro só por causa
+// do PDM refaria trabalho que não mudou (Protheus/Busca Reversa não
+// dependem do PDM). AppDiagnosticsGate.tsx chama isto assim que o PDM
+// conecta e substitui só a seção correspondente no pop-up já aberto, pelo
+// key (PDM_CHECK_KEY) — sem passar por CHECKS/runAppDiagnostics de novo.
+export async function runPdmDiagnosticSection(pdm: PdmCredentials): Promise<DiagnosticSection> {
+  return runCheckResult(PDM_CHECK_KEY, PDM_CHECK_LABEL, 'summary', () => checkPdmVsSupabase(pdm))
 }

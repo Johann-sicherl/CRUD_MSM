@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppAuth } from '@/lib/appAuthContext'
 import { useProtheusAuth } from '@/lib/protheusAuthContext'
 import { usePdmAuth } from '@/lib/pdmAuthContext'
 import type { DiagnosticSection } from '@/lib/appDiagnostics'
 import AppDiagnosticsPopup from './AppDiagnosticsPopup'
+
+const PDM_CHECK_KEY = 'pdm_vs_supabase'
 
 const STORAGE_KEY = 'app-diagnostics-seen-build'
 
@@ -36,6 +38,11 @@ export default function AppDiagnosticsGate() {
   const [error, setError] = useState('')
   const [sections, setSections] = useState<DiagnosticSection[]>([])
   const [triggered, setTriggered] = useState(false)
+  // Guarda qual credencial de PDM já foi refletida na seção "Consulta PDM
+  // x Banco MSM" (pela rodada inicial ou pela re-execução avulsa abaixo) —
+  // evita re-buscar a mesma coisa de novo se este efeito re-rodar por
+  // outro motivo (ex.: appUser mudou de referência sem mudar de verdade).
+  const pdmSyncedKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (triggered || !appUser.isAdmin || !protheusCreds) return
@@ -47,6 +54,11 @@ export default function AppDiagnosticsGate() {
     setOpen(true)
     setLoading(true)
     setError('')
+    // Se o PDM já estiver conectado bem no instante em que o diagnóstico
+    // inicial dispara (raro, mas possível), essa credencial já entra nesta
+    // primeira rodada — marca como sincronizada pra o efeito de re-execução
+    // abaixo não buscar a mesma coisa de novo assim que ele rodar.
+    pdmSyncedKeyRef.current = pdmCreds ? `${pdmCreds.user}:${pdmCreds.password}` : null
     fetch('/api/app-diagnostics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -66,6 +78,35 @@ export default function AppDiagnosticsGate() {
       .catch(() => setError('Falha de rede ao rodar o diagnóstico'))
       .finally(() => setLoading(false))
   }, [triggered, appUser, protheusCreds, pdmCreds])
+
+  // Re-executa só a Checagem #4 quando o PDM conecta (ou reconecta com
+  // outro usuário) depois do diagnóstico inicial já ter rodado — pedido
+  // explícito do usuário: "faz o PDM re-rodar sozinho quando conectar".
+  // Não refaz as outras 3 checagens (Protheus/Busca Reversa não dependem
+  // do PDM, refazê-las seria trabalho redundante) — só troca a seção
+  // correspondente, pelo key, no pop-up já aberto (ou já fechado — a seção
+  // é atualizada em segundo plano de qualquer forma, mesmo sem o pop-up
+  // visível; só não aparece até o Admin reabrir, o que hoje não tem botão
+  // próprio — ver limitação em specs/diagnostico-aplicacao.md).
+  useEffect(() => {
+    if (!triggered || !pdmCreds) return
+    const key = `${pdmCreds.user}:${pdmCreds.password}`
+    if (pdmSyncedKeyRef.current === key) return
+    pdmSyncedKeyRef.current = key
+
+    fetch('/api/app-diagnostics/pdm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId: appUser.id, pdmUser: pdmCreds.user, pdmPassword: pdmCreds.password }),
+    })
+      .then(async res => {
+        if (!res.ok) return
+        const json = await res.json()
+        if (!json.section) return
+        setSections(prev => prev.map(s => (s.key === PDM_CHECK_KEY ? json.section : s)))
+      })
+      .catch(() => { /* best-effort — falha aqui não derruba o resto do pop-up já mostrado */ })
+  }, [triggered, pdmCreds, appUser])
 
   const handleClose = () => {
     setOpen(false)

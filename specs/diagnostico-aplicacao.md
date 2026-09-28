@@ -311,14 +311,40 @@ checagem já existente em `runAppDiagnostics`, ver "Arquitetura" acima) —
 uma checagem que depende de uma credencial ainda não disponível não é
 tratada como erro, só como "nada a reportar ainda".
 
-**Limitação aceita conscientemente**: como o pop-up só dispara uma vez por
-build (`app-diagnostics-seen-build` em `localStorage`), se o PDM não
-estiver conectado na primeira vez que o pop-up abre, esta seção continua
-mostrando "PDM não conectado" até o próximo `npm run build` em produção —
-não há re-execução automática quando o PDM conecta depois. Não implementado
-porque não foi pedido; se isso incomodar no uso real, a correção natural
-seria re-rodar só esta seção quando o PDM conectar, sem depender do gate de
-build inteiro — mudança à parte, não implementada aqui.
+**Rodada seguinte, pedido explícito do usuário**: "faz o PDM re-rodar
+sozinho quando conectar" — a limitação acima (só mostrar "PDM não
+conectado" até o próximo build) foi corrigida. `runPdmDiagnosticSection(pdm)`
+(`appDiagnostics.ts`) roda **só** `checkPdmVsSupabase`, fora do loop de
+`CHECKS`/`runAppDiagnostics` — reexecutar o diagnóstico inteiro só por
+causa do PDM refaria as outras 3 checagens à toa (Protheus/Busca Reversa
+não dependem do PDM). Extraído `runCheckResult(key, tableLabel, mode, run)`
+de dentro de `runAppDiagnostics` (o mesmo try/catch por checagem, agora
+reusado pelos dois caminhos) — `runCheck(check, creds)` é só um wrapper
+fino dela pro loop principal.
+
+Nova rota `POST /api/app-diagnostics/pdm` (`{ profileId, pdmUser,
+pdmPassword }`, mesma checagem `getProfileById` + `isAdmin` da rota
+principal) chama `runPdmDiagnosticSection` e devolve `{ section }` — só
+essa seção, não o array inteiro. `AppDiagnosticsGate.tsx` ganhou um
+segundo `useEffect`, independente do que dispara o diagnóstico inicial:
+observa `usePdmAuth().creds` e, quando muda pra uma credencial ainda não
+sincronizada (`pdmSyncedKeyRef`, chave `usuário:senha` — cobre tanto "PDM
+conectou pela primeira vez" quanto "reconectou com outro usuário"), chama
+essa rota e substitui só a seção `pdm_vs_supabase` no state `sections` já
+carregado (`setSections(prev => prev.map(...))`), sem tocar nas outras 3.
+Guardado por `triggered` (só faz sentido depois que o diagnóstico inicial
+já rodou) e por `pdmSyncedKeyRef` já pré-marcado dentro do efeito
+principal quando o PDM por acaso já estiver conectado na primeira rodada
+— evita buscar a mesma coisa duas vezes seguidas.
+
+Roda em segundo plano mesmo com o pop-up já fechado pelo Admin (não há
+gate de `open` no efeito) — atualiza o state de qualquer forma; só não
+fica visível até reabrir. **Limitação aceita conscientemente, ainda
+existente**: não há botão pra reabrir o pop-up manualmente hoje (ele só
+abre sozinho, uma vez por build) — então, na prática, o Admin só vê o
+resultado atualizado se ainda estiver com o pop-up aberto no momento em
+que conecta ao PDM. Corrigir isso (um jeito de reabrir o pop-up a
+qualquer momento) não foi pedido e é uma mudança à parte.
 
 ### Threading de credencial — mudança de assinatura compartilhada por todas as checagens
 
