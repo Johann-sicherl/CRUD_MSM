@@ -1137,16 +1137,6 @@ export default function AnalisadorEstruturasPage() {
           Consulta Banco de Dados · busc. itens série estrut. protheus
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Itens Série Estrut. Protheus</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Busque a estrutura direto no banco Protheus (recomendado) ou envie um ou mais arquivos .xlsx de estrutura
-          (planilhas &quot;2-Estruturas&quot; e &quot;FLAT-LIST&quot; — nome do arquivo = código Protheus). Cada código da
-          estrutura é comparado com as regras cadastradas em{' '}
-          <Link href="/parametros-estrutura" className="text-primary hover:underline">Parâmetros de Estrutura</Link>
-          — todas as propriedades cadastradas são analisadas, não só as que tiveram código encontrado: se dois
-          códigos do mesmo grupo indicarem valores diferentes, gera alerta de duplicidade; se o valor não bater
-          com o cadastro do equipamento em Cadastro de Equipamentos, gera alerta de erro; se nenhum código do
-          grupo aparecer na estrutura, a propriedade é sinalizada como não encontrada.
-        </p>
       </div>
 
       {/* Live DB search — usa a única conexão ao Protheus da aplicação (barra lateral) */}
