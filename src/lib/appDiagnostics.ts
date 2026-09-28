@@ -210,13 +210,14 @@ async function checkReverseSearchStructures(creds: DiagnosticsCredentials): Prom
 // usa do lado do banco MSM — accessory_groups ali é só pra rótulo de
 // grupo, não entra na comparação em si).
 //
-// PDM é uma conexão à parte, oferecida automaticamente só depois que o
-// Protheus já conectou (ver pdmAuthContext.tsx) — no instante em que este
-// pop-up dispara (junto com a conexão ao Protheus), o PDM tipicamente
-// ainda não foi conectado. Em vez de bloquear o diagnóstico inteiro ou
-// pular a seção em silêncio, reporta isso como um único aviso informativo
-// (sem `group`, cai na lista simples) — mesmo espírito "best-effort,
-// nunca trava o resto" já usado em runAppDiagnostics abaixo.
+// PDM é uma conexão à parte do Protheus (ver pdmAuthContext.tsx).
+// `AppDiagnosticsGate.tsx` só dispara o pop-up depois que os DOIS já
+// conectaram (pedido explícito do usuário — ver comentário lá), então na
+// prática `pdm` sempre chega preenchido aqui. O branch `!pdm` abaixo é só
+// defesa (o parâmetro é opcional no tipo porque `runPdmDiagnosticSection`
+// também pode ser chamada isoladamente) — reporta um aviso informativo em
+// vez de lançar erro, mesmo espírito "best-effort, nunca trava o resto"
+// já usado em runAppDiagnostics abaixo.
 //
 // Recebe só `pdm` (não `DiagnosticsCredentials` inteiro) de propósito —
 // esta é a única checagem que também precisa rodar sozinha, fora do loop

@@ -21,17 +21,29 @@ const STORAGE_KEY = 'app-diagnostics-seen-build'
 // nada salvo) → roda o diagnóstico e mostra o pop-up; mesmo build já visto
 // → não mostra nada.
 //
-// Só Admin (pedido explícito do usuário) — e só depois que o Protheus já
-// conectou (a checagem precisa da credencial; reusa a mesma conexão única
-// do app inteiro, nunca pede uma segunda vez). Roda no máximo uma vez por
-// carregamento da página (offeredRef equivalente via `triggeredRef`).
+// Só Admin (pedido explícito do usuário) — e só depois que os DOIS bancos
+// já conectaram: Protheus e PDM (pedido explícito do usuário, rodada
+// seguinte: "quero que você dispare a consulta do pop-up de Análise,
+// depois que for conectado os dois bancos de dados" — antes disparava só
+// com o Protheus, e a Checagem #4 (PDM) ficava mostrando "não conectado"
+// até o PDM conectar depois, com re-sincronização própria; agora o
+// disparo inicial inteiro espera os dois). Reusa as mesmas conexões
+// únicas do app inteiro, nunca pede uma segunda vez. Roda no máximo uma
+// vez por carregamento da página (offeredRef equivalente via
+// `triggeredRef`).
+//
+// PDM é oferecido automaticamente só depois do Protheus, e o Admin pode
+// dispensar o modal ("Agora não") — se isso acontecer, o pop-up de
+// Diagnóstico simplesmente não dispara nesta sessão até o Admin conectar
+// ao PDM manualmente (botão "Conectar PDM" na Sidebar, sempre disponível
+// pra Admin). Decisão deliberada: esperar os dois é o pedido explícito do
+// usuário, e como o Admin sempre tem permissão pra conectar ao PDM
+// (`canConnectPdm` é ignorado quando `isAdmin`), ele nunca fica travado
+// sem um jeito de destravar o pop-up — só precisa dar esse passo a mais.
 
 export default function AppDiagnosticsGate() {
   const { user: appUser } = useAppAuth()
   const { creds: protheusCreds } = useProtheusAuth()
-  // PDM é opcional pra este pop-up — usado só se já conectado no instante
-  // em que o Protheus dispara o diagnóstico (ver checkPdmVsSupabase,
-  // appDiagnostics.ts, pra o que acontece quando ainda não está).
   const { creds: pdmCreds } = usePdmAuth()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -45,7 +57,7 @@ export default function AppDiagnosticsGate() {
   const pdmSyncedKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (triggered || !appUser.isAdmin || !protheusCreds) return
+    if (triggered || !appUser.isAdmin || !protheusCreds || !pdmCreds) return
     const buildSha = process.env.NEXT_PUBLIC_APP_BUILD_SHA ?? 'dev'
     const seen = localStorage.getItem(STORAGE_KEY)
     if (seen === buildSha) return
@@ -54,11 +66,10 @@ export default function AppDiagnosticsGate() {
     setOpen(true)
     setLoading(true)
     setError('')
-    // Se o PDM já estiver conectado bem no instante em que o diagnóstico
-    // inicial dispara (raro, mas possível), essa credencial já entra nesta
-    // primeira rodada — marca como sincronizada pra o efeito de re-execução
-    // abaixo não buscar a mesma coisa de novo assim que ele rodar.
-    pdmSyncedKeyRef.current = pdmCreds ? `${pdmCreds.user}:${pdmCreds.password}` : null
+    // Os dois já estão conectados nesse ponto (guarda acima) — marca a
+    // credencial de PDM já usada nesta primeira rodada, pra o efeito de
+    // re-execução abaixo não buscar a mesma coisa de novo à toa.
+    pdmSyncedKeyRef.current = `${pdmCreds.user}:${pdmCreds.password}`
     fetch('/api/app-diagnostics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -66,8 +77,8 @@ export default function AppDiagnosticsGate() {
         profileId: appUser.id,
         user: protheusCreds.user,
         password: protheusCreds.password,
-        pdmUser: pdmCreds?.user,
-        pdmPassword: pdmCreds?.password,
+        pdmUser: pdmCreds.user,
+        pdmPassword: pdmCreds.password,
       }),
     })
       .then(async res => {
@@ -79,11 +90,16 @@ export default function AppDiagnosticsGate() {
       .finally(() => setLoading(false))
   }, [triggered, appUser, protheusCreds, pdmCreds])
 
-  // Re-executa só a Checagem #4 quando o PDM conecta (ou reconecta com
-  // outro usuário) depois do diagnóstico inicial já ter rodado — pedido
-  // explícito do usuário: "faz o PDM re-rodar sozinho quando conectar".
-  // Não refaz as outras 3 checagens (Protheus/Busca Reversa não dependem
-  // do PDM, refazê-las seria trabalho redundante) — só troca a seção
+  // Re-executa só a Checagem #4 quando o PDM reconecta com um usuário
+  // diferente **depois** do diagnóstico inicial já ter rodado (ex.: Admin
+  // desconecta e reconecta ao PDM pela Sidebar) — pedido explícito do
+  // usuário, rodada anterior: "faz o PDM re-rodar sozinho quando
+  // conectar". Agora que o disparo inicial já espera os dois bancos (ver
+  // acima), este efeito não cobre mais "PDM ainda não conectado na
+  // primeira vez" (isso nunca mais acontece — o pop-up só abre com os
+  // dois já conectados) — só o caso de reconexão depois. Não refaz as
+  // outras 3 checagens (Protheus/Busca Reversa não dependem do PDM,
+  // refazê-las seria trabalho redundante) — só troca a seção
   // correspondente, pelo key, no pop-up já aberto (ou já fechado — a seção
   // é atualizada em segundo plano de qualquer forma, mesmo sem o pop-up
   // visível; só não aparece até o Admin reabrir, o que hoje não tem botão

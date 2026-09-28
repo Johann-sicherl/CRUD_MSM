@@ -23,10 +23,22 @@ nenhum ganho pro usuário (que só vê o título na tela).
 
 - **Só Admin** — pedido explícito do usuário (não Gerente Adm Comercial,
   não Analista de Dados, mesmo que também conectem ao Protheus).
-- **Só depois que o Protheus já conectou** (`AppDiagnosticsGate.tsx`, dentro
-  de `ClientLayout.tsx`, escuta `useProtheusAuth().creds`) — reusa a
-  credencial já fornecida no login do app (nunca pede uma segunda vez), e a
-  checagem em si precisa dela mesmo.
+- **Só depois que os DOIS bancos já conectaram — Protheus e PDM**
+  (`AppDiagnosticsGate.tsx`, dentro de `ClientLayout.tsx`, escuta
+  `useProtheusAuth().creds` **e** `usePdmAuth().creds`) — reusa as
+  credenciais já fornecidas pelo Admin (nunca pede uma segunda vez).
+  **Histórico**: até uma sessão posterior, disparava só com o Protheus (o
+  PDM era opcional — a Checagem #4 mostrava "PDM não conectado" e se
+  autoatualizava quando o PDM conectasse depois, ver "Checagem #4"
+  abaixo). Pedido explícito do usuário, rodada seguinte: "quero que você
+  dispare a consulta do pop-up de Análise, depois que for conectado os
+  dois bancos de dados" — agora o disparo inicial inteiro espera os dois.
+  Como o PDM é oferecido automaticamente só depois do Protheus e o Admin
+  pode dispensar o modal ("Agora não"), dispensar significa que o pop-up
+  não dispara nesta sessão até o Admin conectar ao PDM manualmente (botão
+  "Conectar PDM" na Sidebar, sempre disponível pra Admin — `canConnectPdm`
+  é ignorado quando `isAdmin`) — decisão deliberada, não é um beco sem
+  saída porque esse botão sempre existe.
 - **Uma vez por build** — "primeira abertura da aplicação, ou quando eu
   atualizo a aplicação" foi implementado como: comparar o hash do commit
   atual (`NEXT_PUBLIC_APP_BUILD_SHA`, embutido no bundle do cliente por
@@ -292,59 +304,72 @@ Componentes` (`accessories`) — a mesma tabela que a tela viva usa do lado
 Supabase (`accessory_groups`, ali, é só pra rótulo de grupo — não entra na
 comparação em si).
 
-### PDM é uma segunda conexão, à parte do Protheus — comportamento quando ainda não conectado
+### PDM é uma segunda conexão, à parte do Protheus — histórico do timing (3 rodadas)
 
-Diferente do Protheus (credencial obrigatória pra o pop-up disparar), a
-conexão ao PDM é oferecida automaticamente só **depois** que o Protheus já
-conectou (`pdmAuthContext.tsx`, `offeredRef`) — e exige um passo à parte do
-Admin pra completar (preencher usuário/senha no modal que abre sozinho).
-Como o pop-up de Diagnóstico dispara no mesmo instante em que o Protheus
-conecta, o PDM tipicamente **ainda não** está conectado nesse momento.
+**1ª rodada (versão original desta checagem)**: diferente do Protheus
+(credencial obrigatória pra o pop-up disparar), a conexão ao PDM é
+oferecida automaticamente só **depois** que o Protheus já conectou
+(`pdmAuthContext.tsx`, `offeredRef`) — e exige um passo à parte do Admin
+pra completar (preencher usuário/senha no modal que abre sozinho). Nessa
+1ª versão, o pop-up disparava assim que o Protheus conectava — no mesmo
+instante, o PDM tipicamente **ainda não** estava conectado. Decisão da
+época (não bloquear o diagnóstico inteiro nem pular a seção em silêncio):
+`checkPdmVsSupabase` verificava a credencial de PDM no início e, se
+ausente, devolvia um único aviso informativo — `'PDM não conectado nesta
+sessão — conecte ao Banco PDM...'`.
 
-Decisão deliberada (não bloquear o diagnóstico inteiro, nem pular a seção
-em silêncio): `checkPdmVsSupabase` verifica `creds.pdm` no início e, se
-`null`, devolve um único aviso informativo sem `group` (cai na lista
-simples, não nos blocos) — `'PDM não conectado nesta sessão — conecte ao
-Banco PDM (oferecido após o Protheus) para incluir esta checagem.'` As
-outras 3 seções continuam rodando normalmente (mesmo `try/catch` por
-checagem já existente em `runAppDiagnostics`, ver "Arquitetura" acima) —
-uma checagem que depende de uma credencial ainda não disponível não é
-tratada como erro, só como "nada a reportar ainda".
+**2ª rodada, pedido explícito do usuário**: "faz o PDM re-rodar sozinho
+quando conectar" — em vez de ficar preso em "PDM não conectado" até o
+próximo build, `runPdmDiagnosticSection(pdm)` (`appDiagnostics.ts`) passou
+a rodar **só** `checkPdmVsSupabase`, fora do loop de `CHECKS`/
+`runAppDiagnostics` — reexecutar o diagnóstico inteiro só por causa do PDM
+refaria as outras 3 checagens à toa (Protheus/Busca Reversa não dependem
+do PDM). Extraído `runCheckResult(key, tableLabel, mode, run)` de dentro
+de `runAppDiagnostics` (o mesmo try/catch por checagem, reusado pelos dois
+caminhos) — `runCheck(check, creds)` é só um wrapper fino dela pro loop
+principal. Nova rota `POST /api/app-diagnostics/pdm` (`{ profileId,
+pdmUser, pdmPassword }`, mesma checagem `getProfileById` + `isAdmin` da
+rota principal) chama `runPdmDiagnosticSection` e devolve `{ section }` —
+só essa seção, não o array inteiro.
 
-**Rodada seguinte, pedido explícito do usuário**: "faz o PDM re-rodar
-sozinho quando conectar" — a limitação acima (só mostrar "PDM não
-conectado" até o próximo build) foi corrigida. `runPdmDiagnosticSection(pdm)`
-(`appDiagnostics.ts`) roda **só** `checkPdmVsSupabase`, fora do loop de
-`CHECKS`/`runAppDiagnostics` — reexecutar o diagnóstico inteiro só por
-causa do PDM refaria as outras 3 checagens à toa (Protheus/Busca Reversa
-não dependem do PDM). Extraído `runCheckResult(key, tableLabel, mode, run)`
-de dentro de `runAppDiagnostics` (o mesmo try/catch por checagem, agora
-reusado pelos dois caminhos) — `runCheck(check, creds)` é só um wrapper
-fino dela pro loop principal.
+**3ª rodada, pedido explícito do usuário**: "quero que você dispare a
+consulta do pop-up de Análise, depois que for conectado os dois bancos de
+dados" — em vez de disparar com o Protheus sozinho e corrigir a seção do
+PDM depois (2ª rodada), o disparo inicial inteiro (`AppDiagnosticsGate.tsx`)
+passou a esperar **os dois** (`protheusCreds && pdmCreds`, ver "Quando
+aparece" acima). Na prática, isso significa que o branch `!pdm` dentro de
+`checkPdmVsSupabase` — o aviso "PDM não conectado" da 1ª rodada — não é
+mais alcançado pelo fluxo normal (o pop-up só abre com os dois já
+conectados); mantido mesmo assim como defesa, já que o parâmetro continua
+opcional no tipo (`runPdmDiagnosticSection` também pode, em tese, ser
+chamada sem credencial).
 
-Nova rota `POST /api/app-diagnostics/pdm` (`{ profileId, pdmUser,
-pdmPassword }`, mesma checagem `getProfileById` + `isAdmin` da rota
-principal) chama `runPdmDiagnosticSection` e devolve `{ section }` — só
-essa seção, não o array inteiro. `AppDiagnosticsGate.tsx` ganhou um
-segundo `useEffect`, independente do que dispara o diagnóstico inicial:
-observa `usePdmAuth().creds` e, quando muda pra uma credencial ainda não
-sincronizada (`pdmSyncedKeyRef`, chave `usuário:senha` — cobre tanto "PDM
-conectou pela primeira vez" quanto "reconectou com outro usuário"), chama
-essa rota e substitui só a seção `pdm_vs_supabase` no state `sections` já
-carregado (`setSections(prev => prev.map(...))`), sem tocar nas outras 3.
-Guardado por `triggered` (só faz sentido depois que o diagnóstico inicial
-já rodou) e por `pdmSyncedKeyRef` já pré-marcado dentro do efeito
-principal quando o PDM por acaso já estiver conectado na primeira rodada
-— evita buscar a mesma coisa duas vezes seguidas.
-
-Roda em segundo plano mesmo com o pop-up já fechado pelo Admin (não há
-gate de `open` no efeito) — atualiza o state de qualquer forma; só não
-fica visível até reabrir. **Limitação aceita conscientemente, ainda
-existente**: não há botão pra reabrir o pop-up manualmente hoje (ele só
-abre sozinho, uma vez por build) — então, na prática, o Admin só vê o
+O mecanismo da 2ª rodada (`runPdmDiagnosticSection`, rota
+`/api/app-diagnostics/pdm`, o segundo `useEffect` em `AppDiagnosticsGate.tsx`)
+**não foi removido** — continua útil pra um caso diferente: o Admin
+desconecta e reconecta ao PDM com outro usuário (Sidebar) depois que o
+pop-up já rodou (com os dois conectados, na 1ª vez). `pdmSyncedKeyRef`
+(chave `usuário:senha`) já nasce marcado com a credencial usada na rodada
+inicial, então esse efeito só dispara de novo numa reconexão de verdade,
+nunca redundantemente logo após o disparo inicial. Segue rodando em
+segundo plano mesmo com o pop-up já fechado pelo Admin (não há gate de
+`open` no efeito) — atualiza o state de qualquer forma; só não fica
+visível até reabrir. **Limitação aceita conscientemente, ainda existente**:
+não há botão pra reabrir o pop-up manualmente hoje (ele só abre sozinho,
+uma vez por build) — então, nesse cenário de reconexão, o Admin só vê o
 resultado atualizado se ainda estiver com o pop-up aberto no momento em
-que conecta ao PDM. Corrigir isso (um jeito de reabrir o pop-up a
+que reconecta ao PDM. Corrigir isso (um jeito de reabrir o pop-up a
 qualquer momento) não foi pedido e é uma mudança à parte.
+
+**Efeito colateral aceito da 3ª rodada**: como a conexão ao PDM pode ser
+dispensada pelo Admin ("Agora não" no modal automático), dispensar agora
+significa que o pop-up de Diagnóstico inteiro não dispara nesta sessão —
+não só a seção do PDM, como antes. O Admin sempre tem um jeito de
+destravar isso (botão "Conectar PDM" na Sidebar, disponível pra Admin
+independente de `canConnectPdm`), então não é um beco sem saída, mas é uma
+mudança de comportamento real em relação à 1ª/2ª rodada (onde o Protheus
+sozinho já era suficiente pro pop-up aparecer). Pedido explícito do
+usuário, não uma regressão despercebida.
 
 ### Threading de credencial — mudança de assinatura compartilhada por todas as checagens
 
