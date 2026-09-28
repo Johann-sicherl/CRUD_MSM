@@ -159,14 +159,16 @@ export default function PdmConsultaAcessoriosPage() {
     }
   }, [fetchDbSide])
 
-  // Consulta sozinha ao abrir a tela, sem precisar clicar em nada — se ainda
-  // não houver conexão ao PDM, abre o pop-up (o mesmo oferecido automaticamente
-  // logo após conectar ao Protheus); assim que a conexão existir, dispara a
-  // consulta uma única vez.
+  // Consulta sozinha ao abrir a tela, sem precisar clicar em nada, mas só se
+  // o PDM já estiver conectado (conexão feita no momento inicial da
+  // aplicação ou pelo botão "Conectar e consultar PDM" abaixo) — pedido
+  // explícito do usuário: este pop-up de conexão não deve disparar sozinho
+  // ao abrir uma tela, só no momento inicial. Antes, `!pdmCreds` chamava
+  // `openPdmPrompt()` direto aqui, reabrindo o pop-up toda vez que a tela
+  // era aberta sem PDM conectado.
   const autoRanRef = useRef(false)
   useEffect(() => {
-    if (!pdmCreds) { openPdmPrompt(); return }
-    if (autoRanRef.current) return
+    if (!pdmCreds || autoRanRef.current) return
     autoRanRef.current = true
     runQuery(pdmCreds)
   // eslint-disable-next-line react-hooks/exhaustive-deps

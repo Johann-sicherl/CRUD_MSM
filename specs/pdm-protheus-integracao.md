@@ -77,6 +77,27 @@ outro perfil só se essa permissão estiver ligada em Configuração de
 Usuários (ver `specs/permissoes-e-perfis.md` para o histórico: era
 hardcoded admin-only antes desta permissão existir).
 
+**2ª ocorrência da mesma classe de bug, achada depois**: pedido explícito
+do usuário: "Estou tendo que conectar aos banco de dados quando eu entro e
+quando eu abro [uma tela do grupo Parâmetros]... verifique se estamos
+chamando este pop-up de conexão com o Banco de Dados em algum outro lugar
+sem ser no momento inicial da aplicação, se tiver, remova." Causa diferente
+da 1ª ocorrência (não era navegação "dura" — nenhuma das telas de
+`Parâmetros` toca Protheus/PDM): o `useEffect` de auto-consulta da própria
+tela "Consulta PDM x Banco MSM" (`pdm-consulta-acessorios/page.tsx`)
+chamava `openPdmPrompt()` direto toda vez que a tela **montava** sem PDM
+conectado (`if (!pdmCreds) { openPdmPrompt(); return }`) — reabrindo o
+modal de conexão sempre que essa tela era aberta sem PDM já conectado, não
+só "no ato de entrar na aplicação". Corrigido removendo essa chamada — o
+efeito agora só dispara a consulta automática se `pdmCreds` já existir; sem
+conexão, a tela fica parada até o Admin clicar no botão "Conectar e
+consultar PDM" já existente (fallback **por ação do usuário**, não
+automático — esse continua existindo, é diferente do bug). Varredura nas
+outras telas que também têm um fallback de abrir o prompt dentro de um
+`onClick` (`busca-avancada-acessorios/page.tsx`, `pesquisa-itens-dependentes-avancada/page.tsx`)
+não achou nenhum outro caso automático — só esse `useEffect` chamava o
+prompt sem uma ação explícita do usuário.
+
 ## Armadilhas conhecidas da query de BOM (já corrigidas)
 
 Encontradas via auditoria manual do usuário e replicadas tanto no SQL
