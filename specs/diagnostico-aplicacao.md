@@ -35,23 +35,40 @@ nenhum ganho pro usuário (que só vê o título na tela).
   dois bancos de dados" — agora o disparo inicial inteiro espera os dois.
   Como o PDM é oferecido automaticamente só depois do Protheus e o Admin
   pode dispensar o modal ("Agora não"), dispensar significa que o pop-up
-  não dispara nesta sessão até o Admin conectar ao PDM manualmente (botão
+  não dispara nesta carga de página até o Admin conectar ao PDM manualmente (botão
   "Conectar PDM" na Sidebar, sempre disponível pra Admin — `canConnectPdm`
   é ignorado quando `isAdmin`) — decisão deliberada, não é um beco sem
   saída porque esse botão sempre existe.
-- **Uma vez por build** — "primeira abertura da aplicação, ou quando eu
-  atualizo a aplicação" foi implementado como: comparar o hash do commit
-  atual (`NEXT_PUBLIC_APP_BUILD_SHA`, embutido no bundle do cliente por
-  `next.config.js` via `execSync('git rev-parse --short HEAD')` em build
-  time) contra o que está salvo em `localStorage['app-diagnostics-seen-build']`.
-  Build nunca visto (ou primeiro acesso de sempre, sem nada salvo) → roda o
-  diagnóstico e mostra o pop-up; mesmo build já visto → não mostra nada.
-  **Decisão deliberada, confirmada com o usuário**: automático via hash do
-  Git, não um número de versão manual — não exige nenhum passo extra a cada
-  deploy, muda sozinho toda vez que alguém roda `npm run build` de novo em
-  produção. Se o diagnóstico falhar (erro de rede/Protheus), o build **não**
-  é marcado como visto — volta a tentar no próximo carregamento da página em
-  que o Admin conectar, em vez de silenciar o erro até o próximo deploy.
+- **Toda vez que os dois bancos conectarem numa carga de página — sem gate
+  de "uma vez por build"**. **Histórico**: a 1ª versão comparava o hash do
+  commit atual (`NEXT_PUBLIC_APP_BUILD_SHA`, embutido no bundle do cliente
+  por `next.config.js` via `execSync('git rev-parse --short HEAD')` em
+  build time) contra o que estava salvo em
+  `localStorage['app-diagnostics-seen-build']` — build nunca visto → roda
+  o diagnóstico; mesmo build já visto (mesmo depois de um F5) → não mostra
+  nada, até o próximo `npm run build` em produção. Isso foi confirmado com
+  o usuário na época como decisão deliberada (automático via hash do Git,
+  sem passo manual extra a cada deploy).
+
+  **Removido, pedido explícito do usuário, rodada seguinte**: "estou
+  clicando em F5 e o pop-up não está tornando a voltar" — depois de eu
+  explicar a causa (a trava de "visto" persistia em `localStorage`
+  independente de F5, só resetava num deploy novo de verdade), o usuário
+  escolheu explicitamente abandonar o conceito de "uma vez por build" em
+  vez de só ganhar um jeito manual de limpar a trava: "Fazer reaparecer
+  sempre que os dois bancos conectarem". `NEXT_PUBLIC_APP_BUILD_SHA`
+  (`next.config.js`, `getBuildSha`) e a chave `app-diagnostics-seen-build`
+  foram removidos por completo — não sobrou nenhum uso de
+  `NEXT_PUBLIC_APP_BUILD_SHA` no projeto depois disso. `AppDiagnosticsGate.tsx`
+  agora só depende de `triggered` (estado de componente, nunca persistido)
+  pra não disparar duas vezes **dentro da mesma carga de página** — como um
+  F5 é uma navegação "dura" (remonta o app do zero, credenciais em memória
+  somem — mesmo comportamento já documentado em
+  `specs/pdm-protheus-integracao.md` pra Protheus/PDM), `triggered` também
+  reseta, e assim que o Admin reconectar aos dois bancos o pop-up dispara
+  de novo. Reconectar sem dar F5 (desconectar/reconectar pela Sidebar, sem
+  recarregar a página) não dispara de novo — só um carregamento de página
+  novo faz isso.
 
 ## Arquitetura — pensada pra crescer
 
@@ -356,15 +373,31 @@ segundo plano mesmo com o pop-up já fechado pelo Admin (não há gate de
 `open` no efeito) — atualiza o state de qualquer forma; só não fica
 visível até reabrir. **Limitação aceita conscientemente, ainda existente**:
 não há botão pra reabrir o pop-up manualmente hoje (ele só abre sozinho,
-uma vez por build) — então, nesse cenário de reconexão, o Admin só vê o
-resultado atualizado se ainda estiver com o pop-up aberto no momento em
-que reconecta ao PDM. Corrigir isso (um jeito de reabrir o pop-up a
-qualquer momento) não foi pedido e é uma mudança à parte.
+uma vez por carregamento de página — ver "4ª rodada" abaixo) — então,
+nesse cenário de reconexão, o Admin só vê o resultado atualizado se ainda
+estiver com o pop-up aberto no momento em que reconecta ao PDM. Corrigir
+isso (um jeito de reabrir o pop-up a qualquer momento) não foi pedido e é
+uma mudança à parte.
+
+**4ª rodada, pedido explícito do usuário**: "estou clicando em F5 e o
+pop-up não está tornando a voltar" — o gate de "uma vez por build" (ver
+"Quando aparece" acima) fazia o pop-up ficar preso em "já visto" mesmo
+depois de um F5, até o próximo `npm run build` em produção de verdade.
+Removido por completo (`NEXT_PUBLIC_APP_BUILD_SHA`/
+`app-diagnostics-seen-build`) — escolha explícita do usuário entre três
+opções (`AskUserQuestion`): manter e só explicar, adicionar um botão de
+reabrir manual, ou abandonar o "uma vez por build" e disparar toda vez que
+os dois bancos conectarem — escolhida a terceira. Agora o gate é só
+`triggered` (estado de componente, nunca persistido), que reseta em
+qualquer carregamento de página novo (F5 já derruba as credenciais em
+memória de qualquer forma — ver `specs/pdm-protheus-integracao.md`) — então
+o pop-up volta a aparecer a cada F5 seguido de reconexão aos dois bancos,
+não só uma vez por deploy.
 
 **Efeito colateral aceito da 3ª rodada**: como a conexão ao PDM pode ser
 dispensada pelo Admin ("Agora não" no modal automático), dispensar agora
-significa que o pop-up de Diagnóstico inteiro não dispara nesta sessão —
-não só a seção do PDM, como antes. O Admin sempre tem um jeito de
+significa que o pop-up de Diagnóstico inteiro não dispara nesta carga de
+página — não só a seção do PDM, como antes. O Admin sempre tem um jeito de
 destravar isso (botão "Conectar PDM" na Sidebar, disponível pra Admin
 independente de `canConnectPdm`), então não é um beco sem saída, mas é uma
 mudança de comportamento real em relação à 1ª/2ª rodada (onde o Protheus

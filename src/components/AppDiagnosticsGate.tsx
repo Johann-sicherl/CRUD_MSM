@@ -9,37 +9,34 @@ import AppDiagnosticsPopup from './AppDiagnosticsPopup'
 
 const PDM_CHECK_KEY = 'pdm_vs_supabase'
 
-const STORAGE_KEY = 'app-diagnostics-seen-build'
-
 // Diagnóstico da Aplicação — pedido explícito do usuário: um pop-up
-// automático "sempre na primeira abertura da aplicação, ou quando eu
-// atualizo a aplicação". "Atualizar a aplicação" é detectado pelo hash do
-// commit atual (NEXT_PUBLIC_APP_BUILD_SHA, embutido no build por
-// next.config.js) — muda sozinho a cada `npm run build` novo em produção,
-// sem precisar de nenhum passo manual. Comparado contra o que está salvo
-// em localStorage: build nunca visto (ou primeiro acesso de sempre, sem
-// nada salvo) → roda o diagnóstico e mostra o pop-up; mesmo build já visto
-// → não mostra nada.
+// automático que dispara sempre que o Admin conecta aos dois bancos
+// (Protheus e PDM). Só Admin (pedido explícito do usuário) — e só depois
+// que os DOIS já conectaram (pedido explícito do usuário: "quero que você
+// dispare a consulta do pop-up de Análise, depois que for conectado os
+// dois bancos de dados"). Reusa as mesmas conexões únicas do app inteiro,
+// nunca pede uma credencial extra só pra isso.
 //
-// Só Admin (pedido explícito do usuário) — e só depois que os DOIS bancos
-// já conectaram: Protheus e PDM (pedido explícito do usuário, rodada
-// seguinte: "quero que você dispare a consulta do pop-up de Análise,
-// depois que for conectado os dois bancos de dados" — antes disparava só
-// com o Protheus, e a Checagem #4 (PDM) ficava mostrando "não conectado"
-// até o PDM conectar depois, com re-sincronização própria; agora o
-// disparo inicial inteiro espera os dois). Reusa as mesmas conexões
-// únicas do app inteiro, nunca pede uma segunda vez. Roda no máximo uma
-// vez por carregamento da página (offeredRef equivalente via
-// `triggeredRef`).
+// **Sem gate de "uma vez por build"** — pedido explícito do usuário,
+// rodada seguinte: dar F5 e reconectar aos dois bancos não trazia o
+// pop-up de volta, porque uma versão anterior marcava o build inteiro
+// como "visto" em localStorage assim que o Admin fechava o pop-up uma
+// vez (`NEXT_PUBLIC_APP_BUILD_SHA`/`app-diagnostics-seen-build`,
+// removidos — ver `next.config.js`). Confirmado com o usuário: em vez de
+// só limpar essa trava por engano/consertar o gate, a decisão foi
+// abandonar o conceito — agora dispara **toda vez** que os dois bancos
+// conectarem, inclusive de novo depois de um F5. Continua rodando no
+// máximo uma vez por essa conexão (guarda `triggered`, dentro da mesma
+// carga de página) — reconectar sem dar F5 (ex.: desconectar e conectar
+// nos dois de novo pela Sidebar, sem recarregar) não dispara de novo; só
+// um novo carregamento de página (que reseta `triggered` junto com as
+// credenciais em memória) faz o pop-up disparar outra vez.
 //
 // PDM é oferecido automaticamente só depois do Protheus, e o Admin pode
 // dispensar o modal ("Agora não") — se isso acontecer, o pop-up de
-// Diagnóstico simplesmente não dispara nesta sessão até o Admin conectar
-// ao PDM manualmente (botão "Conectar PDM" na Sidebar, sempre disponível
-// pra Admin). Decisão deliberada: esperar os dois é o pedido explícito do
-// usuário, e como o Admin sempre tem permissão pra conectar ao PDM
-// (`canConnectPdm` é ignorado quando `isAdmin`), ele nunca fica travado
-// sem um jeito de destravar o pop-up — só precisa dar esse passo a mais.
+// Diagnóstico simplesmente não dispara nesta carga de página até o Admin
+// conectar ao PDM manualmente (botão "Conectar PDM" na Sidebar, sempre
+// disponível pra Admin — `canConnectPdm` é ignorado quando `isAdmin`).
 
 export default function AppDiagnosticsGate() {
   const { user: appUser } = useAppAuth()
@@ -58,9 +55,6 @@ export default function AppDiagnosticsGate() {
 
   useEffect(() => {
     if (triggered || !appUser.isAdmin || !protheusCreds || !pdmCreds) return
-    const buildSha = process.env.NEXT_PUBLIC_APP_BUILD_SHA ?? 'dev'
-    const seen = localStorage.getItem(STORAGE_KEY)
-    if (seen === buildSha) return
 
     setTriggered(true)
     setOpen(true)
@@ -124,16 +118,7 @@ export default function AppDiagnosticsGate() {
       .catch(() => { /* best-effort — falha aqui não derruba o resto do pop-up já mostrado */ })
   }, [triggered, pdmCreds, appUser])
 
-  const handleClose = () => {
-    setOpen(false)
-    // Só marca como "visto" se o diagnóstico rodou de verdade — uma falha
-    // de rede/Protheus não fica marcada como vista; volta a tentar no
-    // próximo carregamento da página em que o Admin conectar ao Protheus
-    // (triggered é estado de componente, não sobrevive a um reload).
-    if (error) return
-    const buildSha = process.env.NEXT_PUBLIC_APP_BUILD_SHA ?? 'dev'
-    localStorage.setItem(STORAGE_KEY, buildSha)
-  }
+  const handleClose = () => setOpen(false)
 
   if (!open) return null
   return <AppDiagnosticsPopup sections={sections} loading={loading} error={error} onClose={handleClose} />
