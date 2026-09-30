@@ -215,14 +215,6 @@ export default function InteligenciaProdutoPage() {
             Consulta Banco de Dados · inteligência do produto
           </div>
           <h1 className="text-3xl font-bold text-on-surface tracking-tight">Inteligência do Produto</h1>
-          <p className="text-on-surface-variant text-base mt-1 max-w-3xl">
-            Motor de regras que confronta as 9 tabelas de engenharia (Cadastro de Componentes, Grupo de
-            Equipamentos, Cadastro de Equipamentos, Equipamento x Acessórios, Produtos Não Combináveis,
-            Produtos Dependentes, Mesas de Roletes, Grupo de Acessórios, Cadastro de Alertas) contra o
-            cadastro e a estrutura ao vivo do Protheus — acha inconsistência que a validação normal de
-            escrita do app nunca pega, porque nunca olha o Protheus, ou porque o dado entrou via
-            Atualizador Global (substituição total, sem validar campo por campo).
-          </p>
         </div>
         <button
           onClick={handleCopyRegras}

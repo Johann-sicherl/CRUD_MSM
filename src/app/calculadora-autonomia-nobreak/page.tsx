@@ -169,10 +169,6 @@ export default function CalculadoraAutonomiaNobreakPage() {
           Sistema · calculadora-autonomia-nobreak
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Calculadora de Autonomia de Nobreak</h1>
-        <p className="text-on-surface-variant text-base mt-1 max-w-3xl">
-          Estima a autonomia (h:min) de um banco de baterias sob um UPS/nobreak, a partir da carga aplicada,
-          do modelo de UPS e da configuração do banco de baterias interno/externo.
-        </p>
       </div>
 
       <div className="flex items-center gap-2 border-b border-outline-variant">

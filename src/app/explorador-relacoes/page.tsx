@@ -894,9 +894,6 @@ export default function ExploradorRelacoesPage() {
           Sistema · janela de pesquisa avançada
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Janela de Pesquisa Avançada</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Digite um código de Cadastro de Equipamentos ou de Cadastro de Componentes e veja tudo que está ligado a ele
-        </p>
       </div>
 
       <div className="flex items-center gap-2 max-w-xl">

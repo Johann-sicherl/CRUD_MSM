@@ -211,14 +211,6 @@ export default function ClonagemEstruturalAvancadaPage() {
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">Sistema · clonagem estrut. avançada</div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Clonagem Estrut. Avançada</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Copia, de um equipamento de origem para outro de destino, todas as regras cadastradas em Equipamento x
-          Acessórios, Produtos Dependentes, Produtos Não Combináveis e Tipo Mesas de Roletes. Antes de efetivar,
-          você revisa, edita ou remove qualquer linha — nada é gravado até clicar em &quot;Clonar&quot;. Um item que já
-          exista, idêntico, no equipamento de destino é automaticamente ignorado (não duplica). Em Equipamento x
-          Acessórios e Produtos Não Combináveis, só são trazidas regras com status = active (Produtos Dependentes e
-          Tipo Mesas de Roletes não têm coluna de status, então trazem tudo).
-        </p>
       </div>
 
       {step === 'select' && (

@@ -189,14 +189,6 @@ function AtualizadorGlobalAdmin() {
           Sistema · atualizador global de tabelas msm
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Atualizador Global de Tabelas MSM</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Envie o CSV oficial de uma ou mais tabelas — a tela identifica sozinha de qual tabela cada
-          arquivo se trata. Audite cada um individualmente (colunas faltando/extras, células
-          obrigatórias vazias, prévia dos dados) e, quando todos estiverem corretos, use o botão no
-          final da página para substituir tudo de uma vez. Cada tabela confirmada tem todos os seus
-          registros atuais apagados e substituídos pelo conteúdo do respectivo arquivo. Colunas
-          financeiras ({FORCE_TO_ONE_FIELDS.join(', ')}) são sempre gravadas como 1.
-        </p>
       </div>
 
       <div className="mb-6">

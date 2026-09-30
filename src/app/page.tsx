@@ -88,9 +88,6 @@ export default function Dashboard() {
           VMI Security · Monte Sua Máquina
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Dashboard</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          PostgreSQL 14.2 · 15 tabelas · painel administrativo
-        </p>
       </div>
 
       {dbError && (

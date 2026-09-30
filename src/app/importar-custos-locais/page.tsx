@@ -125,13 +125,6 @@ export default function ImportarCustosLocaisPage() {
           Geral · importar-custos-locais
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Importador de Custos Locais</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Mesma lógica do Atualizador Global de Tabelas MSM — envie o(s) CSV(s) oficial(is), a tela
-          identifica a tabela sozinha — mas <strong>nunca toca o banco de dados MSM</strong>: só extrai as colunas
-          financeiras ({FORCE_TO_ONE_FIELDS.join(', ')}) e grava no arquivo local de custos reais desta
-          máquina (local-data/real-costs.json). Use isto pra alimentar o custo local numa instalação nova,
-          sem precisar de acesso ao Atualizador Global nem risco nenhum de apagar dados do banco.
-        </p>
       </div>
 
       <div className="mb-6">

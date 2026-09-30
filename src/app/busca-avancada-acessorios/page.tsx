@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { classifyEquipmentType, type EquipmentClassificationRule } from '@/lib/equipmentClassification'
 import { idbGet, idbSet } from '@/lib/idbStore'
 import ColumnFilter from '@/components/ColumnFilter'
@@ -781,27 +780,6 @@ export default function BuscaAvancadaAcessoriosPage() {
           Consulta Banco de Dados · busc. avanc. acessórios protheus
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Busc. Avanc. Acessórios Protheus</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Varre todo cabeçalho de estrutura no Protheus com o prefixo de NIVEL 1 informado (nunca listado
-          diretamente), classifica cada um por tipo de equipamento usando as mesmas regras de{' '}
-          <Link href="/parametros-estrutura" className="text-primary hover:underline">Classificação de Equipamentos</Link>
-          {' '}(aplicadas sobre DESC_ESTRUTURA), e explora todos os itens de NIVEL 2 dessa estrutura — só abrindo
-          para NIVEL 3 (o próprio equipamento e seus acessórios) os itens de nível 2 que combinem com o prefixo de
-          NIVEL 2 informado. A lista mostra só a categoria &quot;ACESSÓRIO&quot; (a peça de verdade) — SubPA,
-          Equipamento, Gastos Gerais, Embalagens, Adesivos, Spare Parts e Cabos são categorias estruturais da
-          árvore Protheus, não componentes pra cadastrar, e ficam sempre fora da lista. Cada item que aparece ganha
-          um texto dizendo se já está cadastrado no MSM (Cadastro de Equipamentos ou Cadastro de Componentes) —
-          nada some por não estar cadastrado — mas você pode marcar &quot;Ignorar&quot; num componente que sabe
-          que nunca vai usar: ele some desta lista (nesta busca e nas próximas) e pode ser revisto/removido em
-          {' '}<Link href="/parametros-estrutura" className="text-primary hover:underline">Parâm. Itens de Série e Acessórios</Link>.
-          A busca também explora, em memória, toda a subestrutura de cada acessório até o último nível — sem
-          misturar esses componentes mais profundos na lista principal: quando um item tem filhos na estrutura
-          Protheus, a própria linha dele ganha uma seta à esquerda do código (única flag de &quot;tem filhos&quot;
-          — não indica nada sobre cadastro no banco de dados MSM); clicar na linha expande e mostra os filhos logo
-          abaixo, indentados e em blocos com um tom de fundo levemente diferente por nível (só pra separar
-          visualmente a cascata), cada um com o mesmo selo de cadastro no MSM e a mesma seta se ele também tiver
-          filhos.
-        </p>
       </div>
 
       <div className="mb-1 flex items-center gap-3 flex-wrap">

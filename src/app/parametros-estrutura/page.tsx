@@ -532,10 +532,7 @@ export default function ParametrosEstruturaPage() {
           lado (grid xl:grid-cols-3) — trocado por uma pilha vertical. */}
       <div className="flex flex-col gap-10">
       <div>
-      <h1 className="text-3xl font-bold text-on-surface mb-1">Parâmetros de Estrutura</h1>
-      <p className="text-on-surface-variant text-base mb-3">
-        Regras por Grupo Acessórios usadas pelo Busc. Itens Série Estrut. — edite e clique em Salvar, ou importe/exporte um Excel.
-      </p>
+      <h1 className="text-3xl font-bold text-on-surface mb-3">Parâmetros de Estrutura</h1>
       {loading ? (
         <div className="flex items-center gap-3 py-16 text-outline">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -813,11 +810,7 @@ export default function ParametrosEstruturaPage() {
       </div>
 
       <div>
-        <h1 className="text-3xl font-bold text-on-surface mb-1">Classificação de Equipamentos</h1>
-        <p className="text-on-surface-variant text-base mb-3">
-          Define o tipo de equipamento a partir da descrição da estrutura, usado para agrupar os resultados
-          em Busc. Itens Série Estrut. — a última regra que bater vence.
-        </p>
+        <h1 className="text-3xl font-bold text-on-surface mb-3">Classificação de Equipamentos</h1>
 
         {classLoading ? (
           <div className="flex items-center gap-3 py-16 text-outline">
@@ -932,13 +925,7 @@ export default function ParametrosEstruturaPage() {
       </div>
 
       <div>
-        <h1 className="text-3xl font-bold text-on-surface mb-1">Acessórios Ignorados</h1>
-        <p className="text-on-surface-variant text-base mb-3">
-          Componentes marcados como &quot;nunca vou usar&quot; em Busc. Avanç. Acessórios Protheus — somem daquela
-          listagem enquanto estiverem aqui. Remover um código aqui não apaga nada no Protheus/MSM, só volta a
-          deixá-lo aparecer normalmente na próxima busca. Adicionar é só de lá (checkbox &quot;Ignorar&quot; na
-          linha do componente).
-        </p>
+        <h1 className="text-3xl font-bold text-on-surface mb-3">Acessórios Ignorados</h1>
 
         {ignoredLoading ? (
           <div className="flex items-center gap-3 py-16 text-outline">

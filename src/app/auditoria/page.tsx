@@ -468,9 +468,6 @@ export default function AuditoriaPage() {
               Sistema · auditoria
             </div>
             <h1 className="text-2xl font-bold text-on-surface">Auditoria de Queries</h1>
-            <p className="text-on-surface-variant text-sm mt-1">
-              Queries geradas a partir das alterações no app, para aplicar manualmente no banco oficial
-            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <select

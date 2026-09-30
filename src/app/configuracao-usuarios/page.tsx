@@ -143,9 +143,6 @@ export default function ConfiguracaoUsuariosPage() {
           Administração · configuracao-usuarios
         </div>
         <h1 className="text-2xl font-bold text-on-surface">Configuração de Usuários</h1>
-        <p className="text-on-surface-variant text-sm mt-1">
-          Selecione um usuário para ver e editar a senha, quais módulos ele enxerga e quais colunas pode editar no formulário.
-        </p>
       </div>
 
       {loading ? (

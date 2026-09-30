@@ -398,9 +398,6 @@ export default function PdmConsultaAcessoriosPage() {
           Consulta Banco de Dados · consulta pdm x banco msm
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Consulta PDM x Banco MSM</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Traz os itens validados no PDM (base VMI) e compara com o que está gravado em Cadastro de Componentes.
-        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">

@@ -73,9 +73,6 @@ export default function OptionsPage() {
       <div className="mb-6">
         <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">SISTEMA</div>
         <h1 className="text-3xl font-bold text-on-surface">Listas de Opções</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Gerencie os valores disponíveis para campos do tipo lista. Novos valores são salvos automaticamente em maiúsculo.
-        </p>
       </div>
 
       {loading ? (

@@ -353,9 +353,6 @@ export default function CustosGeraisVmiPage() {
               Portifólio · custos-gerais-vmi
             </div>
             <h1 className="text-2xl font-bold text-on-surface">Custos Gerais VMI</h1>
-            <p className="text-on-surface-variant text-sm mt-1">
-              Consolidação dos custos padrão (cost_std) de todas as tabelas do catálogo
-            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {!appUser.isAdmin && (

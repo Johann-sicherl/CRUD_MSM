@@ -75,13 +75,6 @@ export default function DuploCheckQueriesPage() {
           Sistema · duplo-check-queries
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Double-check de Queries</h1>
-        <p className="text-on-surface-variant text-base mt-1 max-w-3xl">
-          Testa se um DELETE/INSERT/UPDATE exportado da Auditoria vai dar erro antes de rodar no banco
-          oficial de verdade — sem nunca tocar nos dados reais. Cada uma das 9 tabelas abaixo tem uma
-          cópia estrutural idêntica (mesmos tipos, chaves, foreign keys) com sufixo <code>_check</code>.
-          Primeiro grave o retrato de hoje nela (passo 1), depois simule as queries (passo 2) — cada
-          simulação roda de verdade contra a cópia e desfaz tudo no final, mesmo se der tudo certo.
-        </p>
       </div>
 
       <CsvSnapshotSection profileId={appUser.id} />

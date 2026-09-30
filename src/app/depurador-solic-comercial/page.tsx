@@ -77,14 +77,6 @@ export default function DepuradorSolicComercialPage() {
           Sistema · depurador solic. comercial
         </div>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Depurador Solic. Comercial</h1>
-        <p className="text-on-surface-variant text-base mt-1">
-          Cole abaixo, à esquerda, o texto bagunçado que chega do comercial (nomes e códigos misturados, blocos
-          repetidos, quantidades soltas, rótulos sem valor). O lado direito mostra uma versão organizada: itens com
-          código (deduplicados, com a quantidade quando identificada) e, separadamente, os trechos de
-          especificação/observação que não têm código nenhum. É uma limpeza heurística — o texto original é escrito
-          por pessoas em formatos diferentes, então revise o resultado antes de usar; onde o nome de um item ficou
-          ambíguo demais para arriscar, ele aparece como <span className="font-mono">(nome não identificado)</span>.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
