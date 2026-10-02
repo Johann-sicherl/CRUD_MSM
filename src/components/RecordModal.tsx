@@ -50,6 +50,30 @@ const EMPTY_CASCADE: CascadeState = {
 
 const EMPTY_SELECTED: Set<string> = new Set()
 
+// Tabelas cujo protheus_code, quando editado no formulário normal (fora da
+// tela "Consulta PDM x Banco MSM"), precisa cascatear pra toda tabela que
+// referencia aquele código — pedido explícito do usuário: "quando eu
+// altero o código protheus_code nestas tabelas, eu tenho que fazer o
+// update nas outras tabelas também... disparando consequentemente, a
+// criação das Queries." Reusa a mesma RPC/rota já usada pela tela PDM pra
+// accessories (replace_protheus_code); standard_equipment_items ganhou uma
+// RPC própria, com escopo mais estreito (ver msm_replace_protheus_code_equipment.sql)
+// — confirmado com o usuário que só dependant_items.protheus_code e
+// pending_target_cost.protheus_code guardam um código de equipamento fora
+// da própria standard_equipment_items.
+const CODE_RENAME_CASCADE: Record<string, { replaceUrl: string; previewUrl: string }> = {
+  accessories: { replaceUrl: '/api/replace-protheus-code', previewUrl: '/api/replace-protheus-code/preview' },
+  standard_equipment_items: { replaceUrl: '/api/replace-protheus-code-equipment', previewUrl: '/api/replace-protheus-code-equipment/preview' },
+}
+
+interface CodeRenamePreview {
+  oldCode: string
+  newCode: string
+  counts: Record<string, number>
+  labels: Record<string, string>
+  pendingBody: Record<string, unknown>
+}
+
 export default function RecordModal({ schema, tableName, record, prefill, restrictToFields, onClose, onSaved }: Props) {
   const isEdit = !!record
   const isBatch = !!schema.batchInsert && !isEdit
@@ -95,6 +119,13 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
 
   const [form, setForm] = useState<Record<string, string>>(buildInitial)
   const [loading, setLoading] = useState(false)
+  // Pop-up de confirmação do cascade de renomeação de código (ver
+  // CODE_RENAME_CASCADE acima) — null enquanto não há uma troca de
+  // protheus_code pendente de confirmação.
+  const [codeRenamePreview, setCodeRenamePreview] = useState<CodeRenamePreview | null>(null)
+  const [codeRenameChecking, setCodeRenameChecking] = useState(false)
+  const [codeRenameConfirming, setCodeRenameConfirming] = useState(false)
+  const [codeRenameError, setCodeRenameError] = useState('')
   const [error, setError] = useState('')
   const [fetchedOptions, setFetchedOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({})
   const [fetchedDynamic, setFetchedDynamic] = useState<Record<string, string[]>>({})
@@ -557,8 +588,46 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
       return
     }
 
-    setLoading(true)
     const body = parseFormToBody(form)
+
+    // Editar o protheus_code de uma linha existente, em accessories/
+    // standard_equipment_items, precisa cascatear pra toda tabela que
+    // referencia aquele código (ver CODE_RENAME_CASCADE acima) — pedido
+    // explícito do usuário. Detecta a troca aqui e abre o pop-up de
+    // confirmação em vez de salvar direto; o salvamento de verdade (desta
+    // linha e de qualquer outro campo também alterado no mesmo submit) só
+    // acontece depois que o cascade for confirmado (confirmCodeRename
+    // abaixo).
+    const cascade = isEdit && record ? CODE_RENAME_CASCADE[tableName] : undefined
+    if (cascade) {
+      const oldCode = String(record!.protheus_code ?? '').trim()
+      const newCode = String(body.protheus_code ?? '').trim()
+      if (oldCode && newCode && oldCode.toUpperCase() !== newCode.toUpperCase()) {
+        setCodeRenameChecking(true)
+        setCodeRenameError('')
+        try {
+          const res = await fetch(cascade.previewUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldCode }),
+          })
+          const json = await res.json()
+          if (!res.ok) { setError(json.error || 'Falha ao consultar referências do código'); return }
+          setCodeRenamePreview({ oldCode, newCode, counts: json.counts || {}, labels: json.labels || {}, pendingBody: body })
+        } catch {
+          setError('Falha de rede ao consultar referências do código')
+        } finally {
+          setCodeRenameChecking(false)
+        }
+        return
+      }
+    }
+
+    await submitSave(body)
+  }
+
+  const submitSave = async (body: Record<string, unknown>) => {
+    setLoading(true)
     const url = isEdit ? `/api/${tableName}/${record!.id}` : `/api/${tableName}`
     const method = isEdit ? 'PUT' : 'POST'
     const res = await fetch(url, {
@@ -573,6 +642,36 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
       return
     }
     onSaved()
+  }
+
+  // Confirmar no pop-up de cascade: primeiro troca o código em todas as
+  // tabelas referenciadas (RPC dedicada, ver CODE_RENAME_CASCADE), só então
+  // salva o formulário normalmente (demais campos alterados, se houver) —
+  // a esta altura o protheus_code já bate entre o formulário e o banco,
+  // então o PUT normal não gera diff nenhum pra ele (nem duplica a
+  // auditoria já gravada pelo cascade).
+  const confirmCodeRename = async () => {
+    if (!codeRenamePreview) return
+    const cascade = CODE_RENAME_CASCADE[tableName]
+    if (!cascade) return
+    setCodeRenameConfirming(true)
+    setCodeRenameError('')
+    try {
+      const res = await fetch(cascade.replaceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldCode: codeRenamePreview.oldCode, newCode: codeRenamePreview.newCode }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setCodeRenameError(json.error || 'Falha ao substituir o código'); return }
+      const { pendingBody } = codeRenamePreview
+      setCodeRenamePreview(null)
+      await submitSave(pendingBody)
+    } catch {
+      setCodeRenameError('Falha de rede ao substituir o código')
+    } finally {
+      setCodeRenameConfirming(false)
+    }
   }
 
   const handleCreateAll = async () => {
@@ -779,11 +878,11 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
             )}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || codeRenameChecking}
               className="flex items-center gap-2 px-5 py-2 text-[16.8px] bg-primary text-on-primary rounded hover:shadow-neon disabled:opacity-60 font-semibold transition-shadow"
             >
-              {!isBatch && loading
-                ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Salvando...</>
+              {!isBatch && (loading || codeRenameChecking)
+                ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> {codeRenameChecking ? 'Verificando código…' : 'Salvando...'}</>
                 : isBatch
                   ? (editingQid ? '✓ Atualizar na Lista' : '+ Adicionar à Lista')
                   : (isEdit ? 'Salvar Alterações' : 'Criar Registro')
@@ -1107,6 +1206,70 @@ export default function RecordModal({ schema, tableName, record, prefill, restri
                 className="px-4 py-2 bg-primary text-on-primary rounded text-[14.4px] font-semibold hover:shadow-neon transition-shadow"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação do cascade de renomeação de código (ver
+          CODE_RENAME_CASCADE) — pedido explícito do usuário: editar o
+          protheus_code aqui tem que atualizar todo lugar que referencia
+          aquele código, gerando a Auditoria de cada tabela afetada. Mostra
+          quantas linhas de cada tabela serão tocadas antes de confirmar,
+          mesmo espírito de prévia da tela "Consulta PDM x Banco MSM". */}
+      {codeRenamePreview && (
+        <div className="fixed inset-0 z-[62] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-lg animate-fade-in">
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <span className="text-[16.8px] font-semibold text-on-surface">Confirmar troca de código</span>
+            </div>
+            <div className="px-5 py-4 flex flex-col gap-3">
+              <p className="text-[14.4px] text-on-surface-variant">
+                O código <span className="font-mono text-on-surface">{codeRenamePreview.oldCode}</span> vai virar{' '}
+                <span className="font-mono text-on-surface">{codeRenamePreview.newCode}</span> em{' '}
+                <span className="font-semibold">{schema.label}</span> e em toda tabela abaixo que o referencia —
+                cada uma entra na Auditoria de Queries como uma troca pendente.
+              </p>
+              <div className="flex flex-col divide-y divide-outline-variant/40 border border-outline-variant rounded">
+                {Object.entries(codeRenamePreview.labels).map(([table, label]) => {
+                  const n = codeRenamePreview.counts[table] ?? 0
+                  if (table !== tableName && n === 0) return null
+                  return (
+                    <div key={table} className="flex items-center justify-between px-3 py-2 text-[14.4px]">
+                      <span className="text-on-surface-variant">{label}</span>
+                      <span className={`font-mono ${n > 0 ? 'text-on-surface' : 'text-outline'}`}>
+                        {n} linha{n !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              {codeRenameError && (
+                <div className="text-error text-[13px] bg-error-container/20 border border-error/30 rounded px-3 py-2">
+                  ⚠ {codeRenameError}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-outline-variant">
+              <button
+                type="button"
+                onClick={() => { setCodeRenamePreview(null); setCodeRenameError('') }}
+                disabled={codeRenameConfirming}
+                className="px-4 py-2 text-[14.4px] text-on-surface-variant hover:text-on-surface disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmCodeRename}
+                disabled={codeRenameConfirming}
+                className="flex items-center gap-2 px-4 py-2 text-[14.4px] bg-primary text-on-primary rounded font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
+              >
+                {codeRenameConfirming
+                  ? <><span className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" /> Substituindo…</>
+                  : 'Confirmar troca e salvar'
+                }
               </button>
             </div>
           </div>

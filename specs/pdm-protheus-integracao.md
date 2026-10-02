@@ -183,6 +183,103 @@ constraint, mas também significa que o Postgres não garante consistência
 referencial nesses campos — é a própria RPC (e o app) que precisa manter
 isso coerente.
 
+## Cascade de renomeação de código também pelo formulário normal (`RecordModal.tsx`)
+
+Pedido explícito do usuário: "como a tabela accessories e a tabela de
+standard_equipment_items, logo, cadastro de componentes e cadastro de
+equipamentos respectivamente, quando eu altero o código protheus_code
+nestas tabelas, eu tenho que fazer o update nas outras tabelas também, em
+todo lugar que aparecer este referido código antigo, tem que substituir
+pelo código novo, disparando consequentemente, a criação das Queries."
+
+Até esta mudança, o cascade de renomeação (`replace_protheus_code`, seção
+acima) só rodava a partir da tela "Consulta PDM x Banco MSM" — editar o
+`protheus_code` direto no formulário normal de Cadastro de Componentes ou
+Cadastro de Equipamentos trocava a linha em si (e, depois do fix
+documentado em `specs/auditoria.md`, gerava a query de Auditoria pra ela
+corretamente), mas **nunca** propagava pra outras tabelas que referenciam
+aquele código.
+
+### Como funciona agora
+
+`RecordModal.tsx` detecta a troca de `protheus_code` no momento do submit
+(`isEdit`, comparando `record.protheus_code` com o valor do formulário,
+`.trim().toUpperCase()` nos dois lados) — só pra `accessories` e
+`standard_equipment_items` (`CODE_RENAME_CASCADE`, mapa fixo tabela →
+rotas). Quando detecta:
+
+1. Busca uma prévia (`POST /api/replace-protheus-code/preview` ou
+   `/api/replace-protheus-code-equipment/preview`, conforme a tabela) —
+   conta quantas linhas de cada tabela relacionada têm aquele código, sem
+   alterar nada.
+2. Mostra um pop-up de confirmação (dentro do próprio `RecordModal`, mesmo
+   padrão de "grande, com tabela de impacto" das janelas de revisão de
+   import) listando cada tabela afetada e quantas linhas — **decisão
+   confirmada explicitamente com o usuário**: pedido pra ter essa prévia
+   em vez de cascatear direto sem aviso nenhum, exatamente pelo mesmo
+   motivo de segurança da tela PDM (é uma troca em massa, difícil de
+   reverter).
+3. Ao confirmar: chama a RPC de substituição (`POST /api/replace-protheus-code`
+   ou `/api/replace-protheus-code-equipment`) — ela já troca o código na
+   própria tabela (`accessories`/`standard_equipment_items`) **e** em
+   todas as tabelas relacionadas, numa transação só, e grava uma linha de
+   Auditoria pendente pra cada tabela de fato afetada (`recordReplaceAudit`/
+   `recordReplaceAuditEquipment`), migrando também o custo real local
+   (`renameCostRow`).
+4. Só depois disso, o `PUT /api/[table]/[id]` normal roda (via
+   `submitSave`), pra persistir qualquer OUTRO campo alterado no mesmo
+   submit (nome, cor etc.) — a esta altura o `protheus_code` já bate entre
+   o formulário e o banco (o passo 3 já trocou), então o PUT não gera
+   diff nenhum pra ele nem duplica a entrada de Auditoria já criada pelo
+   cascade; só os demais campos (se houver) passam pelo fluxo normal de
+   `recordUpdateAudit`.
+
+Se o código **não** mudou no submit, nada disso roda — comportamento
+idêntico ao de antes, PUT direto.
+
+### Dois cascades distintos, escopos confirmados explicitamente com o usuário
+
+- **`accessories`** — reusa a RPC `replace_protheus_code` já existente,
+  sem nenhuma mudança nela: `accessories` + `relationship_equip_accessory`
+  + `non_combinable_comps` (2 colunas) + `dependant_items` (2 colunas) +
+  `roller_tables` + `pending_target_cost`.
+- **`standard_equipment_items`** — a RPC de accessories **não serve**
+  (seu guard exige que o código antigo exista em `accessories`). Nova RPC
+  `replace_protheus_code_equipment` (`msm_replace_protheus_code_equipment.sql`,
+  precisa rodar manualmente no SQL Editor, mesma convenção de todo
+  `msm_*.sql` deste projeto), com escopo bem mais estreito, confirmado
+  explicitamente com o usuário via `AskUserQuestion` antes de implementar:
+  só `standard_equipment_items` + `dependant_items.protheus_code` (campo
+  "Cód. Item" — só quando o gatilho da dependência é o próprio
+  equipamento, não um acessório) + `pending_target_cost.protheus_code`.
+  **`dependant_items.protheus_item_code` (campo "Cód. Dependente") nunca
+  entra nesse cascade** — essa coluna só guarda código de acessório (ver
+  `schema.ts`), nunca de equipamento, então uma troca de código de
+  equipamento não deve tocá-la.
+- `POST /api/replace-protheus-code-equipment` e sua `/preview` seguem
+  exatamente o mesmo padrão das rotas de accessories (mesmo formato de
+  resposta, mesmo `recordReplaceAudit`-equivalente) — só a lista de
+  tabelas/colunas afetadas é diferente.
+
+### Limitação herdada, não nova desta mudança
+
+Nenhuma das rotas de substituição de código (`/api/replace-protheus-code`,
+`/api/replace-protheus-code-equipment`, e os respectivos `/preview`) tem
+checagem de `profileId`/`isAdmin` no servidor — mesma ausência de
+checagem que a rota de `accessories` já tinha desde que foi criada pra
+tela PDM (admin-only só pela UI, não pelo backend). Como agora essas
+rotas também são chamadas pelo `RecordModal` normal, qualquer perfil com
+permissão de editar `protheus_code` nessas duas tabelas (hoje, na
+prática, só quem tem o campo liberado em `editableFieldsByTable` —
+perfis restritos como Gerente Adm Comercial normalmente não têm esse
+campo liberado, então nunca veem o input habilitado pra disparar isso)
+consegue acionar o cascade. Não corrigido aqui — é uma lacuna já existente
+no mesmo nível de "proteção na UI, não no backend" documentado em
+`specs/permissoes-e-perfis.md`; se quiser fechar essa lacuna, é um pedido
+à parte (exigiria passar `profileId` pro `RecordModal` e validar
+`getProfileById` nessas quatro rotas, mesmo padrão já usado em outras
+rotas sensíveis do app).
+
 ## Alterações manuais via SQL Editor nunca geram auditoria
 
 Rodar uma query direto no SQL Editor do Supabase (fora do app) **nunca**
