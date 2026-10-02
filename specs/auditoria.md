@@ -23,6 +23,60 @@ direto nesse banco oficial, só gera a instrução para alguém rodar.
   exibição na tela de Auditoria. Qualquer novo ponto que monte
   `record_key_value` manualmente deve reusar `keyValueString`, nunca
   concatenar à mão.
+
+### Bug real já corrigido: editar o próprio campo-chave (ex. `protheus_code`) não gerava query nenhuma
+
+Pedido explícito do usuário, em Cadastro de Componentes: "estou mudando o
+código Protheus (protheus_code)... e não está desenvolvendo uma query para
+esta alteração." Causa: `buildUpdateSQL` excluía **todo** campo-chave
+(`getAuditKeyFields`) do `SET` — partindo da premissa de que uma chave de
+negócio nunca muda de valor. Falso para qualquer tabela em que a própria
+chave (ex.: `protheus_code` em `accessories`/`standard_equipment_items`,
+`unique` mas **não** `isReadonly`) é um campo comum do formulário, editável
+normalmente (só não pode ser mass-editada — `noBulkEdit`). Quando o código
+era o **único** campo alterado, `changed` tinha uma entrada, mas o SET
+ficava vazio — gerava `UPDATE accessories SET  WHERE protheus_code =
+'ANTIGO';` (SQL quebrado, sem nenhuma coluna). Quando outros campos também
+mudavam junto, a query saía com os outros campos certos, mas a própria
+mudança do código — a informação mais importante da edição — desaparecia
+silenciosamente.
+
+Corrigido removendo a exclusão: um campo-chave alterado agora entra no
+`SET` normalmente, igual a qualquer outro campo. O `WHERE` continua correto
+sem nenhuma mudança — já usava `keyRow` (os valores de **antes** da edição,
+`beforeRow`), nunca os novos, exatamente o que é preciso pra localizar a
+linha como ela existe hoje no banco oficial antes de renomear o código
+nela. `id` (uuid interno) nunca corre o risco de entrar no SET por essa
+mudança — `updateTableRow` (`tableWrite.ts`) já filtra `isPk` antes de
+`updateBody` chegar em `recordUpdateAudit`, então um campo-chave vindo do
+fallback de `id` (caso nenhuma tabela caia nele hoje) nunca apareceria
+em `changedFields` pra começo de conversa.
+
+### Bug real já corrigido: criar um registro gerava INSERT com informação faltando
+
+Mesmo pedido do usuário, mesma tela: "quando cria, cria faltando
+informações." Causa: a rota `POST /api/[table]` chamava
+`recordInsertAudit(..., insertBody)` — o objeto que o **próprio app**
+monta a partir do corpo da requisição, **antes** do INSERT de verdade —
+em vez da linha que o Supabase realmente devolve depois de inserir
+(`data`). Qualquer coluna cujo valor final dependesse de algo resolvido
+só no banco (um default do Postgres não espelhado em `insertBody`, por
+exemplo) saía como `NULL`/ausente na query de auditoria gerada, mesmo a
+linha de verdade tendo um valor. O caminho `doubleInsert` (`non_combinable_comps`)
+logo abaixo, no mesmo arquivo, **já fazia certo** — usava `data` (o
+resultado real do `.insert(...).select()`) — essa inconsistência entre os
+dois caminhos foi o que expôs o bug: só a criação de um registro único
+(o caso comum) usava o objeto errado.
+
+Corrigido trocando `insertBody` por `data as Record<string, unknown>` na
+chamada de `recordInsertAudit` do caminho normal — agora os dois caminhos
+de INSERT (único e `doubleInsert`) usam a mesma fonte de verdade (a linha
+real devolvida pelo Supabase), nunca o palpite pré-insert do próprio app.
+`buildInsertSQL` continua excluindo `isPk`/`created_at`/`updated_at` do
+texto gerado independente da fonte (por design — essas colunas devem vir
+do próprio `NOW()`/`gen_random_uuid()` da produção, nunca de um valor
+capturado aqui), então essa troca não reintroduz nenhum desses campos na
+query.
 - `diffChangedFields` — decide quais campos de um UPDATE de fato mudaram
   (usa `shouldCompareField`/`valuesEqual`, mesma lógica de comparação de
   `csvBaseline.ts` — ver `specs/csv-baseline-comparacao.md`), para o SQL de

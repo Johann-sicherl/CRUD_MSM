@@ -200,7 +200,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (schema.auditQueries) {
     try {
-      await recordInsertAudit(supabaseAdmin, table, schema, insertBody)
+      // Usa a linha de verdade devolvida pelo Supabase (`data`), não o
+      // `insertBody` pré-insert — achado real, pedido explícito do usuário:
+      // "quando cria, cria faltando informações". `insertBody` só carrega o
+      // que o próprio app calculou antes do INSERT; qualquer coluna com
+      // valor padrão resolvido pelo Postgres (não replicado em
+      // `insertBody`) ficava faltando/NULL na query de auditoria gerada,
+      // mesmo a linha real tendo o valor certo. O fluxo `doubleInsert`
+      // abaixo já usava `data` corretamente — este era o único caminho
+      // (criação de um registro só) que ainda usava o objeto errado.
+      await recordInsertAudit(supabaseAdmin, table, schema, data as Record<string, unknown>)
     } catch { /* audit log is best-effort — never block the real operation */ }
   }
 

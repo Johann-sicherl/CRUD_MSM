@@ -97,7 +97,26 @@ export function buildInsertSQL(table: string, schema: TableSchema, row: Record<s
 }
 
 /** UPDATE statement, keyed on the business key (not the internal uuid).
- *  `keyRow` only needs to carry the key fields' values. */
+ *  `keyRow` only needs to carry the key fields' values — always the values
+ *  from BEFORE the edit (the WHERE clause has to find the row as it exists
+ *  today in the official DB), even when a key field itself is one of the
+ *  columns being changed.
+ *
+ *  Bug real já corrigido: esta função excluía qualquer campo-chave do SET,
+ *  achando que uma chave de negócio (ex.: `protheus_code` em
+ *  `accessories`) nunca muda de valor — mas ela É um campo editável comum
+ *  (só não pode ser mass-editada, `noBulkEdit`), e o usuário pode
+ *  perfeitamente corrigir/renomear um código direto no formulário. Quando
+ *  o campo-chave era o único campo alterado, isso gerava `UPDATE ... SET
+ *  WHERE ...` com o SET vazio (SQL quebrado); quando outros campos também
+ *  mudavam junto, a mudança do próprio código simplesmente desaparecia da
+ *  query gerada, mesmo a linha de Auditoria existindo. Pedido explícito do
+ *  usuário: "estou mudando o código Protheus... e não está desenvolvendo
+ *  uma query para esta alteração." Não há mais exclusão — um campo-chave
+ *  mudado entra no SET normalmente (o WHERE, que usa `keyRow` = valores de
+ *  ANTES da edição, continua localizando a linha certa). `id` (uuid
+ *  interno) nunca aparece aqui pra começo de conversa — `updateBody`
+ *  (`tableWrite.ts`) já filtra `isPk` antes de chegar neste ponto. */
 export function buildUpdateSQL(
   table: string,
   schema: TableSchema,
@@ -105,10 +124,8 @@ export function buildUpdateSQL(
   keyFields: Field[],
   keyRow: Record<string, unknown>,
 ): string {
-  const keyNames = new Set(keyFields.map(f => f.name))
   const sets: string[] = []
   for (const [name, val] of Object.entries(changedFields)) {
-    if (keyNames.has(name)) continue
     const field = schema.fields.find(f => f.name === name)
     if (!field || !isRealColumnField(field)) continue
     sets.push(`${name} = ${sqlLiteralForAudit(schema, field, val)}`)
