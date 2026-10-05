@@ -22,6 +22,7 @@ dono do projeto. Convenção dos arquivos "oficiais" (com banner de cabeçalho
 | `msm_add_read_only_check_mode.sql` | Coluna `read_only_check_mode` em `user_profiles` — perfil somente-leitura restrito às cópias `_check` (perfil "Analista de Dados", ver `specs/permissoes-e-perfis.md`). |
 | `msm_add_international_contribution_margin.sql` | Coluna `international_contribution_margin_ratio` em `equipments` (e, se já existir, `equipments_check`) — 11º campo de `FORCE_TO_ONE_FIELDS`, ver `specs/custeio-financeiro.md`. |
 | `msm_replace_protheus_code_equipment.sql` | RPC `replace_protheus_code_equipment` — análoga a `replace_protheus_code`, mas pro código de Cadastro de Equipamentos (`standard_equipment_items`), escopo mais estreito (ver `specs/pdm-protheus-integracao.md`). |
+| `msm_image_change_log.sql` | Tabela `image_change_log` — histórico de upload/substituição/renomeação/remoção de imagens do bucket Cloudflare R2, tela "Grupos de Imagens" (ver `specs/imagens-r2.md`). |
 
 ## Exceções à convenção — sem banner, scripts pontuais
 

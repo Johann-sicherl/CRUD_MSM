@@ -8,7 +8,7 @@ Next.js 14 (App Router) + TypeScript + Supabase, ferramenta administrativa inter
 - `npm run dev` — desenvolvimento. `npm run build` — build de produção. `npm run serve` — build + start. `npm run lint` — ESLint.
 - **Não há suite de testes automatizados** (`package.json` não tem script `test`). Antes de qualquer commit: `npx tsc --noEmit` e `npm run build` — ambos precisam terminar limpos.
 - Path alias `@/*` → `./src/*`.
-- Variáveis de ambiente obrigatórias (`.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`.
+- Variáveis de ambiente obrigatórias (`.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`. Opcionais, só pra tela "Grupos de Imagens" (bucket Cloudflare R2): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL` (ver `specs/imagens-r2.md`).
 
 ## Convenções universais
 
@@ -48,6 +48,7 @@ Next.js 14 (App Router) + TypeScript + Supabase, ferramenta administrativa inter
 - Ao trabalhar no módulo Double-check de Queries (tabelas `_check`, simulação de SQL da Auditoria): leia @specs/double-check-queries.md
 - Ao trabalhar nas regras da Inteligência do Produto, ou precisar do significado de negócio de tabelas/colunas do Protheus e das 9 tabelas de engenharia: leia @specs/contexto-negocio-inteligencia-produto.md
 - Ao trabalhar no pop-up de Diagnóstico da Aplicação (checagens automáticas no login do Admin): leia @specs/diagnostico-aplicacao.md
+- Ao trabalhar na tela "Grupos de Imagens" ou na integração com o bucket Cloudflare R2: leia @specs/imagens-r2.md
 
 # Compact instructions
 

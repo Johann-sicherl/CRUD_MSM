@@ -35,13 +35,17 @@ do projeto durante o desenvolvimento; não tratar como autenticação real.
 
 ## Telas fora do sistema de módulos
 
-`/pdm-consulta-acessorios` e `/configuracao-usuarios` são **deliberadamente**
-mantidas fora do sistema de `visibleModules`/`MODULES` — o acesso a elas
-não é uma entrada em `modules.ts`, é uma checagem própria no componente/rota
-(`isAdmin` para `/configuracao-usuarios`; `isAdmin || canConnectPdm` para
-`/pdm-consulta-acessorios`, ver seção de conexão a PDM/Protheus abaixo).
-Isso significa que adicionar uma tabela/tela ao `MODULES` array não cobre
-essas duas telas.
+`/pdm-consulta-acessorios`, `/configuracao-usuarios` e `/grupos-imagens` são
+**deliberadamente** mantidas fora do sistema de `visibleModules`/`MODULES`
+— o acesso a elas não é uma entrada em `modules.ts`, é uma checagem própria
+no componente/rota (`isAdmin` para `/configuracao-usuarios` e
+`/grupos-imagens`; `isAdmin || canConnectPdm` para `/pdm-consulta-acessorios`,
+ver seção de conexão a PDM/Protheus abaixo). Isso significa que adicionar
+uma tabela/tela ao `MODULES` array não cobre essas três telas.
+`/grupos-imagens` (ver `specs/imagens-r2.md`) é sempre admin-only, sem
+equivalente a `canConnectPdm` — não existe permissão configurável pra
+liberar esse acesso a outro perfil, decisão deliberada dado o risco de uma
+operação em massa no bucket público de imagens.
 
 Além do guard dentro da própria página, o **link** para essas páginas fica
 hardcoded direto no render de `Sidebar.tsx` (não gerado a partir de
