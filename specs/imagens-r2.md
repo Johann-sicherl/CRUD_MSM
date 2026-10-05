@@ -361,6 +361,32 @@ Dois caminhos, mesma rota por trás (`POST /rename`):
   continuam normalmente; toast final resume quantas moveram e lista os
   nomes que falharam.
 
+**Escolher a pasta de destino por árvore, não só por texto — pedido
+explícito do usuário**: "Quando eu usar a função de Mover imagem, quero
+que eu tenha um pop-up para ver a árvore de pastas para mover as imagens,
+hoje está apenas um caminho de texto." `FolderTreePicker`
+(`grupos-imagens/page.tsx`) é um componente de pop-up próprio, reusado
+pelos dois fluxos de mover (uma imagem no pop-up "Renomear/Mover imagem",
+e o lote no pop-up "Mover N imagem(ns)") — um botão "🗀 Escolher pasta" ao
+lado do campo de texto ("Nova pasta"/"Pasta de destino") abre o pop-up já
+navegado até o caminho que estava no campo. Mesmo visual de cascata
+(colunas lado a lado, estilo Finder/macOS) da navegação principal da tela
+— ver "Navegação tipo Windows Explorer" abaixo —, só que **confinado ao
+pop-up** (estado próprio, nunca compartilha `columns`/`pathSegments` com a
+navegação de fundo) e **só pastas** (nenhuma imagem é listada — não faz
+sentido escolher um arquivo como destino de um move). Clicar numa pasta
+abre a próxima coluna; o breadcrumb no topo do pop-up permite voltar a um
+nível mais raso; "Selecionar esta pasta" devolve o caminho navegado pro
+campo de texto que abriu o pop-up (`renameToPath` ou `bulkMoveToPath`) e
+fecha. **O campo de texto não foi removido** — digitar continua funcionando
+normalmente (inclusive pra apontar pra uma pasta que ainda não existe,
+criada implicitamente ao mover a primeira imagem pra lá, mesmo
+comportamento de sempre); o pop-up é só um jeito mais rápido de apontar
+pra uma pasta já existente, sem precisar saber/digitar o caminho de
+cabeça. Não foi estendido ao pop-up "Renomear / mover pasta inteira" nem
+ao "+ Adicionar imagem" — o pedido foi especificamente sobre "mover
+imagem", não sobre mover uma pasta inteira ou escolher pasta no upload.
+
 **A pasta de origem nunca "some sozinha" ao ser esvaziada por um move ou
 por uma exclusão — pedido explícito do usuário**: "É de conveniência do R2
 ter o comportamento de que se eu movo todas as imagens de uma pasta para

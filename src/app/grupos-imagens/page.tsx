@@ -67,6 +67,156 @@ async function fetchBrowseColumn(profileId: string, path: string): Promise<Brows
   return { path, folders: json.folders || [], files: json.files || [] }
 }
 
+// Pop-up de escolha de pasta por árvore — pedido explícito do usuário:
+// "quando eu usar a função de Mover imagem, quero ter um pop-up para ver a
+// árvore de pastas... hoje está apenas um caminho de texto". Mesmo visual
+// de cascata (colunas lado a lado) da navegação principal da tela, só que
+// confinado a este pop-up e só com pastas (nenhuma imagem é mostrada aqui
+// — não faz sentido escolher um arquivo como destino de um move). Não
+// substitui o campo de texto, só o preenche: a pessoa ainda pode digitar
+// um caminho novo (uma pasta que ainda não existe) direto no input, se
+// preferir — o pop-up é só uma forma mais rápida de apontar pra uma pasta
+// já existente.
+function FolderTreePicker({
+  userId,
+  initialPath,
+  onSelect,
+  onClose,
+}: {
+  userId: string
+  initialPath: string
+  onSelect: (path: string) => void
+  onClose: () => void
+}) {
+  const initialSegments = initialPath ? initialPath.split('/').filter(Boolean) : []
+  const [pathSegments, setPathSegments] = useState<string[]>(initialSegments)
+  const [columns, setColumns] = useState<BrowseColumn[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  // Carrega a raiz e, em sequência, cada segmento do caminho inicial — pra
+  // o pop-up já abrir navegado até onde o campo de texto já apontava, em
+  // vez de sempre começar do zero.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const root = await fetchBrowseColumn(userId, '')
+        if (cancelled) return
+        const cols: BrowseColumn[] = [root]
+        for (let i = 0; i < initialSegments.length; i++) {
+          const segPath = initialSegments.slice(0, i + 1).join('/')
+          const col = await fetchBrowseColumn(userId, segPath)
+          if (cancelled) return
+          cols.push(col)
+        }
+        if (!cancelled) setColumns(cols)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Falha ao consultar o bucket de imagens')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  const currentPath = pathSegments.join('/')
+
+  const selectAt = async (colIdx: number, name: string) => {
+    if (pathSegments[colIdx] === name) {
+      setPathSegments(pathSegments.slice(0, colIdx + 1))
+      return
+    }
+    const newSegments = [...pathSegments.slice(0, colIdx), name]
+    const newPath = newSegments.join('/')
+    setLoading(true)
+    setError('')
+    try {
+      const next = await fetchBrowseColumn(userId, newPath)
+      setColumns(prev => [...prev.slice(0, colIdx + 1), next])
+      setPathSegments(newSegments)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao consultar o bucket de imagens')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // idx = -1 volta pra raiz; idx = k mantém pathSegments[0..k]
+  const navigateToIndex = (idx: number) => setPathSegments(prev => prev.slice(0, idx + 1))
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-fade-in" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-outline-variant flex items-center justify-between">
+          <span className="text-base font-semibold text-on-surface">Escolher pasta de destino</span>
+          <button type="button" onClick={onClose} className="text-on-surface-variant hover:text-on-surface text-xl leading-none">✕</button>
+        </div>
+        <div className="px-5 py-3 border-b border-outline-variant text-xs text-outline flex items-center gap-1 flex-wrap">
+          <button type="button" onClick={() => navigateToIndex(-1)} className="hover:text-primary hover:underline">🗀 Raiz</button>
+          {pathSegments.map((seg, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <span>/</span>
+              <button type="button" onClick={() => navigateToIndex(i)} className="hover:text-primary hover:underline">{seg}</button>
+            </span>
+          ))}
+        </div>
+        <div className="flex-1 overflow-auto px-5 py-4">
+          {error && <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2 mb-3">⚠ {error}</div>}
+          {loading && columns.length === 0 ? (
+            <p className="text-sm text-outline">Carregando…</p>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {columns.map((col, colIdx) => (
+                col.folders.length > 0 && (
+                  <div key={colIdx} className="w-56 shrink-0 border border-outline-variant rounded-lg overflow-hidden">
+                    <div className="bg-surface-container-high px-3 py-2 text-xs font-semibold text-on-surface-variant border-b border-outline-variant">
+                      {colIdx === 0 ? 'Raiz' : pathSegments[colIdx - 1]}
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {col.folders.map(name => (
+                        <button
+                          type="button"
+                          key={name}
+                          onClick={() => selectAt(colIdx, name)}
+                          title={name}
+                          className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-surface-container-high ${pathSegments[colIdx] === name ? 'bg-primary-container/40 text-primary font-semibold' : 'text-on-surface'}`}
+                        >
+                          🗀 {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-outline-variant">
+          <p className="text-xs text-outline truncate">
+            Selecionado: <span className="font-mono text-on-surface">{currentPath || '(raiz)'}</span>
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelect(currentPath)}
+              className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon transition-shadow"
+            >
+              Selecionar esta pasta
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function GruposImagensPage() {
   const { user } = useAppAuth()
 
@@ -292,6 +442,11 @@ export default function GruposImagensPage() {
     setAddError('')
     setAddOpen(true)
   }
+
+  // ── Pop-up de escolha de pasta por árvore (compartilhado entre o
+  // Renomear/Mover de uma imagem e o Mover em lote) — pedido explícito do
+  // usuário, ver FolderTreePicker acima.
+  const [folderPickerFor, setFolderPickerFor] = useState<'rename' | 'bulk' | null>(null)
 
   // ── Renomear/Mover ───────────────────────────────────────────
   const [renameTarget, setRenameTarget] = useState<{ fileName: string; fromPath: string } | null>(null)
@@ -992,12 +1147,21 @@ export default function GruposImagensPage() {
               </p>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
                 Nova pasta
-                <input
-                  value={renameToPath}
-                  onChange={e => setRenameToPath(e.target.value)}
-                  placeholder="ex: Acessórios/CAMERAS"
-                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    value={renameToPath}
+                    onChange={e => setRenameToPath(e.target.value)}
+                    placeholder="ex: Acessórios/CAMERAS"
+                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFolderPickerFor('rename')}
+                    className="px-3 py-2 text-xs font-semibold text-on-surface-variant hover:text-primary border border-outline-variant rounded whitespace-nowrap"
+                  >
+                    🗀 Escolher pasta
+                  </button>
+                </div>
               </label>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
                 Novo nome do arquivo
@@ -1039,12 +1203,21 @@ export default function GruposImagensPage() {
               </p>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
                 Pasta de destino
-                <input
-                  value={bulkMoveToPath}
-                  onChange={e => setBulkMoveToPath(e.target.value)}
-                  placeholder="ex: Acessórios/CAMERAS"
-                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    value={bulkMoveToPath}
+                    onChange={e => setBulkMoveToPath(e.target.value)}
+                    placeholder="ex: Acessórios/CAMERAS"
+                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFolderPickerFor('bulk')}
+                    className="px-3 py-2 text-xs font-semibold text-on-surface-variant hover:text-primary border border-outline-variant rounded whitespace-nowrap"
+                  >
+                    🗀 Escolher pasta
+                  </button>
+                </div>
               </label>
               {bulkMoveError && (
                 <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {bulkMoveError}</div>
@@ -1065,6 +1238,20 @@ export default function GruposImagensPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pop-up Escolher pasta por árvore (Renomear/Mover imagem e Mover em lote) */}
+      {folderPickerFor && (
+        <FolderTreePicker
+          userId={user.id}
+          initialPath={folderPickerFor === 'rename' ? renameToPath : bulkMoveToPath}
+          onClose={() => setFolderPickerFor(null)}
+          onSelect={path => {
+            if (folderPickerFor === 'rename') setRenameToPath(path)
+            else setBulkMoveToPath(path)
+            setFolderPickerFor(null)
+          }}
+        />
       )}
 
       {/* Pop-up Renomear pasta */}
