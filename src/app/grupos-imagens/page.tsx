@@ -330,6 +330,56 @@ export default function GruposImagensPage() {
     else showToast(`${okCount} removida(s), ${failCount} falharam`, true)
   }
 
+  // ── Mover em lote (uma imagem ou várias selecionadas) ─────────
+  // Pedido explícito do usuário: "Quero ter a capacidade de mover imagens
+  // de uma pasta para outra, podem ser uma única imagem ou várias
+  // selecionadas." O pop-up Renomear/Mover já existente (abaixo) cobre o
+  // caso de uma imagem só (ele também só muda a pasta, deixando o nome
+  // igual, se quiser); este modal novo é só pra mover várias de uma vez,
+  // reusando a mesma rota POST /rename, uma chamada por imagem.
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false)
+  const [bulkMoveToPath, setBulkMoveToPath] = useState('')
+  const [bulkMoveSaving, setBulkMoveSaving] = useState(false)
+  const [bulkMoveError, setBulkMoveError] = useState('')
+
+  const openBulkMove = () => {
+    setBulkMoveToPath(currentPath)
+    setBulkMoveError('')
+    setBulkMoveOpen(true)
+  }
+
+  const submitBulkMove = async () => {
+    const targets = Array.from(selectedFiles)
+    const toPath = bulkMoveToPath.trim()
+    if (targets.length === 0) return
+    if (toPath === currentPath) { setBulkMoveError('O destino é igual à pasta atual — nada a fazer'); return }
+    setBulkMoveSaving(true)
+    setBulkMoveError('')
+    // Sequencial de propósito (não Promise.all) — erro isolado por imagem e
+    // ordem previsível, mesmo padrão de toda escrita em lote deste projeto.
+    let okCount = 0
+    const failed: string[] = []
+    for (const fileName of targets) {
+      try {
+        const res = await fetch('/api/r2-images/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId: user.id, path: currentPath, fileName, toPath, toFileName: fileName }),
+        })
+        if (res.ok) okCount++
+        else failed.push(fileName)
+      } catch {
+        failed.push(fileName)
+      }
+    }
+    setBulkMoveSaving(false)
+    setBulkMoveOpen(false)
+    clearSelection()
+    refreshAll()
+    if (failed.length === 0) showToast(`${okCount} imagem(ns) movida(s) para ${toPath || '(raiz)'}`)
+    else showToast(`${okCount} movida(s), ${failed.length} falharam (${failed.join(', ')})`, true)
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!user.isAdmin) {
@@ -422,6 +472,14 @@ export default function GruposImagensPage() {
                 className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
               >
                 {selectedFiles.size === files.length ? 'Limpar seleção' : 'Selecionar todas'}
+              </button>
+            )}
+            {selectedFiles.size > 0 && (
+              <button
+                onClick={openBulkMove}
+                className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+              >
+                Mover selecionadas ({selectedFiles.size})
               </button>
             )}
             {selectedFiles.size > 0 && (
@@ -642,6 +700,49 @@ export default function GruposImagensPage() {
                 className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
               >
                 {renameSaving ? 'Movendo…' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up Mover selecionadas (em lote) */}
+      {bulkMoveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setBulkMoveOpen(false)}>
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <span className="text-base font-semibold text-on-surface">Mover {selectedFiles.size} imagem(ns)</span>
+            </div>
+            <div className="px-5 py-4 flex flex-col gap-3">
+              <p className="text-xs text-outline">
+                De: <span className="font-mono text-on-surface">{currentPath || '(raiz)'}</span> — o nome de cada
+                arquivo é mantido, só a pasta muda. Se já existir uma imagem com o mesmo nome no destino, essa em
+                particular falha (as outras continuam normalmente).
+              </p>
+              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+                Pasta de destino
+                <input
+                  value={bulkMoveToPath}
+                  onChange={e => setBulkMoveToPath(e.target.value)}
+                  placeholder="ex: Acessórios/CAMERAS"
+                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
+                />
+              </label>
+              {bulkMoveError && (
+                <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {bulkMoveError}</div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-outline-variant">
+              <button type="button" onClick={() => setBulkMoveOpen(false)} disabled={bulkMoveSaving} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitBulkMove}
+                disabled={bulkMoveSaving || !bulkMoveToPath.trim()}
+                className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
+              >
+                {bulkMoveSaving ? 'Movendo…' : 'Mover'}
               </button>
             </div>
           </div>

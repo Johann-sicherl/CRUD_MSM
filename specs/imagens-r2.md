@@ -341,6 +341,26 @@ menos uma selecionada, "Excluir selecionadas (N)".
   falharam (se alguma falhar, o toast fica no estilo de erro) — uma falha
   isolada numa imagem nunca interrompe as demais do lote.
 
+### Mover (uma imagem ou várias selecionadas)
+
+Pedido explícito do usuário: "Quero ter a capacidade de mover imagens de
+uma pasta para outra, podem ser uma única imagem ou várias selecionadas."
+Dois caminhos, mesma rota por trás (`POST /rename`):
+- **Uma imagem** — botão "Renomear" por linha já existente (pop-up
+  "Renomear/Mover") — já permitia trocar pasta e/ou nome juntos desde a
+  reescrita pra profundidade livre, sem mudança nesta rodada.
+- **Várias selecionadas** — botão "Mover selecionadas (N)" (só aparece
+  junto de "Excluir selecionadas" quando `selectedFiles.size > 0`) abre um
+  pop-up com um único campo "Pasta de destino"; `submitBulkMove` chama
+  `POST /rename` **uma vez por imagem selecionada**, sequencial (mesmo
+  motivo do delete em lote: erro isolado, ordem previsível), sempre com
+  `toFileName` igual ao nome original — **o lote não renomeia arquivo
+  nenhum, só move**; trocar nome continua sendo só pelo fluxo de uma
+  imagem por vez. Se o destino já tiver uma imagem com o mesmo nome, só
+  aquela falha (a rota já recusa colisão de nome) — as outras do lote
+  continuam normalmente; toast final resume quantas moveram e lista os
+  nomes que falharam.
+
 ## O que ficou fora do escopo desta 1ª versão
 
 Pra não inflar demais uma primeira entrega, as seguintes seções do manual
