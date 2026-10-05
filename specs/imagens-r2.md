@@ -88,13 +88,25 @@ certo.
   caminho inteiro (cada segmento não vazio, não `.`/`..`), não mais só um
   segmento isolado.
 - **Tela (`grupos-imagens/page.tsx`)** — breadcrumb no topo (`Raiz / seg1 /
-  seg2 / ...`, cada segmento clicável pra voltar), painel esquerdo lista só
-  as subpastas do caminho atual (clique entra nela, "↑ Subir um nível"
-  quando não está na raiz), painel direito lista as imagens do caminho
-  atual — mesma grade de cartões de antes, só generalizada pra `path` em
-  vez de `group`/`subgroup`. O formulário "+ Adicionar imagem" tem agora um
-  único campo "Pasta" (texto livre, aceita qualquer profundidade separada
-  por `/`, pré-preenchido com o caminho atual) em vez de dois campos fixos.
+  seg2 / ...`, cada segmento clicável pra voltar) + **caixas em cascata**
+  (estilo colunas do Finder/macOS), uma caixa por nível, lado a lado, com
+  rolagem horizontal. Abaixo, as imagens do caminho selecionado (coluna
+  mais funda) — mesma grade de cartões de antes, só generalizada pra
+  `path` em vez de `group`/`subgroup`. O formulário "+ Adicionar imagem"
+  tem um único campo "Pasta" (texto livre, aceita qualquer profundidade
+  separada por `/`, pré-preenchido com o caminho atual) em vez de dois
+  campos fixos. **2ª rodada, pedido explícito do usuário**: "Tem como não
+  ter o 'Subir de nivel' das pastas quero a visão de cascata, separada em
+  caixas menores... e em níveis cascateados" — o painel único (lista de
+  subpastas do nível atual + botão "↑ Subir um nível") foi substituído por
+  várias caixas pequenas simultâneas, uma por nível já visitado
+  (`columns: BrowseColumn[]`, `columns[0]` = raiz, `columns[k]` = conteúdo
+  de `pathSegments.slice(0, k)`), sem nenhum botão "subir" — pra voltar a
+  um nível mais raso, ou clica na própria caixa anterior (escolhendo outra
+  subpasta dali, o que já corta qualquer coluna mais funda) ou no
+  breadcrumb. Colunas já visitadas ficam em memória (`navigateToIndex` só
+  corta o array, sem round-trip novo); só abrir uma pasta nova (ou
+  "Recarregar") dispara `fetchBrowseColumn`.
 - **`GET /tree` e `GET /list` foram removidos**, substituídos por uma única
   `GET /browse?path=`, que devolve `{ path, folders, files }` de um nível
   só. `POST /upload`/`/rename`/`/delete` trocaram `group`/`subgroup` (e
@@ -270,12 +282,16 @@ o que cada linha significa.
 - Guard `!user.isAdmin` igual a `/configuracao-usuarios` (mensagem "Acesso
   restrito a administradores", sem nada mais renderizado).
 - Breadcrumb no topo (`🗀 Raiz / seg1 / seg2 / ...`), cada segmento
-  clicável — navega pra aquele nível, sem precisar "subir" um de cada vez.
-- Coluna esquerda: só as subpastas do caminho atual (`folders`, um nível),
-  clique entra numa delas; "↑ Subir um nível" quando não está na raiz.
-- Painel direito: grade de cartões por imagem do caminho atual (miniatura
-  via `<img>` direto na URL pública, nome, tamanho, data, link "Abrir", e
-  os três botões Substituir/Renomear/Remover).
+  clicável — navega pra aquele nível.
+- Caixas em cascata (`w-56` cada, `overflow-x-auto` na linha): uma por
+  nível já aberto, lado a lado — clique numa pasta de qualquer caixa abre
+  a próxima à direita (e descarta qualquer coluna mais funda que já
+  existisse). Sem botão "subir" — ver "Navegação tipo Windows Explorer"
+  acima pro histórico de por que isso mudou de um painel único pra caixas
+  em cascata.
+- Abaixo das caixas: grade de cartões por imagem do caminho selecionado
+  (miniatura via `<img>` direto na URL pública, nome, tamanho, data, link
+  "Abrir", e os três botões Substituir/Renomear/Remover).
 - "+ Adicionar imagem" — um único campo "Pasta" (texto livre, `<datalist>`
   sugere as subpastas do nível atual, mas aceita digitar qualquer caminho
   com `/`, inclusive um que ainda não existe — é assim que uma pasta nova
