@@ -33,11 +33,29 @@ uma vez, nesta máquina.
 
 - **`local-data/local-access.txt`** (gitignored, nunca sobe pro Git — mesma
   pasta/convenção de `local-data/real-costs.json`, ver
-  `specs/custeio-financeiro.md`) — um arquivo `CHAVE=valor` por linha
-  (`#` para comentário), com `PROTHEUS_USER`/`PROTHEUS_PASSWORD`,
-  `PDM_USER`/`PDM_PASSWORD`, e as chaves `R2_*` (ver
-  `specs/imagens-r2.md`, seção "Fallback pra `local-data/local-access.txt`")
-  — um único arquivo pra todas as credenciais desta máquina, como pedido.
+  `specs/custeio-financeiro.md`) — um único arquivo pra todas as
+  credenciais desta máquina, como pedido. Dois formatos dentro do mesmo
+  arquivo, por seção:
+  - **Protheus/PDM** — flat, `CHAVE=valor` por linha (`#` pra comentário),
+    sem seção: `PROTHEUS_USER`/`PROTHEUS_PASSWORD`, `PDM_USER`/`PDM_PASSWORD`.
+  - **R2** — dentro de um bloco `[r2]`, **no mesmo formato do
+    `rclone.conf`** (chave em minúsculo, `= ` com espaço, ver manual da TI
+    em `specs/imagens-r2.md`) — pedido explícito do usuário, pra poder
+    colar direto a configuração que já existe no rclone, sem reescrever à
+    mão: `type`, `provider`, `access_key_id`, `secret_access_key`,
+    `endpoint`, `region`, `no_check_bucket` (as 3 últimas só informativas,
+    não usadas pelo app) + `bucket`/`public_base_url` (extras que só este
+    app lê — não existem no `rclone.conf` padrão, que guarda o bucket no
+    caminho do remote, não no config). `parseLocalAccessFile`
+    (`localCredentials.ts`) reconhece a seção `[r2]` e mapeia
+    `access_key_id`/`secret_access_key`/`bucket`/`public_base_url` pros
+    nomes internos (`R2_ACCESS_KEY_ID` etc.) que `r2Images.ts` já lia —
+    **`endpoint` é a única fonte do Account ID** (o `rclone.conf` nunca tem
+    um campo `account_id` separado): extraído da própria URL
+    (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) via regex. Chaves
+    fora de qualquer seção continuam funcionando no formato antigo
+    (`R2_ACCOUNT_ID=...` flat), por compatibilidade — ninguém precisa
+    reescrever um arquivo já preenchido no formato anterior.
 - **`local-access.example.txt`** (raiz do repo, committed) — template
   comentado, mesmo padrão de `.env.local.example` → `.env.local`. Instrui a
   copiar para `local-data/local-access.txt` e preencher.

@@ -133,6 +133,14 @@ de conveniência para desenvolvimento/uso pessoal na própria máquina.
 tenha o valor (`envOrLocal`, lança erro se nenhuma tiver) — nunca um
 default hardcoded, pelo mesmo motivo de grafia ambígua já explicado acima.
 
+**Dentro de `local-data/local-access.txt`, a seção R2 usa o formato do
+`rclone.conf`** (bloco `[r2]`, chaves em minúsculo — `access_key_id`,
+`secret_access_key`, `endpoint` etc.), não `R2_ACCESS_KEY_ID=` flat —
+pedido explícito do usuário, pra poder colar direto a configuração que já
+existe no rclone. Detalhe completo (mapeamento de chave, extração do
+Account ID a partir do `endpoint`) em `specs/pdm-protheus-integracao.md`,
+seção "Credenciais locais...".
+
 **`R2_PUBLIC_BASE_URL` não tem um valor hardcoded de propósito**: o manual
 enviado pelo usuário tem duas grafias diferentes pro mesmo domínio
 (`imagesmsm.vmisecurity.com` numa tabela, `images-msm.vmisecurity.com` nos

@@ -25,9 +25,20 @@ PROTHEUS_PASSWORD=
 PDM_USER=
 PDM_PASSWORD=
 
-# ── Cloudflare R2 (bucket images-msm — ver specs/imagens-r2.md) ─
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET=images-msm
-R2_PUBLIC_BASE_URL=https://images-msm.vmisecurity.com
+# ── Cloudflare R2 (bucket images-msm — ver specs/imagens-r2.md) ─────
+# Mesmo formato do rclone.conf — se você já tem a configuração do rclone
+# (ver manual da TI), pode colar o bloco [r2] de lá direto aqui. "bucket"
+# e "public_base_url" não existem no rclone.conf padrão (no rclone o
+# bucket vai no caminho do remote, não no config) — são extras que só
+# este app usa; se deixar em branco, assume os defaults de sempre
+# (images-msm / https://images-msm.vmisecurity.com).
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id =
+secret_access_key =
+endpoint = https://xxxxxxx.r2.cloudflarestorage.com
+region = auto
+no_check_bucket = true
+bucket = images-msm
+public_base_url = https://images-msm.vmisecurity.com

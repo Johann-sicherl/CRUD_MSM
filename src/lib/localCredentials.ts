@@ -17,16 +17,57 @@ import path from 'path'
 
 const FILE_PATH = path.join(process.cwd(), 'local-data', 'local-access.txt')
 
+// Pedido explícito do usuário: a seção R2 do arquivo usa o mesmo formato do
+// rclone.conf (chaves em minúsculo, "=" com espaço nos dois lados, dentro
+// de "[r2]") — assim dá pra colar direto a configuração que já existe no
+// rclone, sem reescrever à mão. Mapeia as chaves padrão do rclone pros
+// nomes internos que r2Images.ts já lê via getLocalValue. Protheus/PDM
+// continuam fora de seção, formato flat de sempre (PROTHEUS_USER=...).
+const R2_SECTION_KEY_MAP: Record<string, string> = {
+  access_key_id: 'R2_ACCESS_KEY_ID',
+  secret_access_key: 'R2_SECRET_ACCESS_KEY',
+  bucket: 'R2_BUCKET',
+  public_base_url: 'R2_PUBLIC_BASE_URL',
+  base_prefix: 'R2_BASE_PREFIX',
+}
+
+// "endpoint" do rclone (https://<ACCOUNT_ID>.r2.cloudflarestorage.com) é
+// de onde o Account ID é extraído — o rclone.conf nunca tem um campo
+// "account_id" separado, só o endpoint completo.
+const R2_ENDPOINT_RE = /^https?:\/\/([^./]+)\.r2\.cloudflarestorage\.com/i
+
 function parseLocalAccessFile(raw: string): Record<string, string> {
   const result: Record<string, string> = {}
+  let section = ''
   for (const line of raw.split('\n')) {
     const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) continue
+    const sectionMatch = trimmed.match(/^\[(\w+)\]$/)
+    if (sectionMatch) {
+      section = sectionMatch[1].toLowerCase()
+      continue
+    }
     const eq = trimmed.indexOf('=')
     if (eq === -1) continue
     const key = trimmed.slice(0, eq).trim()
     const value = trimmed.slice(eq + 1).trim()
-    if (key) result[key] = value
+    if (!key) continue
+
+    if (section === 'r2') {
+      const lowerKey = key.toLowerCase()
+      if (lowerKey === 'endpoint') {
+        const match = value.match(R2_ENDPOINT_RE)
+        if (match) result.R2_ACCOUNT_ID = match[1]
+        continue
+      }
+      const mapped = R2_SECTION_KEY_MAP[lowerKey]
+      if (mapped) result[mapped] = value
+      // demais chaves do rclone (type, provider, region, no_check_bucket)
+      // são só informativas aqui — não usadas por r2Images.ts, ignoradas.
+      continue
+    }
+
+    result[key] = value
   }
   return result
 }
