@@ -248,6 +248,78 @@ export async function deleteImage(folderPath: string, fileName: string): Promise
   await client.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: buildKey(folderPath, fileName) }))
 }
 
+// Verifica se uma pasta tem algum conteúdo (arquivo em qualquer
+// profundidade abaixo dela) — usado por renameFolder pra confirmar que a
+// origem existe e que o destino ainda está livre, sem precisar listar tudo
+// (MaxKeys: 1 já basta pra responder sim/não).
+export async function folderHasContent(folderPath: string): Promise<boolean> {
+  const normalized = normalizeFolderPath(folderPath)
+  const prefix = normalized ? `${getBasePrefix()}${normalized}/` : getBasePrefix()
+  const client = getClient()
+  const res = await client.send(new ListObjectsV2Command({ Bucket: getBucket(), Prefix: prefix, MaxKeys: 1 }))
+  return (res.Contents?.length ?? 0) > 0
+}
+
+// Lista TODAS as chaves (qualquer profundidade, sem Delimiter) sob um
+// prefixo — usado só por renameFolder, que precisa mover o conteúdo
+// inteiro da subárvore, não um nível por vez como browseFolder.
+async function listAllKeysUnderPrefix(prefix: string): Promise<string[]> {
+  const client = getClient()
+  const bucket = getBucket()
+  const keys: string[] = []
+  let token: string | undefined
+  do {
+    const res = await client.send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      ContinuationToken: token,
+    }))
+    for (const obj of res.Contents ?? []) {
+      if (obj.Key) keys.push(obj.Key)
+    }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined
+  } while (token)
+  return keys
+}
+
+// Renomeia/move uma pasta inteira (qualquer profundidade) — o R2/S3 não tem
+// rename de pasta nativo (pasta não é uma entidade real, só um prefixo de
+// chave), então é copiar todo o conteúdo pro prefixo novo e só então apagar
+// o antigo. Pedido explícito do usuário: "Quero poder renomear uma pasta,
+// é possível?"
+//
+// Ordem deliberada — copia TUDO primeiro, só depois apaga TUDO: se uma
+// cópia no meio do caminho falhar, a função lança antes de apagar qualquer
+// coisa, então a pasta de origem fica 100% intacta (seguro tentar de novo).
+// Se as cópias todas derem certo mas uma remoção específica falhar, o pior
+// cenário é uma sobra isolada na origem (os arquivos já estão seguros no
+// destino) — nunca perda de dado.
+export async function renameFolder(fromFolderPath: string, toFolderPath: string): Promise<number> {
+  const fromNormalized = normalizeFolderPath(fromFolderPath)
+  const toNormalized = normalizeFolderPath(toFolderPath)
+  const fromPrefix = fromNormalized ? `${getBasePrefix()}${fromNormalized}/` : getBasePrefix()
+  const client = getClient()
+  const bucket = getBucket()
+
+  const keys = await listAllKeysUnderPrefix(fromPrefix)
+  const newKeys = keys.map(key => {
+    const relative = key.slice(fromPrefix.length)
+    return toNormalized ? `${getBasePrefix()}${toNormalized}/${relative}` : `${getBasePrefix()}${relative}`
+  })
+
+  for (let i = 0; i < keys.length; i++) {
+    await client.send(new CopyObjectCommand({
+      Bucket: bucket,
+      Key: newKeys[i],
+      CopySource: `${bucket}/${keys[i].split('/').map(encodeURIComponent).join('/')}`,
+    }))
+  }
+  for (const key of keys) {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  }
+  return keys.length
+}
+
 // Backup automático antes de substituir/remover — o manual da TI pede isso
 // como passo manual ("guarde uma cópia da versão atual"); aqui é automático
 // a cada substituição/remoção, pra nunca depender de alguém lembrar de

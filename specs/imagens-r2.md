@@ -361,6 +361,50 @@ Dois caminhos, mesma rota por trás (`POST /rename`):
   continuam normalmente; toast final resume quantas moveram e lista os
   nomes que falharam.
 
+### Renomear/mover uma pasta inteira
+
+Pedido explícito do usuário: "Quero poder renomear uma pasta, é possível?"
+R2/S3 não tem rename de pasta nativo (pasta não é entidade real, só um
+prefixo de chave — ver "Terminologia" acima) — a única forma é copiar todo
+o conteúdo pro prefixo novo e só então apagar o antigo, igual ao mecanismo
+de renomear um arquivo (`copyImage`+`deleteImage`), só que pra uma
+subárvore inteira em vez de um objeto só.
+
+- **`folderHasContent(folderPath)`** (`r2Images.ts`) — `MaxKeys: 1`, só
+  confirma sim/não se existe algo abaixo daquele prefixo; usada tanto pra
+  validar que a origem existe quanto pra garantir que o destino ainda está
+  livre (a operação é **recusada** se já houver qualquer conteúdo lá —
+  nunca mescla duas pastas silenciosamente).
+- **`renameFolder(fromFolderPath, toFolderPath)`** (`r2Images.ts`) — lista
+  TODAS as chaves sob o prefixo de origem (`listAllKeysUnderPrefix`, sem
+  `Delimiter`, qualquer profundidade), copia cada uma pro prefixo novo
+  (preservando o caminho relativo), e só depois de **todas** as cópias
+  terem dado certo é que começa a apagar os originais. Ordem deliberada:
+  se uma cópia no meio falhar, a função lança antes de apagar qualquer
+  coisa — a origem fica 100% intacta, seguro tentar de novo. Se as cópias
+  todas derem certo mas uma remoção específica falhar, o pior cenário é
+  uma sobra isolada na origem (os arquivos já estão seguros no destino) —
+  nunca perda de dado.
+- **`POST /api/r2-images/rename-folder`** — `{ profileId, path, toPath }`
+  (pastas de origem/destino, sem `fileName` — move tudo que está dentro).
+  Recusa `path` vazio (não dá pra renomear a raiz), recusa se `path` não
+  tiver conteúdo (404) ou se `toPath` já tiver (409). Uma única linha em
+  `image_change_log` por operação (não uma por arquivo movido, pra não
+  inundar o histórico numa pasta com muitos arquivos) — `file_name`/
+  `to_file_name` levam um rótulo tipo `(pasta — N imagens)` em vez de um
+  nome de arquivo de verdade, só pra deixar claro no histórico que foi uma
+  pasta inteira, não um arquivo.
+- **Tela** — botão "✎" (aparece ao passar o mouse, `group-hover`) ao lado
+  de cada pasta nas caixas em cascata, abre um pop-up "Renomear / mover
+  pasta" com um único campo "Novo caminho" (prefenchido com o caminho
+  atual — editar só o último segmento é "renomear", trocar tudo é "mover"
+  pra outro lugar qualquer, o mesmo mecanismo serve pros dois). Depois de
+  um rename bem-sucedido, a navegação **volta pra raiz** (`loadRoot()`, não
+  só `refreshAll()`) — o caminho da pasta renomeada pode não existir mais
+  exatamente como estava (se o usuário tiver navegado pra dentro dela ou
+  de uma pasta-filha), então recomeçar do zero é mais simples e seguro que
+  tentar remendar o estado de navegação em cascata.
+
 ## O que ficou fora do escopo desta 1ª versão
 
 Pra não inflar demais uma primeira entrega, as seguintes seções do manual

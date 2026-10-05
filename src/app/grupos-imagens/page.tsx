@@ -380,6 +380,51 @@ export default function GruposImagensPage() {
     else showToast(`${okCount} movida(s), ${failed.length} falharam (${failed.join(', ')})`, true)
   }
 
+  // ── Renomear/mover uma pasta inteira ──────────────────────────
+  // Pedido explícito do usuário: "Quero poder renomear uma pasta, é
+  // possível?" — R2/S3 não tem rename de pasta nativo, a rota
+  // /rename-folder copia toda a subárvore pro destino novo e só então
+  // apaga a origem. Depois de um rename bem-sucedido, a navegação volta
+  // pra raiz (loadRoot) em vez de só recarregar as colunas abertas — o
+  // caminho da pasta renomeada pode não existir mais exatamente como
+  // estava, então recomeçar do zero é mais seguro que tentar remendar o
+  // estado de navegação atual.
+  const [renameFolderTarget, setRenameFolderTarget] = useState<{ fromPath: string } | null>(null)
+  const [renameFolderToPath, setRenameFolderToPath] = useState('')
+  const [renameFolderSaving, setRenameFolderSaving] = useState(false)
+  const [renameFolderError, setRenameFolderError] = useState('')
+
+  const openRenameFolder = (colIdx: number, name: string) => {
+    const fromPath = [...pathSegments.slice(0, colIdx), name].join('/')
+    setRenameFolderTarget({ fromPath })
+    setRenameFolderToPath(fromPath)
+    setRenameFolderError('')
+  }
+
+  const submitRenameFolder = async () => {
+    if (!renameFolderTarget) return
+    const toPath = renameFolderToPath.trim()
+    if (toPath === renameFolderTarget.fromPath) { setRenameFolderError('O destino é igual à origem — nada a fazer'); return }
+    setRenameFolderSaving(true)
+    setRenameFolderError('')
+    try {
+      const res = await fetch('/api/r2-images/rename-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: user.id, path: renameFolderTarget.fromPath, toPath }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setRenameFolderError(json.error || 'Falha ao renomear a pasta'); return }
+      setRenameFolderTarget(null)
+      showToast(`Pasta renomeada/movida (${json.moved ?? 0} imagem(ns))`)
+      loadRoot()
+    } catch {
+      setRenameFolderError('Falha de rede ao renomear a pasta')
+    } finally {
+      setRenameFolderSaving(false)
+    }
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!user.isAdmin) {
@@ -440,16 +485,29 @@ export default function GruposImagensPage() {
               {col.folders.map(name => {
                 const isSelected = pathSegments[i] === name
                 return (
-                  <button
+                  <div
                     key={name}
-                    onClick={() => selectAt(i, name)}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
-                      isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-on-surface-variant hover:bg-surface-container-high'
+                    className={`group w-full flex items-center transition-colors ${
+                      isSelected ? 'bg-primary/10' : 'hover:bg-surface-container-high'
                     }`}
                   >
-                    <span className="text-outline">🗀</span>
-                    <span className="truncate">{name}</span>
-                  </button>
+                    <button
+                      onClick={() => selectAt(i, name)}
+                      className={`flex-1 min-w-0 flex items-center gap-2 px-3 py-1.5 text-left text-xs ${
+                        isSelected ? 'text-primary font-semibold' : 'text-on-surface-variant'
+                      }`}
+                    >
+                      <span className="text-outline">🗀</span>
+                      <span className="truncate">{name}</span>
+                    </button>
+                    <button
+                      onClick={() => openRenameFolder(i, name)}
+                      title="Renomear/mover esta pasta"
+                      className="shrink-0 px-2 text-outline hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ✎
+                    </button>
+                  </div>
                 )
               })}
             </div>
@@ -743,6 +801,49 @@ export default function GruposImagensPage() {
                 className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
               >
                 {bulkMoveSaving ? 'Movendo…' : 'Mover'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up Renomear pasta */}
+      {renameFolderTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setRenameFolderTarget(null)}>
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <span className="text-base font-semibold text-on-surface">Renomear / mover pasta</span>
+            </div>
+            <div className="px-5 py-4 flex flex-col gap-3">
+              <p className="text-xs text-outline">
+                De: <span className="font-mono text-on-surface">{renameFolderTarget.fromPath}</span> — move todo o
+                conteúdo (qualquer profundidade) pro caminho novo. Se já existir alguma coisa no destino, a operação
+                é recusada (escolha outro caminho, ou mova/limpe o destino primeiro).
+              </p>
+              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+                Novo caminho
+                <input
+                  value={renameFolderToPath}
+                  onChange={e => setRenameFolderToPath(e.target.value)}
+                  placeholder="ex: Acessórios/CAMERAS"
+                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
+                />
+              </label>
+              {renameFolderError && (
+                <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {renameFolderError}</div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-outline-variant">
+              <button type="button" onClick={() => setRenameFolderTarget(null)} disabled={renameFolderSaving} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitRenameFolder}
+                disabled={renameFolderSaving || !renameFolderToPath.trim()}
+                className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
+              >
+                {renameFolderSaving ? 'Movendo…' : 'Confirmar'}
               </button>
             </div>
           </div>
