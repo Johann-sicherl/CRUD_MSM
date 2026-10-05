@@ -405,6 +405,75 @@ subárvore inteira em vez de um objeto só.
   de uma pasta-filha), então recomeçar do zero é mais simples e seguro que
   tentar remendar o estado de navegação em cascata.
 
+### Remover uma pasta inteira
+
+Pedido explícito do usuário: "Quero poder deletar uma pasta por completo."
+Mesmo espírito do delete de uma imagem avulsa (backup automático antes de
+apagar), só que pra subárvore inteira, e mesma ordem segura de
+`renameFolder` (backup de TUDO primeiro, só apaga depois que todas as
+cópias de segurança deram certo).
+
+- **`deleteFolder(folderPath)`** (`r2Images.ts`) — lista todos os objetos
+  sob o prefixo (`listAllObjectsUnderPrefix`, mesma função de
+  `renameFolder`/`searchAll`), copia cada um pra `_backup/<timestamp>-
+  <caminho relativo>` (um timestamp só pro lote inteiro, não um por
+  arquivo como `backupImage` faz numa substituição avulsa — mantém a cópia
+  de segurança da pasta inteira agrupada sob o mesmo prefixo, preservando
+  a subestrutura original dentro de `_backup/`), e só apaga os originais
+  depois que **todas** as cópias de segurança tiverem dado certo. Devolve
+  `{ count, backupPrefix }`.
+- **`POST /api/r2-images/delete-folder`** — `{ profileId, path }`. Recusa
+  `path` vazio (não dá pra apagar a raiz) e recusa se a pasta não tiver
+  conteúdo (404). Uma única linha em `image_change_log` por operação
+  (`action: 'delete'`, mesmo rótulo `(pasta — N imagens)` de
+  `rename-folder`, `backup_key` = o prefixo do lote de backup).
+- **Tela** — botão "🗑" (aparece ao passar o mouse, ao lado do "✎" já
+  existente) em cada pasta das caixas em cascata. Confirmação
+  (`window.confirm`) avisa que é o conteúdo inteiro, qualquer profundidade
+  — sem contar quantas imagens de antemão (saber isso exigiria uma
+  varredura completa só pra popular o texto da confirmação; o toast final,
+  depois de confirmar, já informa a contagem real). Depois de remover, a
+  navegação volta pra raiz (`loadRoot()`), mesmo motivo do rename de
+  pasta: o caminho atual pode não existir mais como estava.
+
+### Criar uma pasta vazia
+
+Pedido explícito do usuário: "Quero conseguir criar uma nova pasta
+também." Até aqui, uma pasta só "nascia" implicitamente ao enviar a
+primeira imagem pra um caminho novo (ver "Por que não existe uma tabela
+'Grupos de Imagens'" acima) — isso continua valendo, mas agora também dá
+pra criar uma pasta vazia explicitamente, sem precisar enviar nada ainda.
+
+- **`createFolder(folderPath)`** (`r2Images.ts`) — como o S3/R2 não tem
+  pasta de verdade, isso é o truque padrão também usado por ferramentas
+  tipo AWS Console/Cyberduck: um objeto de 0 bytes cuja chave termina em
+  `/`. Listado com `Delimiter`, essa chave vira um `CommonPrefix` (aparece
+  como pasta em `browseFolder`) em vez de aparecer como arquivo. Ao
+  navegar **pra dentro** dela, o próprio marcador aparece como uma chave
+  igual ao prefixo consultado (`fileName` vazio depois do corte) — já é
+  descartado pela checagem de segurança que `browseFolder` sempre teve
+  (`if (!fileName) continue`, documentada como "a própria pasta, nunca
+  deveria vir, mas por segurança"), então a pasta nova aparece
+  corretamente vazia (0 imagens) até alguém enviar algo de verdade pra lá.
+  Níveis intermediários não precisam de marcador próprio — criar
+  diretamente `"A/B/C"` já faz `"A"` e `"A/B"` aparecerem sozinhos na
+  cascata, porque o cálculo de `CommonPrefixes` do S3 deriva isso da
+  própria estrutura da chave, independente da profundidade (mesmo
+  comportamento que já valia pra pastas "nascidas" via upload).
+- **`POST /api/r2-images/create-folder`** — `{ profileId, path }`. Recusa
+  `path` vazio e recusa se já existir conteúdo nesse caminho (409 — nunca
+  sobrescreve uma pasta já existente). Uma linha em `image_change_log`
+  (`action: 'upload'`, `fileName: '(pasta vazia criada)'`) — não existe um
+  tipo de ação dedicado pra "criar pasta" no enum (`upload`/`replace`/
+  `rename`/`delete`), e isto é estruturalmente mais parecido com um
+  "adicionar" do que com os outros três.
+- **Tela** — botão "+ Nova pasta" ao lado de "+ Adicionar imagem" (só
+  aparece na navegação normal, não durante uma busca — criar pasta não faz
+  sentido em cima de um resultado de busca). Pop-up com um único campo
+  "Caminho" (pré-preenchido com o caminho atual, texto livre, qualquer
+  profundidade). Depois de criar, navega direto pra dentro da pasta nova
+  (`loadPath`), em vez de só recarregar onde já estava.
+
 ### Busca global (pastas + imagens, bucket inteiro)
 
 Pedido explícito do usuário: "Quero que você adicione um filtro de

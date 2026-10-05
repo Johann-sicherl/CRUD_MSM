@@ -508,6 +508,75 @@ export default function GruposImagensPage() {
     }
   }
 
+  // ── Remover uma pasta inteira ──────────────────────────────────
+  // Pedido explícito do usuário: "Quero poder deletar uma pasta por
+  // completo." Mesmo espírito de deletar uma imagem avulsa (backup
+  // automático antes de apagar), só que pra subárvore inteira — ver
+  // deleteFolder em r2Images.ts. Depois de remover, volta pra raiz
+  // (loadRoot), mesmo motivo do rename de pasta: o caminho atual pode não
+  // existir mais como estava.
+  const [deletingFolder, setDeletingFolder] = useState<string | null>(null)
+  const removeFolder = async (colIdx: number, name: string) => {
+    const path = [...pathSegments.slice(0, colIdx), name].join('/')
+    const ok = window.confirm(`Remover a pasta "${path}" e TODO o conteúdo dela (qualquer profundidade)? Uma cópia de segurança é guardada no bucket pra cada imagem, mas a pasta some do ar imediatamente.`)
+    if (!ok) return
+    setDeletingFolder(path)
+    try {
+      const res = await fetch('/api/r2-images/delete-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: user.id, path }),
+      })
+      const json = await res.json()
+      if (!res.ok) { showToast(json.error || 'Falha ao remover a pasta', true); return }
+      showToast(`Pasta removida (${json.count ?? 0} imagem(ns))`)
+      loadRoot()
+    } catch {
+      showToast('Falha de rede ao remover a pasta', true)
+    } finally {
+      setDeletingFolder(null)
+    }
+  }
+
+  // ── Criar pasta vazia ──────────────────────────────────────────
+  // Pedido explícito do usuário: "Quero conseguir criar uma nova pasta
+  // também" — até aqui uma pasta só "nascia" implicitamente ao enviar a
+  // primeira imagem; agora dá pra criar uma vazia (ver createFolder em
+  // r2Images.ts). Depois de criar, navega direto pra dentro dela.
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
+  const [newFolderPath, setNewFolderPath] = useState('')
+  const [newFolderSaving, setNewFolderSaving] = useState(false)
+  const [newFolderError, setNewFolderError] = useState('')
+
+  const openNewFolder = () => {
+    setNewFolderPath(currentPath)
+    setNewFolderError('')
+    setNewFolderOpen(true)
+  }
+
+  const submitNewFolder = async () => {
+    const path = newFolderPath.trim()
+    if (!path) { setNewFolderError('Informe o caminho da nova pasta'); return }
+    setNewFolderSaving(true)
+    setNewFolderError('')
+    try {
+      const res = await fetch('/api/r2-images/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: user.id, path }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setNewFolderError(json.error || 'Falha ao criar a pasta'); return }
+      setNewFolderOpen(false)
+      showToast('Pasta criada')
+      loadPath(path.split('/'))
+    } catch {
+      setNewFolderError('Falha de rede ao criar a pasta')
+    } finally {
+      setNewFolderSaving(false)
+    }
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!user.isAdmin) {
@@ -682,6 +751,14 @@ export default function GruposImagensPage() {
                     >
                       ✎
                     </button>
+                    <button
+                      onClick={() => removeFolder(i, name)}
+                      disabled={deletingFolder === [...pathSegments.slice(0, i), name].join('/')}
+                      title="Remover esta pasta e todo o conteúdo dela"
+                      className="shrink-0 px-2 text-outline hover:text-error opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-100 disabled:text-error"
+                    >
+                      {deletingFolder === [...pathSegments.slice(0, i), name].join('/') ? '…' : '🗑'}
+                    </button>
                   </div>
                 )
               })}
@@ -729,6 +806,12 @@ export default function GruposImagensPage() {
               className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
             >
               {changesOpen ? 'Ocultar' : 'Ver'} histórico de alterações
+            </button>
+            <button
+              onClick={openNewFolder}
+              className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+            >
+              + Nova pasta
             </button>
             <button
               onClick={openAddForm}
@@ -1021,6 +1104,48 @@ export default function GruposImagensPage() {
                 className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
               >
                 {renameFolderSaving ? 'Movendo…' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up Nova pasta */}
+      {newFolderOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setNewFolderOpen(false)}>
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <span className="text-base font-semibold text-on-surface">Nova pasta</span>
+            </div>
+            <div className="px-5 py-4 flex flex-col gap-3">
+              <p className="text-xs text-outline">
+                Caminho completo da pasta nova (ex: Acessórios/CAMERAS) — pode ter qualquer profundidade. Fica vazia
+                até a primeira imagem ser enviada pra lá.
+              </p>
+              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+                Caminho
+                <input
+                  value={newFolderPath}
+                  onChange={e => setNewFolderPath(e.target.value)}
+                  placeholder="ex: Acessórios/CAMERAS"
+                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
+                />
+              </label>
+              {newFolderError && (
+                <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {newFolderError}</div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-outline-variant">
+              <button type="button" onClick={() => setNewFolderOpen(false)} disabled={newFolderSaving} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitNewFolder}
+                disabled={newFolderSaving || !newFolderPath.trim()}
+                className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
+              >
+                {newFolderSaving ? 'Criando…' : 'Criar'}
               </button>
             </div>
           </div>

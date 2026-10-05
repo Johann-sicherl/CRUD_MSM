@@ -225,6 +225,30 @@ export async function uploadImage(
   }))
 }
 
+// Cria uma pasta vazia — pedido explícito do usuário: "Quero conseguir
+// criar uma nova pasta também" (até aqui, uma pasta só "nascia"
+// implicitamente ao enviar a primeira imagem pra um caminho novo). No S3/R2
+// não existe pasta de verdade (ver "Terminologia" em specs/imagens-r2.md),
+// então isso é um truque padrão também usado por ferramentas tipo AWS
+// Console/Cyberduck: um objeto de 0 bytes cuja chave termina em "/" —
+// listado com Delimiter, essa chave vira um CommonPrefix (aparece como
+// pasta em browseFolder) em vez de aparecer como arquivo. Ao navegar PRA
+// DENTRO dela, o próprio marcador aparece como uma chave igual ao prefixo
+// consultado (fileName vazio) — já é descartado pela checagem de
+// segurança que browseFolder já tinha (`if (!fileName) continue`), então a
+// pasta nova aparece corretamente vazia (0 imagens) até alguém enviar algo
+// de verdade pra lá.
+export async function createFolder(folderPath: string): Promise<void> {
+  const normalized = normalizeFolderPath(folderPath)
+  if (!normalized) throw new Error('Informe um caminho de pasta')
+  const client = getClient()
+  await client.send(new PutObjectCommand({
+    Bucket: getBucket(),
+    Key: `${getBasePrefix()}${normalized}/`,
+    Body: Buffer.alloc(0),
+  }))
+}
+
 // Copia um objeto pra outra chave — usado tanto pra renomear (copy + delete
 // do original, já que o S3/R2 não tem "rename" de verdade, mesma razão do
 // rclone usar moveto) quanto pra guardar uma cópia de segurança antes de
@@ -325,6 +349,45 @@ export async function renameFolder(fromFolderPath: string, toFolderPath: string)
     await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
   }
   return keys.length
+}
+
+export interface DeleteFolderResult {
+  count: number
+  backupPrefix: string
+}
+
+// Remove uma pasta inteira (qualquer profundidade) — pedido explícito do
+// usuário: "Quero poder deletar uma pasta por completo." Mesma ordem
+// segura de renameFolder: faz backup de TUDO primeiro, só apaga depois que
+// todas as cópias de segurança deram certo — se uma cópia falhar no meio,
+// a função lança antes de apagar qualquer coisa, a pasta original fica
+// 100% intacta. Um timestamp só pra todo o lote (não um por arquivo, como
+// backupImage faz pra uma substituição avulsa) — mantém a cópia de
+// segurança inteira agrupada sob o mesmo prefixo, preservando a
+// subestrutura original dentro de `_backup/`.
+export async function deleteFolder(folderPath: string): Promise<DeleteFolderResult> {
+  const normalized = normalizeFolderPath(folderPath)
+  const base = getBasePrefix()
+  const prefix = normalized ? `${base}${normalized}/` : base
+  const client = getClient()
+  const bucket = getBucket()
+
+  const objects = await listAllObjectsUnderPrefix(prefix)
+  const ts = Date.now()
+  const backupPrefix = `_backup/${ts}-`
+  const backupKeys = objects.map(o => `${backupPrefix}${o.key.slice(base.length)}`)
+
+  for (let i = 0; i < objects.length; i++) {
+    await client.send(new CopyObjectCommand({
+      Bucket: bucket,
+      Key: backupKeys[i],
+      CopySource: `${bucket}/${objects[i].key.split('/').map(encodeURIComponent).join('/')}`,
+    }))
+  }
+  for (const o of objects) {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: o.key }))
+  }
+  return { count: objects.length, backupPrefix }
 }
 
 export interface SearchFileResult {
