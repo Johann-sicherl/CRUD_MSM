@@ -171,17 +171,17 @@ function ProtheusLoginModal({ onClose, onConnect }: {
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
             />
           </label>
-          <div className="flex items-center justify-between gap-2 mt-2">
+          <div className="flex flex-col gap-2 mt-2">
             <button
               type="button"
               onClick={handleLocalLogin}
               disabled={testing || localTesting}
               title="Lê usuário e senha de local-data/local-access.txt (ver local-access.example.txt)"
-              className="px-3 py-1.5 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
+              className="w-full px-3 py-1 text-xs border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
             >
               {localTesting ? 'Conectando…' : '📁 Entrar com Dados Locais'}
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
               <button type="button" onClick={onClose} disabled={testing || localTesting} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
                 Agora não
               </button>

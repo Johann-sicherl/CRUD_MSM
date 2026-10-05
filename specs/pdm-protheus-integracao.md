@@ -106,6 +106,13 @@ uma vez, nesta máquina.
   abaixo). Os pop-ups continuam exatamente como eram antes (campos, texto,
   botões "Agora não"/"Conectar") — só o botão novo foi adicionado, nada
   removido/alterado no fluxo manual existente.
+  **Layout do botão, pedido explícito do usuário numa rodada seguinte**:
+  "Entrar com Dados Locais" ocupa a largura inteira do pop-up, numa linha
+  própria acima (`w-full`, texto menor — `text-xs` em vez de `text-sm`,
+  mais discreto por ser uma conveniência, não a ação principal) e
+  "Agora não"/"Conectar" ficam numa segunda linha abaixo, lado a lado —
+  antes os três ficavam todos na mesma linha (`justify-between`), o que
+  deixava o botão local espremido ao lado dos outros dois.
 
 **Risco encontrado e corrigido antes de considerar a tarefa concluída**:
 as duas rotas novas (`GET` sem nenhum parâmetro, sem tocar
