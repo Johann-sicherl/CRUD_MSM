@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidFileName, isValidFolderPath, imageExists, copyImage, deleteImage } from '@/lib/r2Images'
+import { isValidFileName, isValidFolderPath, imageExists, copyImage, deleteImage, folderHasContent, createFolder } from '@/lib/r2Images'
 import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
@@ -45,6 +45,22 @@ export async function POST(request: NextRequest) {
 
     await copyImage(path, fileName, toPath, toFileName)
     await deleteImage(path, fileName)
+
+    // Se a imagem saiu de verdade da pasta de origem (não só trocou de nome
+    // dentro dela) e a origem ficou sem nenhum conteúdo, cria um marcador
+    // vazio pra ela não sumir da cascata — pedido explícito do usuário: "Não
+    // quero isso" (que mover a última imagem de uma pasta apague a pasta
+    // sozinha). No S3/R2 uma pasta só existe enquanto tiver algum objeto
+    // com aquele prefixo (ver "Terminologia"/`createFolder` em
+    // specs/imagens-r2.md) — sem isso, esvaziar uma pasta via mover é
+    // indistinguível, pro bucket, de ela nunca ter existido. Best-effort:
+    // nunca derruba o move em si, que já teve sucesso.
+    if (path && path !== toPath) {
+      try {
+        const stillHasContent = await folderHasContent(path)
+        if (!stillHasContent) await createFolder(path)
+      } catch { /* preservar a pasta vazia é best-effort */ }
+    }
 
     try {
       await recordImageChange({ action: 'rename', folderPath: path, fileName, toFolderPath: toPath, toFileName, profile })
