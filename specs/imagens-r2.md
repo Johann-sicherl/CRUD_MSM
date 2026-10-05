@@ -361,27 +361,35 @@ Dois caminhos, mesma rota por trás (`POST /rename`):
   continuam normalmente; toast final resume quantas moveram e lista os
   nomes que falharam.
 
-**A pasta de origem nunca "some sozinha" ao ser esvaziada por um move —
-pedido explícito do usuário**: "É de conveniência do R2 ter o
-comportamento de que se eu movo todas as imagens de uma pasta para outra,
-essa pasta é automaticamente deletada? Não quero isso." Resposta: não é um
-"apagar automático" do app, é consequência direta de pasta não ser uma
-entidade real no S3/R2 (ver "Terminologia" acima) — esvaziar uma pasta via
-move é indistinguível, pro bucket, de ela nunca ter existido. Corrigido em
-`POST /api/r2-images/rename`: depois do copy+delete, se a imagem saiu de
-verdade da pasta de origem (`path !== toPath`, não só trocou de nome
-dentro da mesma pasta) e a origem ficou sem nenhum conteúdo
-(`!folderHasContent(path)`), cria automaticamente um marcador vazio ali
-(`createFolder`, mesmo mecanismo de "+ Nova pasta" acima) — best-effort,
-nunca derruba o move em si, que já teve sucesso. Como o botão "Mover
-selecionadas (N)" já chama essa mesma rota uma vez por imagem, sequencial,
-essa correção cobre os dois casos automaticamente (uma imagem só, ou o
-lote inteiro) sem nenhum código extra do lado do cliente — só a última
-imagem a sair de uma pasta é que de fato dispara a criação do marcador.
-**Decisão de escopo**: só o fluxo de mover — excluir (individual ou em
-lote) a última imagem de uma pasta continua esvaziando-a de verdade, sem
-preservar marcador nenhum; isso é intencional (apagar é apagar), o usuário
-só pediu sobre mover.
+**A pasta de origem nunca "some sozinha" ao ser esvaziada por um move ou
+por uma exclusão — pedido explícito do usuário**: "É de conveniência do R2
+ter o comportamento de que se eu movo todas as imagens de uma pasta para
+outra, essa pasta é automaticamente deletada? Não quero isso." Resposta:
+não é um "apagar automático" do app, é consequência direta de pasta não
+ser uma entidade real no S3/R2 (ver "Terminologia" acima) — esvaziar uma
+pasta via move (ou via exclusão) é indistinguível, pro bucket, de ela
+nunca ter existido. Corrigido primeiro em `POST /api/r2-images/rename`:
+depois do copy+delete, se a imagem saiu de verdade da pasta de origem
+(`path !== toPath`, não só trocou de nome dentro da mesma pasta) e a
+origem ficou sem nenhum conteúdo (`!folderHasContent(path)`), cria
+automaticamente um marcador vazio ali (`createFolder`, mesmo mecanismo de
+"+ Nova pasta" acima) — best-effort, nunca derruba o move em si, que já
+teve sucesso. Como o botão "Mover selecionadas (N)" já chama essa mesma
+rota uma vez por imagem, sequencial, essa correção cobre os dois casos
+automaticamente (uma imagem só, ou o lote inteiro) sem nenhum código extra
+do lado do cliente — só a última imagem a sair de uma pasta é que de fato
+dispara a criação do marcador.
+
+**Rodada seguinte, pedido explícito do usuário**: "Faz o mesmo quando
+excluir a última imagem também" — a mesma proteção foi replicada em
+`POST /api/r2-images/delete`, depois do `backupImage`+`deleteImage`: se a
+pasta ficou sem nenhum conteúdo depois da remoção, cria o mesmo marcador
+vazio ali. Como "Excluir selecionadas (N)" (exclusão em lote) já chama
+essa mesma rota uma vez por imagem, sequencial, esta correção também cobre
+os dois casos (uma imagem só, ou o lote inteiro) sem código extra do lado
+do cliente. Não sobrou nenhuma decisão de escopo "só move, não delete" —
+as duas operações que podem esvaziar uma pasta por completo (mover tudo
+pra fora, ou excluir tudo) agora preservam ela da mesma forma.
 
 ### Renomear/mover uma pasta inteira
 

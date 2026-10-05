@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidFileName, isValidFolderPath, imageExists, deleteImage, backupImage } from '@/lib/r2Images'
+import { isValidFileName, isValidFolderPath, imageExists, deleteImage, backupImage, folderHasContent, createFolder } from '@/lib/r2Images'
 import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
@@ -27,6 +27,18 @@ export async function POST(request: NextRequest) {
 
     const backupKey = await backupImage(path, fileName)
     await deleteImage(path, fileName)
+
+    // Mesma proteção do move (ver POST /rename) — pedido explícito do
+    // usuário: "Faz o mesmo quando excluir a última imagem também". Se a
+    // pasta ficou sem nenhum conteúdo depois dessa remoção, cria um
+    // marcador vazio ali pra ela não sumir sozinha da cascata. Best-effort:
+    // nunca derruba a remoção em si, que já teve sucesso.
+    if (path) {
+      try {
+        const stillHasContent = await folderHasContent(path)
+        if (!stillHasContent) await createFolder(path)
+      } catch { /* preservar a pasta vazia é best-effort */ }
+    }
 
     try {
       await recordImageChange({ action: 'delete', folderPath: path, fileName, backupKey, profile })
