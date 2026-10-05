@@ -48,11 +48,20 @@ uma vez, nesta máquina.
     não usadas pelo app — o `.example.txt` deliberadamente não inclui mais
     nada dentro do `[r2]`, pra ficar idêntico ao bloco que a TI fornece).
     `parseLocalAccessFile` (`localCredentials.ts`) reconhece a seção `[r2]`
-    e mapeia `access_key_id`/`secret_access_key` pros nomes internos
-    (`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`) que `r2Images.ts` já lia —
-    **`endpoint` é a única fonte do Account ID** (o `rclone.conf` nunca tem
-    um campo `account_id` separado): extraído da própria URL
-    (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) via regex.
+    e mapeia `access_key_id`/`secret_access_key`/`endpoint` pros nomes
+    internos (`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_ENDPOINT`) que
+    `r2Images.ts` lê — **`endpoint` é guardado exatamente como escrito no
+    arquivo**, nunca decomposto/reconstruído. **Bug real já corrigido**: a
+    1ª versão tentava extrair um "Account ID" do `endpoint` via regex
+    (`https://<ID>.r2.cloudflarestorage.com`) e reconstruía a URL a partir
+    dele — quebrava silenciosamente (erro "R2_ACCOUNT_ID não configurada",
+    mesmo com o `endpoint` preenchido) sempre que a URL real não batia
+    exatamente com esse formato, por exemplo com um sufixo de jurisdição
+    que a Cloudflare às vezes usa (`https://<id>.eu.r2.cloudflarestorage.com`,
+    `.fips.`). Corrigido usando o `endpoint` direto, sem regex nenhum —
+    `getEndpoint()` (`r2Images.ts`) só cai de volta pra montar a URL a
+    partir de `R2_ACCOUNT_ID` (env var antiga, formato `.env.local`) quando
+    nenhum `R2_ENDPOINT` foi encontrado em nenhuma das duas fontes.
     `R2_BUCKET`/`R2_PUBLIC_BASE_URL` **não fazem parte** do bloco da TI —
     continuam vindo só do `.env.local` (`R2_BUCKET` tem default
     `images-msm` se omitido; `R2_PUBLIC_BASE_URL` precisa estar em algum

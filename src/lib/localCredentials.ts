@@ -23,18 +23,22 @@ const FILE_PATH = path.join(process.cwd(), 'local-data', 'local-access.txt')
 // rclone, sem reescrever à mão. Mapeia as chaves padrão do rclone pros
 // nomes internos que r2Images.ts já lê via getLocalValue. Protheus/PDM
 // continuam fora de seção, formato flat de sempre (PROTHEUS_USER=...).
+// Mapeamento direto, sem nenhuma tentativa de decompor/reconstruir valor —
+// "endpoint" é guardado como R2_ENDPOINT, igual ao texto que a TI forneceu,
+// e r2Images.ts usa essa URL direto (ver getEndpoint() lá). Achado real: a
+// 1ª versão tentava extrair um "Account ID" do endpoint via regex e
+// reconstruía a URL a partir dele — quebrava silenciosamente sempre que o
+// endpoint real não batia exatamente com o formato esperado pelo regex
+// (ex.: sufixo de jurisdição .eu./.fips. que a Cloudflare às vezes usa).
+// Guardar o valor como veio evita essa classe inteira de bug.
 const R2_SECTION_KEY_MAP: Record<string, string> = {
   access_key_id: 'R2_ACCESS_KEY_ID',
   secret_access_key: 'R2_SECRET_ACCESS_KEY',
+  endpoint: 'R2_ENDPOINT',
   bucket: 'R2_BUCKET',
   public_base_url: 'R2_PUBLIC_BASE_URL',
   base_prefix: 'R2_BASE_PREFIX',
 }
-
-// "endpoint" do rclone (https://<ACCOUNT_ID>.r2.cloudflarestorage.com) é
-// de onde o Account ID é extraído — o rclone.conf nunca tem um campo
-// "account_id" separado, só o endpoint completo.
-const R2_ENDPOINT_RE = /^https?:\/\/([^./]+)\.r2\.cloudflarestorage\.com/i
 
 function parseLocalAccessFile(raw: string): Record<string, string> {
   const result: Record<string, string> = {}
@@ -54,13 +58,7 @@ function parseLocalAccessFile(raw: string): Record<string, string> {
     if (!key) continue
 
     if (section === 'r2') {
-      const lowerKey = key.toLowerCase()
-      if (lowerKey === 'endpoint') {
-        const match = value.match(R2_ENDPOINT_RE)
-        if (match) result.R2_ACCOUNT_ID = match[1]
-        continue
-      }
-      const mapped = R2_SECTION_KEY_MAP[lowerKey]
+      const mapped = R2_SECTION_KEY_MAP[key.toLowerCase()]
       if (mapped) result[mapped] = value
       // demais chaves do rclone (type, provider, region, no_check_bucket)
       // são só informativas aqui — não usadas por r2Images.ts, ignoradas.

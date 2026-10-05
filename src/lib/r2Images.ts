@@ -33,12 +33,27 @@ function envOrLocal(name: string): string {
   return v
 }
 
+// R2_ENDPOINT é a URL completa (ex.: https://<account_id>.r2.cloudflarestorage.com,
+// ou com sufixo de jurisdição tipo .eu./.fips. que a Cloudflare às vezes usa)
+// exatamente como a TI fornece no bloco [r2] do rclone.conf — usada direto,
+// sem tentar decompor/reconstruir a partir de um "Account ID" separado
+// (achado real: a 1ª versão extraía o Account ID do endpoint via regex e
+// reconstruía a URL; isso quebrava silenciosamente em qualquer formato de
+// endpoint que não fosse exatamente "https://<id>.r2.cloudflarestorage.com"
+// sem segmento extra). R2_ACCOUNT_ID continua aceito como alternativa (quem
+// só tem o Account ID, não a URL completa — ex. configurado direto no
+// .env.local) — só quando R2_ENDPOINT não está definido em nenhuma fonte.
+function getEndpoint(): string {
+  const direct = process.env.R2_ENDPOINT || getLocalValue('R2_ENDPOINT')
+  if (direct) return direct.endsWith('/') ? direct.slice(0, -1) : direct
+  return `https://${envOrLocal('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`
+}
+
 function getClient(): S3Client {
   if (_client) return _client
-  const accountId = envOrLocal('R2_ACCOUNT_ID')
   _client = new S3Client({
     region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    endpoint: getEndpoint(),
     credentials: {
       accessKeyId: envOrLocal('R2_ACCESS_KEY_ID'),
       secretAccessKey: envOrLocal('R2_SECRET_ACCESS_KEY'),

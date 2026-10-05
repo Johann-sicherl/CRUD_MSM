@@ -140,9 +140,10 @@ bloco `[r2]` que a TI fornece pro `rclone.conf`** (`type`, `provider`,
 pedido explícito do usuário, confirmado com o texto literal que a TI já
 passou pra ele, pra poder colar direto sem reescrever nada.
 `R2_BUCKET`/`R2_PUBLIC_BASE_URL` não fazem parte desse bloco (não existem
-no `rclone.conf` padrão) — continuam só no `.env.local`. Detalhe completo
-(mapeamento de chave, extração do Account ID a partir do `endpoint`) em
-`specs/pdm-protheus-integracao.md`, seção "Credenciais locais...".
+no `rclone.conf` padrão) — continuam só no `.env.local`. O `endpoint` é
+usado direto, nunca decomposto num "Account ID" separado (bug real já
+corrigido — ver detalhe completo em `specs/pdm-protheus-integracao.md`,
+seção "Credenciais locais...").
 
 **`R2_PUBLIC_BASE_URL` não tem um valor hardcoded de propósito**: o manual
 enviado pelo usuário tem duas grafias diferentes pro mesmo domínio
