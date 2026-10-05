@@ -288,7 +288,12 @@ o que cada linha significa.
   a próxima à direita (e descarta qualquer coluna mais funda que já
   existisse). Sem botão "subir" — ver "Navegação tipo Windows Explorer"
   acima pro histórico de por que isso mudou de um painel único pra caixas
-  em cascata.
+  em cascata. **3ª rodada, pedido explícito do usuário**: "não quero ver
+  isso [a caixa com 'Sem subpastas.'], quero ver só se tiver alguma
+  subpasta mesmo" — uma coluna só é renderizada quando `col.folders.length
+  > 0`; `columns` continua guardando a entrada mesmo vazia (preserva o
+  índice usado por `pathSegments`/`selectAt`), só a caixa em si não
+  aparece quando não há nenhuma subpasta pra mostrar.
 - Abaixo das caixas: grade de cartões por imagem do caminho selecionado
   (miniatura via `<img>` direto na URL pública, nome, tamanho, data, link
   "Abrir", e os três botões Substituir/Renomear/Remover).

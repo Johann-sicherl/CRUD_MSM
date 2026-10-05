@@ -324,33 +324,32 @@ export default function GruposImagensPage() {
         <button onClick={refreshAll} title="Recarregar" className="ml-auto text-outline hover:text-primary">⟳</button>
       </div>
 
-      {/* Caixas em cascata, uma por nível — clicar numa pasta abre a próxima caixa à direita */}
+      {/* Caixas em cascata, uma por nível — clicar numa pasta abre a próxima caixa à direita.
+          Só mostra a caixa quando o nível tem pelo menos uma subpasta de verdade — pedido
+          explícito do usuário: "não quero ver isso [Sem subpastas], quero ver só se tiver
+          alguma subpasta mesmo". */}
       <div className="flex gap-3 overflow-x-auto pb-2 mb-6">
-        {columns.map((col, i) => (
+        {columns.map((col, i) => col.folders.length === 0 ? null : (
           <div key={i} className="shrink-0 w-56 bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-outline-variant text-xs font-bold uppercase tracking-wide text-on-surface-variant truncate">
               {i === 0 ? '🗀 Raiz' : pathSegments[i - 1]}
             </div>
             <div className="max-h-[50vh] overflow-y-auto">
-              {col.folders.length === 0 ? (
-                <div className="p-3 text-xs text-outline italic">Sem subpastas.</div>
-              ) : (
-                col.folders.map(name => {
-                  const isSelected = pathSegments[i] === name
-                  return (
-                    <button
-                      key={name}
-                      onClick={() => selectAt(i, name)}
-                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
-                        isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-on-surface-variant hover:bg-surface-container-high'
-                      }`}
-                    >
-                      <span className="text-outline">🗀</span>
-                      <span className="truncate">{name}</span>
-                    </button>
-                  )
-                })
-              )}
+              {col.folders.map(name => {
+                const isSelected = pathSegments[i] === name
+                return (
+                  <button
+                    key={name}
+                    onClick={() => selectAt(i, name)}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                      isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-on-surface-variant hover:bg-surface-container-high'
+                    }`}
+                  >
+                    <span className="text-outline">🗀</span>
+                    <span className="truncate">{name}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         ))}
