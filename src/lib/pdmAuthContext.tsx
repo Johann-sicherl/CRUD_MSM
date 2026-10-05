@@ -131,10 +131,6 @@ function PdmLoginModal({ onClose, onConnect }: {
           className="p-5 flex flex-col gap-3"
           onSubmit={handleSubmit}
         >
-          <p className="text-sm text-on-surface-variant">
-            Informe seu usuário e senha do SQL Server do PDM (base VMI, servidor srvvmis03) — usada pela tela
-            Consulta PDM x Banco MSM. Nada fica salvo; cada consulta abre e fecha sua própria conexão.
-          </p>
           {error && (
             <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">
               ⚠ {error}
