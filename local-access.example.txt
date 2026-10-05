@@ -26,19 +26,21 @@ PDM_USER=
 PDM_PASSWORD=
 
 # ── Cloudflare R2 (bucket images-msm — ver specs/imagens-r2.md) ─────
-# Mesmo formato do rclone.conf — se você já tem a configuração do rclone
-# (ver manual da TI), pode colar o bloco [r2] de lá direto aqui. "bucket"
-# e "public_base_url" não existem no rclone.conf padrão (no rclone o
-# bucket vai no caminho do remote, não no config) — são extras que só
-# este app usa; se deixar em branco, assume os defaults de sempre
-# (images-msm / https://images-msm.vmisecurity.com).
+# Bloco exatamente igual ao que a TI fornece pro rclone.conf — se você já
+# tem a configuração do rclone, cole o bloco [r2] de lá direto aqui, sem
+# adicionar nenhuma linha extra.
 [r2]
-type = s3
-provider = Cloudflare
+type =
+provider =
 access_key_id =
 secret_access_key =
-endpoint = https://xxxxxxx.r2.cloudflarestorage.com
-region = auto
-no_check_bucket = true
-bucket = images-msm
-public_base_url = https://images-msm.vmisecurity.com
+endpoint =
+region =
+no_check_bucket =
+
+# R2_BUCKET/R2_PUBLIC_BASE_URL não fazem parte do bloco da TI acima —
+# configure-os no .env.local (ver specs/imagens-r2.md). R2_BUCKET pode
+# ficar de fora (assume "images-msm" por padrão); R2_PUBLIC_BASE_URL
+# precisa estar em algum dos dois lugares, senão a tela "Grupos de
+# Imagens" não funciona (de propósito — grafia de domínio ambígua, nunca
+# chuta um valor).

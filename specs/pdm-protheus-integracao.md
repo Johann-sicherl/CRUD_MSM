@@ -38,23 +38,31 @@ uma vez, nesta máquina.
   arquivo, por seção:
   - **Protheus/PDM** — flat, `CHAVE=valor` por linha (`#` pra comentário),
     sem seção: `PROTHEUS_USER`/`PROTHEUS_PASSWORD`, `PDM_USER`/`PDM_PASSWORD`.
-  - **R2** — dentro de um bloco `[r2]`, **no mesmo formato do
-    `rclone.conf`** (chave em minúsculo, `= ` com espaço, ver manual da TI
-    em `specs/imagens-r2.md`) — pedido explícito do usuário, pra poder
-    colar direto a configuração que já existe no rclone, sem reescrever à
-    mão: `type`, `provider`, `access_key_id`, `secret_access_key`,
-    `endpoint`, `region`, `no_check_bucket` (as 3 últimas só informativas,
-    não usadas pelo app) + `bucket`/`public_base_url` (extras que só este
-    app lê — não existem no `rclone.conf` padrão, que guarda o bucket no
-    caminho do remote, não no config). `parseLocalAccessFile`
-    (`localCredentials.ts`) reconhece a seção `[r2]` e mapeia
-    `access_key_id`/`secret_access_key`/`bucket`/`public_base_url` pros
-    nomes internos (`R2_ACCESS_KEY_ID` etc.) que `r2Images.ts` já lia —
+  - **R2** — dentro de um bloco `[r2]`, **exatamente no formato que a TI
+    fornece pro `rclone.conf`** (chave em minúsculo, `= ` com espaço, ver
+    manual da TI em `specs/imagens-r2.md`) — pedido explícito do usuário,
+    confirmado com o texto literal que a TI já passou pra ele: só
+    `type`, `provider`, `access_key_id`, `secret_access_key`, `endpoint`,
+    `region`, `no_check_bucket`, nessa ordem, sem nenhuma linha extra
+    (`type`/`provider`/`region`/`no_check_bucket` são só informativas,
+    não usadas pelo app — o `.example.txt` deliberadamente não inclui mais
+    nada dentro do `[r2]`, pra ficar idêntico ao bloco que a TI fornece).
+    `parseLocalAccessFile` (`localCredentials.ts`) reconhece a seção `[r2]`
+    e mapeia `access_key_id`/`secret_access_key` pros nomes internos
+    (`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`) que `r2Images.ts` já lia —
     **`endpoint` é a única fonte do Account ID** (o `rclone.conf` nunca tem
     um campo `account_id` separado): extraído da própria URL
-    (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) via regex. Chaves
-    fora de qualquer seção continuam funcionando no formato antigo
-    (`R2_ACCOUNT_ID=...` flat), por compatibilidade — ninguém precisa
+    (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) via regex.
+    `R2_BUCKET`/`R2_PUBLIC_BASE_URL` **não fazem parte** do bloco da TI —
+    continuam vindo só do `.env.local` (`R2_BUCKET` tem default
+    `images-msm` se omitido; `R2_PUBLIC_BASE_URL` precisa estar em algum
+    dos dois lugares, senão a tela "Grupos de Imagens" não funciona — ver
+    `specs/imagens-r2.md`). O parser ainda reconhece `bucket`/
+    `public_base_url` como chaves extras *opcionais* dentro do `[r2]`, se
+    alguém preferir colocá-las ali em vez do `.env.local` — só não fazem
+    parte do template padrão. Chaves fora de qualquer seção continuam
+    funcionando no formato antigo (`R2_ACCOUNT_ID=...` flat), por
+    compatibilidade — ninguém precisa
     reescrever um arquivo já preenchido no formato anterior.
 - **`local-access.example.txt`** (raiz do repo, committed) — template
   comentado, mesmo padrão de `.env.local.example` → `.env.local`. Instrui a
