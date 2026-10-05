@@ -9,13 +9,16 @@ import type { UserProfile } from './userProfileStore'
 
 export type ImageChangeAction = 'upload' | 'replace' | 'rename' | 'delete'
 
+// folderPath é o caminho completo da pasta (profundidade livre — ver
+// r2Images.ts), não mais um par fixo Grupo/Subgrupo. group_name/
+// subgroup_name (colunas antigas, ver msm_image_change_log_folder_path.sql)
+// não são mais escritos — ficam só como histórico das linhas gravadas
+// antes dessa mudança.
 export interface ImageChangeEntry {
   action: ImageChangeAction
-  group: string
-  subgroup: string
+  folderPath: string
   fileName: string
-  toGroup?: string
-  toSubgroup?: string
+  toFolderPath?: string
   toFileName?: string
   backupKey?: string | null
   profile: UserProfile | null
@@ -24,11 +27,9 @@ export interface ImageChangeEntry {
 export async function recordImageChange(entry: ImageChangeEntry): Promise<void> {
   await supabaseAdmin.from('image_change_log').insert({
     action: entry.action,
-    group_name: entry.group,
-    subgroup_name: entry.subgroup,
+    folder_path: entry.folderPath,
     file_name: entry.fileName,
-    to_group_name: entry.toGroup ?? null,
-    to_subgroup_name: entry.toSubgroup ?? null,
+    to_folder_path: entry.toFolderPath ?? null,
     to_file_name: entry.toFileName ?? null,
     backup_key: entry.backupKey ?? null,
     profile_id: entry.profile?.id ?? null,

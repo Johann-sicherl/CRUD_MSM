@@ -88,12 +88,26 @@ function getPublicBaseUrl(): string {
   return raw.endsWith('/') ? raw.slice(0, -1) : raw
 }
 
-export function buildKey(group: string, subgroup: string, fileName: string): string {
-  return `${getBasePrefix()}${group}/${subgroup}/${fileName}`
+// folderPath é o caminho relativo dentro do prefixo-base, com profundidade
+// livre (ex.: "Acessórios/CAMERAS", ou "Acessórios/CAMERAS/Extra") — nunca
+// mais um par fixo Grupo/Subgrupo. "" (string vazia) é a raiz. Pedido
+// explícito do usuário: "eu posso ter imagens em diferentes grupos e
+// níveis, e não consigo ver o que está no nível acima da imagem hoje" —
+// a 1ª versão desta tela assumia exatamente 2 níveis (Grupo > Subgrupo),
+// o que escondia qualquer estrutura mais profunda já existente no bucket
+// (criada fora do app, ex. via rclone). Navegação agora é tipo Windows
+// Explorer: uma pasta por vez, com volta via breadcrumb — ver browseFolder.
+function normalizeFolderPath(path: string): string {
+  return path.trim().split('/').map(s => s.trim()).filter(Boolean).join('/')
 }
 
-export function buildPublicUrl(group: string, subgroup: string, fileName: string): string {
-  const key = buildKey(group, subgroup, fileName)
+export function buildKey(folderPath: string, fileName: string): string {
+  const normalized = normalizeFolderPath(folderPath)
+  return normalized ? `${getBasePrefix()}${normalized}/${fileName}` : `${getBasePrefix()}${fileName}`
+}
+
+export function buildPublicUrl(folderPath: string, fileName: string): string {
+  const key = buildKey(folderPath, fileName)
   return `${getPublicBaseUrl()}/${key.split('/').map(encodeURIComponent).join('/')}`
 }
 
@@ -106,22 +120,20 @@ export function isValidFileName(name: string): boolean {
   return FILE_NAME_RE.test(name)
 }
 
-// Grupo/Subgrupo: texto livre (acentos/espaços são esperados — "Acessórios",
-// "CAMERAS"), só proíbe barra (quebraria a estrutura de chave) e nome vazio
-// depois de aparar espaço.
-export function isValidSegmentName(name: string): boolean {
-  const trimmed = name.trim()
-  return trimmed.length > 0 && !trimmed.includes('/')
-}
-
-export interface ImageSubgroupNode {
-  name: string
-  count: number
-}
-
-export interface ImageGroupNode {
-  name: string
-  subgroups: ImageSubgroupNode[]
+// Caminho de pasta: texto livre por segmento (acentos/espaços são
+// esperados — "Acessórios", "CAMERAS"), qualquer profundidade separada por
+// "/". "" (raiz) é válido. Cada segmento não pode ficar vazio nem ser "."/
+// ".." — não é risco de travessia de verdade (chave do S3 é só uma string
+// plana, não resolve ".." como filesystem), mas evitar isso impede nomes
+// confusos na árvore.
+export function isValidFolderPath(path: string): boolean {
+  const trimmed = path.trim()
+  if (trimmed === '') return true
+  const segments = trimmed.split('/')
+  return segments.every(seg => {
+    const s = seg.trim()
+    return s.length > 0 && s !== '.' && s !== '..'
+  })
 }
 
 export interface ImageObject {
@@ -131,15 +143,30 @@ export interface ImageObject {
   url: string
 }
 
-// Lista todas as "pastas" de 1º nível sob o prefixo-base — no R2 (como em
-// qualquer S3) não existe pasta de verdade, CommonPrefixes é só o efeito do
-// parâmetro Delimiter agrupando chaves que compartilham o mesmo prefixo até
-// a próxima barra. Pagina com ContinuationToken até `IsTruncated` ser falso
-// — nunca assume que cabe tudo numa página só.
-async function listCommonPrefixes(prefix: string): Promise<string[]> {
+export interface BrowseResult {
+  path: string
+  folders: string[]
+  files: ImageObject[]
+}
+
+// Lista UM nível da árvore a partir de folderPath — pastas (CommonPrefixes)
+// e arquivos (Contents) que estão diretamente dentro dela, nunca a árvore
+// inteira de uma vez. No R2 (como em qualquer S3) não existe pasta de
+// verdade — CommonPrefixes é só o efeito do parâmetro Delimiter agrupando
+// chaves que compartilham o mesmo prefixo até a próxima barra; uma pasta só
+// "existe" enquanto houver pelo menos um arquivo dentro dela (direto ou em
+// subpasta). Pagina com ContinuationToken até `IsTruncated` ser falso —
+// nunca assume que cabe tudo numa página só. Carregar um nível por vez (em
+// vez da árvore inteira, como a 1ª versão fazia) também é mais barato: o
+// bucket pode ter qualquer profundidade, então varrer tudo de uma vez não
+// escala.
+export async function browseFolder(folderPath: string): Promise<BrowseResult> {
   const client = getClient()
   const bucket = getBucket()
-  const prefixes: string[] = []
+  const normalized = normalizeFolderPath(folderPath)
+  const prefix = normalized ? `${getBasePrefix()}${normalized}/` : getBasePrefix()
+  const folders: string[] = []
+  const files: ImageObject[] = []
   let token: string | undefined
   do {
     const res = await client.send(new ListObjectsV2Command({
@@ -149,92 +176,32 @@ async function listCommonPrefixes(prefix: string): Promise<string[]> {
       ContinuationToken: token,
     }))
     for (const p of res.CommonPrefixes ?? []) {
-      if (p.Prefix) prefixes.push(p.Prefix)
+      if (!p.Prefix) continue
+      const name = p.Prefix.slice(prefix.length, -1)
+      if (name) folders.push(name)
     }
-    token = res.IsTruncated ? res.NextContinuationToken : undefined
-  } while (token)
-  return prefixes
-}
-
-async function countObjects(prefix: string): Promise<number> {
-  const client = getClient()
-  const bucket = getBucket()
-  let total = 0
-  let token: string | undefined
-  do {
-    const res = await client.send(new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix,
-      Delimiter: '/',
-      ContinuationToken: token,
-    }))
-    total += (res.Contents ?? []).length
-    token = res.IsTruncated ? res.NextContinuationToken : undefined
-  } while (token)
-  return total
-}
-
-// Árvore Grupo → Subgrupo + contagem de imagens, 100% derivada do bucket ao
-// vivo — não existe tabela local de "grupos cadastrados": no R2 a pasta só
-// existe enquanto houver arquivo dentro dela (mesma frase do manual da
-// TI), então manter uma lista separada no Supabase só criaria uma segunda
-// fonte de verdade que pode divergir da real. "Criar um grupo/subgrupo
-// novo" = digitar um nome novo na hora de enviar a primeira imagem (ver
-// uploadImage) — a pasta passa a existir no mesmo instante.
-export async function listGroupsTree(): Promise<ImageGroupNode[]> {
-  const base = getBasePrefix()
-  const groupPrefixes = await listCommonPrefixes(base)
-  const groups: ImageGroupNode[] = []
-  for (const groupPrefix of groupPrefixes) {
-    const groupName = groupPrefix.slice(base.length, -1)
-    const subgroupPrefixes = await listCommonPrefixes(groupPrefix)
-    const subgroups: ImageSubgroupNode[] = []
-    for (const subgroupPrefix of subgroupPrefixes) {
-      const subgroupName = subgroupPrefix.slice(groupPrefix.length, -1)
-      const count = await countObjects(subgroupPrefix)
-      subgroups.push({ name: subgroupName, count })
-    }
-    subgroups.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-    groups.push({ name: groupName, subgroups })
-  }
-  groups.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-  return groups
-}
-
-export async function listImages(group: string, subgroup: string): Promise<ImageObject[]> {
-  const client = getClient()
-  const bucket = getBucket()
-  const prefix = `${getBasePrefix()}${group}/${subgroup}/`
-  const images: ImageObject[] = []
-  let token: string | undefined
-  do {
-    const res = await client.send(new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix,
-      Delimiter: '/',
-      ContinuationToken: token,
-    }))
     for (const obj of res.Contents ?? []) {
       if (!obj.Key) continue
       const fileName = obj.Key.slice(prefix.length)
       if (!fileName) continue // a própria "pasta", nunca deveria vir, mas por segurança
-      images.push({
+      files.push({
         fileName,
         size: obj.Size ?? 0,
         lastModified: obj.LastModified ? obj.LastModified.toISOString() : null,
-        url: buildPublicUrl(group, subgroup, fileName),
+        url: buildPublicUrl(normalized, fileName),
       })
     }
     token = res.IsTruncated ? res.NextContinuationToken : undefined
   } while (token)
-  images.sort((a, b) => a.fileName.localeCompare(b.fileName, 'pt-BR', { numeric: true }))
-  return images
+  folders.sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  files.sort((a, b) => a.fileName.localeCompare(b.fileName, 'pt-BR', { numeric: true }))
+  return { path: normalized, folders, files }
 }
 
-export async function imageExists(group: string, subgroup: string, fileName: string): Promise<boolean> {
+export async function imageExists(folderPath: string, fileName: string): Promise<boolean> {
   const client = getClient()
   try {
-    await client.send(new HeadObjectCommand({ Bucket: getBucket(), Key: buildKey(group, subgroup, fileName) }))
+    await client.send(new HeadObjectCommand({ Bucket: getBucket(), Key: buildKey(folderPath, fileName) }))
     return true
   } catch (err) {
     const name = (err as { name?: string })?.name
@@ -244,8 +211,7 @@ export async function imageExists(group: string, subgroup: string, fileName: str
 }
 
 export async function uploadImage(
-  group: string,
-  subgroup: string,
+  folderPath: string,
   fileName: string,
   body: Buffer,
   contentType: string,
@@ -253,7 +219,7 @@ export async function uploadImage(
   const client = getClient()
   await client.send(new PutObjectCommand({
     Bucket: getBucket(),
-    Key: buildKey(group, subgroup, fileName),
+    Key: buildKey(folderPath, fileName),
     Body: body,
     ContentType: contentType,
   }))
@@ -264,39 +230,39 @@ export async function uploadImage(
 // rclone usar moveto) quanto pra guardar uma cópia de segurança antes de
 // substituir/remover (ver backupImage abaixo).
 export async function copyImage(
-  fromGroup: string, fromSubgroup: string, fromFileName: string,
-  toGroup: string, toSubgroup: string, toFileName: string,
+  fromFolderPath: string, fromFileName: string,
+  toFolderPath: string, toFileName: string,
 ): Promise<void> {
   const client = getClient()
   const bucket = getBucket()
-  const sourceKey = buildKey(fromGroup, fromSubgroup, fromFileName)
+  const sourceKey = buildKey(fromFolderPath, fromFileName)
   await client.send(new CopyObjectCommand({
     Bucket: bucket,
-    Key: buildKey(toGroup, toSubgroup, toFileName),
+    Key: buildKey(toFolderPath, toFileName),
     CopySource: `${bucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
   }))
 }
 
-export async function deleteImage(group: string, subgroup: string, fileName: string): Promise<void> {
+export async function deleteImage(folderPath: string, fileName: string): Promise<void> {
   const client = getClient()
-  await client.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: buildKey(group, subgroup, fileName) }))
+  await client.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: buildKey(folderPath, fileName) }))
 }
 
 // Backup automático antes de substituir/remover — o manual da TI pede isso
 // como passo manual ("guarde uma cópia da versão atual"); aqui é automático
 // a cada substituição/remoção, pra nunca depender de alguém lembrar de
 // fazer isso na hora. Grava dentro do próprio bucket, num prefixo
-// `_backup/<group>/<subgroup>/<timestamp>-<fileName>` — fora da árvore
-// Grupo/Subgrupo normal (não aparece em listGroupsTree, que só varre o
-// prefixo-base), então nunca é confundido com uma imagem "em uso" pela
-// aplicação.
-export async function backupImage(group: string, subgroup: string, fileName: string): Promise<string | null> {
-  const exists = await imageExists(group, subgroup, fileName)
+// `_backup/<folderPath>/<timestamp>-<fileName>` — fora da árvore navegável
+// normal (nunca aparece em browseFolder, que só varre o prefixo-base),
+// então nunca é confundido com uma imagem "em uso" pela aplicação.
+export async function backupImage(folderPath: string, fileName: string): Promise<string | null> {
+  const exists = await imageExists(folderPath, fileName)
   if (!exists) return null
   const client = getClient()
   const bucket = getBucket()
-  const sourceKey = buildKey(group, subgroup, fileName)
-  const backupKey = `_backup/${group}/${subgroup}/${Date.now()}-${fileName}`
+  const sourceKey = buildKey(folderPath, fileName)
+  const normalized = normalizeFolderPath(folderPath)
+  const backupKey = `_backup/${normalized ? `${normalized}/` : ''}${Date.now()}-${fileName}`
   await client.send(new CopyObjectCommand({
     Bucket: bucket,
     Key: backupKey,

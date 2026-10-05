@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidFileName, isValidSegmentName, imageExists, deleteImage, backupImage } from '@/lib/r2Images'
+import { isValidFileName, isValidFolderPath, imageExists, deleteImage, backupImage } from '@/lib/r2Images'
 import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
@@ -13,24 +13,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Acesso restrito a administradores' }, { status: 403 })
   }
 
-  const group = String(body?.group ?? '').trim()
-  const subgroup = String(body?.subgroup ?? '').trim()
+  const path = String(body?.path ?? '').trim()
   const fileName = String(body?.fileName ?? '').trim()
-  if (!isValidSegmentName(group) || !isValidSegmentName(subgroup) || !isValidFileName(fileName)) {
-    return NextResponse.json({ error: 'Grupo/Subgrupo/arquivo inválido' }, { status: 400 })
+  if (!isValidFolderPath(path) || !isValidFileName(fileName)) {
+    return NextResponse.json({ error: 'Pasta/arquivo inválido' }, { status: 400 })
   }
 
   try {
-    const exists = await imageExists(group, subgroup, fileName)
+    const exists = await imageExists(path, fileName)
     if (!exists) {
-      return NextResponse.json({ error: `Não existe imagem "${fileName}" em ${group}/${subgroup}` }, { status: 404 })
+      return NextResponse.json({ error: `Não existe imagem "${fileName}" em ${path || '(raiz)'}` }, { status: 404 })
     }
 
-    const backupKey = await backupImage(group, subgroup, fileName)
-    await deleteImage(group, subgroup, fileName)
+    const backupKey = await backupImage(path, fileName)
+    await deleteImage(path, fileName)
 
     try {
-      await recordImageChange({ action: 'delete', group, subgroup, fileName, backupKey, profile })
+      await recordImageChange({ action: 'delete', folderPath: path, fileName, backupKey, profile })
     } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true })

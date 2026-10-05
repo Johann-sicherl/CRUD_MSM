@@ -26,12 +26,16 @@ o app fala com um serviço de armazenamento de objetos.
   com a API S3 (o SDK oficial `@aws-sdk/client-s3` funciona direto, só
   trocando o endpoint).
 - **Bucket** — `images-msm`, configurável via `R2_BUCKET`.
-- **Grupo / Subgrupo** — as duas primeiras pastas do caminho dentro do
-  bucket (ex.: `Acessórios/CAMERAS`). No R2 (como em qualquer S3) **pasta
-  não é uma entidade de verdade** — é só o efeito de agrupar chaves que
-  compartilham o mesmo prefixo até a próxima barra (`Delimiter: '/'` no
-  `ListObjectsV2`). Uma pasta só "existe" enquanto houver pelo menos um
-  arquivo dentro dela — exatamente como o manual da TI descreve.
+- **Pasta** — qualquer segmento do caminho dentro do bucket, profundidade
+  livre (ex.: `Acessórios/CAMERAS`, ou `Acessórios/CAMERAS/Extra`). No R2
+  (como em qualquer S3) **pasta não é uma entidade de verdade** — é só o
+  efeito de agrupar chaves que compartilham o mesmo prefixo até a próxima
+  barra (`Delimiter: '/'` no `ListObjectsV2`). Uma pasta só "existe"
+  enquanto houver pelo menos um arquivo dentro dela (direto ou numa
+  subpasta) — exatamente como o manual da TI descreve. **Histórico**: a 1ª
+  versão desta tela chamava isso de "Grupo/Subgrupo" e assumia sempre
+  exatamente 2 níveis fixos — ver "Navegação tipo Windows Explorer" abaixo
+  pra por que isso mudou.
 - **Chave (key)** — o caminho completo dentro do bucket, ex.:
   `img/Monte sua Máquina/Imagens - MSM/Acessórios/CAMERAS/27.02.00683.png`.
 - **URL pública** — endereço pelo qual a aplicação e qualquer navegador
@@ -39,21 +43,70 @@ o app fala com um serviço de armazenamento de objetos.
 
 ## Por que não existe uma tabela "Grupos de Imagens" no Supabase
 
-Decisão deliberada, não uma lacuna: a árvore Grupo → Subgrupo é **100%
-derivada do bucket ao vivo** (`listGroupsTree`, `src/lib/r2Images.ts`), via
+Decisão deliberada, não uma lacuna: a árvore de pastas é **100% derivada do
+bucket ao vivo** (`browseFolder`, `src/lib/r2Images.ts`), via
 `ListObjectsV2` com `Delimiter: '/'`, nunca de uma tabela local. Manter uma
-lista separada de "grupos cadastrados" no Postgres criaria uma segunda
-fonte de verdade que pode divergir da realidade do bucket (um grupo
+lista separada de "pastas cadastradas" no Postgres criaria uma segunda
+fonte de verdade que pode divergir da realidade do bucket (uma pasta
 existente no R2 mas não na lista, ou vice-versa) — exatamente o tipo de
 inconsistência que este projeto evita em outros lugares (ver
 `isControllershipTable` em `specs/dados-e-schema.md`, "nunca reintroduzir
 lista hardcoded").
 
-**"Criar um Grupo/Subgrupo novo" não é uma ação separada**: é só digitar,
-no formulário "Adicionar imagem", um nome de Grupo/Subgrupo que ainda não
-existe — a pasta passa a existir no bucket no exato momento em que a
-primeira imagem é enviada pra lá, igual ao comportamento nativo do R2/S3
-que o próprio manual da TI descreve.
+**"Criar uma pasta nova" não é uma ação separada**: é só digitar, no
+formulário "Adicionar imagem", um caminho de pasta que ainda não existe —
+a pasta passa a existir no bucket no exato momento em que a primeira
+imagem é enviada pra lá, igual ao comportamento nativo do R2/S3 que o
+próprio manual da TI descreve.
+
+## Navegação tipo Windows Explorer — profundidade livre
+
+**Histórico, mudança arquitetural de uma sessão posterior**: a 1ª versão
+desta tela assumia que todo caminho dentro do bucket tinha **exatamente 2
+níveis fixos** (Grupo > Subgrupo > imagens) — a árvore era carregada por
+inteiro de uma vez (`listGroupsTree`, removida) e upload/renomear/remover
+eram todos parametrizados por `group`+`subgroup`. Pedido explícito do
+usuário, depois de notar que a tela escondia parte da estrutura real do
+bucket: "eu posso ter imagens em diferentes grupos e níveis, e não
+consigo ver o que está no nível acima da imagem hoje" — confirmado via
+`AskUserQuestion` (reescrever pra navegação genérica vs. só adicionar uma
+visualização read-only a mais) que a reescrita completa era o caminho
+certo.
+
+- **`browseFolder(folderPath)`** (`r2Images.ts`) substituiu `listGroupsTree`
+  + `listImages` — lista **um nível por vez** (pastas + imagens
+  diretamente dentro de `folderPath`, nunca a árvore inteira), estilo
+  Windows Explorer. Mais barato também: o bucket pode ter qualquer
+  profundidade, então varrer tudo de uma vez (como a 1ª versão fazia, 2
+  chamadas aninhadas) não escalaria pra uma estrutura mais profunda.
+  `folderPath` é uma string livre (`"Acessórios/CAMERAS"`,
+  `"Acessórios/CAMERAS/Extra"`, ou `""` pra raiz) — `buildKey`/
+  `buildPublicUrl`/`uploadImage`/`copyImage`/`deleteImage`/`imageExists`/
+  `backupImage` foram todos generalizados de `(group, subgroup, fileName)`
+  pra `(folderPath, fileName)`.
+- **`isValidFolderPath(path)`** substituiu `isValidSegmentName` — valida o
+  caminho inteiro (cada segmento não vazio, não `.`/`..`), não mais só um
+  segmento isolado.
+- **Tela (`grupos-imagens/page.tsx`)** — breadcrumb no topo (`Raiz / seg1 /
+  seg2 / ...`, cada segmento clicável pra voltar), painel esquerdo lista só
+  as subpastas do caminho atual (clique entra nela, "↑ Subir um nível"
+  quando não está na raiz), painel direito lista as imagens do caminho
+  atual — mesma grade de cartões de antes, só generalizada pra `path` em
+  vez de `group`/`subgroup`. O formulário "+ Adicionar imagem" tem agora um
+  único campo "Pasta" (texto livre, aceita qualquer profundidade separada
+  por `/`, pré-preenchido com o caminho atual) em vez de dois campos fixos.
+- **`GET /tree` e `GET /list` foram removidos**, substituídos por uma única
+  `GET /browse?path=`, que devolve `{ path, folders, files }` de um nível
+  só. `POST /upload`/`/rename`/`/delete` trocaram `group`/`subgroup` (e
+  `toGroup`/`toSubgroup`) por `path`/`toPath`.
+- **`image_change_log`** — `group_name`/`subgroup_name`/`to_group_name`/
+  `to_subgroup_name` foram substituídos por `folder_path`/`to_folder_path`
+  (`msm_image_change_log_folder_path.sql`, migração manual — ver seção
+  abaixo). As colunas antigas ficaram destravadas (`DROP NOT NULL`) e
+  paradas de receber valor novo — mantidas só como histórico das linhas já
+  gravadas antes desta mudança; a UI lê `folder_path` com fallback pra
+  `group_name + '/' + subgroup_name` quando `folder_path` for `null`
+  (linha antiga).
 
 ## `src/lib/r2Images.ts` — server-only
 
@@ -63,38 +116,37 @@ região `auto`, endpoint `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`)
 `getClient` via `Proxy`, aqui simplificado pra uma função `getClient()`
 só).
 
-- `listGroupsTree()` — varre o prefixo-base (`R2_BASE_PREFIX`) com
-  `Delimiter: '/'` pra achar os Grupos (`CommonPrefixes`), depois cada
-  Grupo de novo pra achar os Subgrupos, depois conta os objetos de cada
-  Subgrupo. Pagina com `ContinuationToken` até `IsTruncated` ser falso em
-  toda chamada de listagem — nunca assume que cabe tudo numa página só
-  (mesma disciplina de `.range()` explícito já documentada em
-  `specs/dados-e-schema.md`, só que pro lado do S3 em vez do PostgREST).
-  Sem cache — é uma tela de uso ocasional (Admin, manutenção pontual), e
-  dado fresco logo depois de um upload importa mais que velocidade; se
-  algum dia isso ficar lento (bucket com centenas de Grupos), o próximo
-  passo natural é um cache curto, mesmo espírito do `BomDetailCache` de
-  `protheusDb.ts`.
-- `listImages(group, subgroup)` — lista as imagens de um Subgrupo
-  específico (nome, tamanho, data, URL pública).
+- `browseFolder(folderPath)` — lista um nível só: as subpastas
+  (`CommonPrefixes`) e as imagens (`Contents`) diretamente dentro de
+  `folderPath` (`""` = raiz, sob o prefixo-base `R2_BASE_PREFIX`). Pagina
+  com `ContinuationToken` até `IsTruncated` ser falso — nunca assume que
+  cabe tudo numa página só (mesma disciplina de `.range()` explícito já
+  documentada em `specs/dados-e-schema.md`, só que pro lado do S3 em vez do
+  PostgREST). Sem cache — é uma tela de uso ocasional (Admin, manutenção
+  pontual), e dado fresco logo depois de um upload importa mais que
+  velocidade; se algum dia isso ficar lento, o próximo passo natural é um
+  cache curto, mesmo espírito do `BomDetailCache` de `protheusDb.ts`. Ver
+  "Navegação tipo Windows Explorer" acima pra por que isso substituiu a
+  árvore eager de 2 níveis fixos da 1ª versão.
 - `uploadImage` / `copyImage` / `deleteImage` / `imageExists` — operações
   básicas (`PutObjectCommand`/`CopyObjectCommand`/`DeleteObjectCommand`/
-  `HeadObjectCommand`).
-- `backupImage(group, subgroup, fileName)` — copia o objeto atual pra
-  `_backup/<group>/<subgroup>/<timestamp>-<fileName>`, **dentro do mesmo
+  `HeadObjectCommand`), todas parametrizadas por `(folderPath, fileName)`.
+- `backupImage(folderPath, fileName)` — copia o objeto atual pra
+  `_backup/<folderPath>/<timestamp>-<fileName>`, **dentro do mesmo
   bucket**, antes de qualquer substituição ou remoção. Automatiza o passo
   manual que o guia da TI pede ("guarde uma cópia da versão atual... para
   poder voltar atrás") — nunca depende de alguém lembrar de fazer isso. O
-  prefixo `_backup/` fica fora da árvore que `listGroupsTree` varre (que só
-  olha o prefixo-base de produção), então uma cópia de segurança nunca
-  aparece como se fosse uma imagem "em uso" pela aplicação.
-- `isValidFileName` / `isValidSegmentName` — validação de nome antes de
-  qualquer operação: arquivo precisa terminar em `.png` minúsculo (mesma
-  regra do manual da TI); Grupo/Subgrupo só não podem ficar vazios nem
-  conter `/` (isso quebraria a própria estrutura de chave).
+  prefixo `_backup/` fica fora da árvore navegável normal (não aparece em
+  `browseFolder`, que só olha o prefixo-base de produção), então uma cópia
+  de segurança nunca aparece como se fosse uma imagem "em uso" pela
+  aplicação.
+- `isValidFileName` / `isValidFolderPath` — validação antes de qualquer
+  operação: arquivo precisa terminar em `.png` minúsculo (mesma regra do
+  manual da TI); caminho de pasta — cada segmento não pode ficar vazio nem
+  ser `.`/`..`, profundidade livre.
 - `buildKey` / `buildPublicUrl` — monta a chave completa e a URL pública
   (`R2_PUBLIC_BASE_URL` + chave, cada segmento passado por
-  `encodeURIComponent` — necessário porque Grupo/Subgrupo têm espaço e
+  `encodeURIComponent` — necessário porque os nomes de pasta têm espaço e
   acento, ex. "Monte sua Máquina", "Acessórios").
 
 ### Variáveis de ambiente (`.env.local`, só pra esta tela)
@@ -157,42 +209,55 @@ como variável de ambiente, confirmada pela TI antes de preencher o
 Todas exigem `profileId` + `getProfileById(...).isAdmin` no servidor —
 nunca um `isAdmin` solto do corpo/query (mesmo padrão documentado em
 `specs/permissoes-e-perfis.md`). Nenhuma mistura GET+método mutante no
-mesmo caminho fixo (cada ação tem sua própria rota: `tree`/`list`/`changes`
-são só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco
-de 405 em build de produção documentado em `specs/telas-auxiliares.md`.
+mesmo caminho fixo (cada ação tem sua própria rota: `browse`/`changes` são
+só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
+405 em build de produção documentado em `specs/telas-auxiliares.md`.
 
-- `GET /tree` — árvore Grupo/Subgrupo + contagem, ao vivo.
-- `GET /list?group=&subgroup=` — imagens de um Subgrupo.
+- `GET /browse?path=` — substituiu `/tree` e `/list` (ver "Navegação tipo
+  Windows Explorer" acima). Devolve `{ path, folders, files }` de **um
+  nível só** — as subpastas e as imagens diretamente dentro de `path`
+  (`""`/omitido = raiz).
 - `POST /upload` — `multipart/form-data` (upload de arquivo de verdade):
-  `profileId`, `group`, `subgroup`, `fileName`, `mode` (`add`|`replace`),
-  `file`. `mode=add` recusa se já existir uma imagem com esse nome
-  (equivalente ao passo manual "confirme que ainda não existe imagem com
-  esse código" do guia — aqui é checado pelo servidor, não só lembrado na
-  checklist); `mode=replace` recusa se **não** existir (evita criar uma
-  substituição "no vazio" sem querer). Só aceita `file.type ===
-  'image/png'`. Faz `backupImage` antes de sobrescrever quando
-  `mode=replace`.
+  `profileId`, `path`, `fileName`, `mode` (`add`|`replace`), `file`.
+  `mode=add` recusa se já existir uma imagem com esse nome (equivalente ao
+  passo manual "confirme que ainda não existe imagem com esse código" do
+  guia — aqui é checado pelo servidor, não só lembrado na checklist);
+  `mode=replace` recusa se **não** existir (evita criar uma substituição
+  "no vazio" sem querer). Só aceita `file.type === 'image/png'`. Faz
+  `backupImage` antes de sobrescrever quando `mode=replace`.
 - `POST /rename` — copy + delete (S3/R2 não tem rename nativo, mesmo
   motivo do `rclone` usar `moveto`) — equivalente à seção 7.4 do manual
-  ("corrigir o nome de um arquivo enviado errado"), generalizado pra também
-  mover entre Grupo/Subgrupo diferentes. Recusa se o destino já existir.
+  ("corrigir o nome de um arquivo enviado errado"), `path`/`toPath`
+  (profundidade livre) + `fileName`/`toFileName`. Recusa se o destino já
+  existir.
 - `POST /delete` — `backupImage` + `deleteImage`. Confirmação (`window.confirm`)
   é só no cliente — a rota em si não teria como "desfazer" sozinha além da
   cópia de segurança automática.
 - `GET /changes` — últimas 200 linhas de `image_change_log`, mais recente
   primeiro.
 
-## `image_change_log` (`msm_image_change_log.sql`)
+## `image_change_log` (`msm_image_change_log.sql` +
+`msm_image_change_log_folder_path.sql`)
 
 Equivalente automático da seção 13 do manual da TI ("Registre a alteração")
 — cada upload/substituição/renomeação/remoção grava uma linha (`action`,
-`group_name`/`subgroup_name`/`file_name`, `to_*` quando é um `rename`,
-`backup_key` quando houve cópia de segurança, `profile_id`/`profile_name`
-— snapshot do nome, sobrevive à exclusão do perfil). Gravado via
-`recordImageChange` (`src/lib/imageChangeLog.ts`), sempre dentro de um
+`folder_path`/`file_name`, `to_folder_path`/`to_file_name` quando é um
+`rename`, `backup_key` quando houve cópia de segurança, `profile_id`/
+`profile_name` — snapshot do nome, sobrevive à exclusão do perfil). Gravado
+via `recordImageChange` (`src/lib/imageChangeLog.ts`), sempre dentro de um
 `try/catch` best-effort (mesmo espírito de `record*Audit`, `sqlAudit.ts`)
 — uma falha ao gravar o log nunca desfaz a operação real no bucket, que já
 tinha terminado com sucesso.
+
+`folder_path`/`to_folder_path` (`msm_image_change_log_folder_path.sql`,
+migração manual — precisa rodar no SQL Editor, mesma convenção de todo
+`msm_*.sql`, ver `specs/sql-migrations.md`) substituíram `group_name`/
+`subgroup_name`/`to_group_name`/`to_subgroup_name` quando a navegação virou
+profundidade livre (ver "Navegação tipo Windows Explorer" acima). As
+colunas antigas foram destravadas (`DROP NOT NULL`) e **não recebem mais
+valor** do app — ficaram só como histórico das linhas gravadas antes dessa
+mudança, com backfill feito pela própria migração
+(`folder_path = group_name || '/' || subgroup_name`).
 
 **Isto não é a mesma coisa que `audit_log`** (`specs/auditoria.md`) — não
 reusado de propósito. `audit_log` existe pra gerar SQL que alguém roda
@@ -204,21 +269,24 @@ o que cada linha significa.
 
 - Guard `!user.isAdmin` igual a `/configuracao-usuarios` (mensagem "Acesso
   restrito a administradores", sem nada mais renderizado).
-- Coluna esquerda: árvore Grupo → Subgrupo (contagem por Subgrupo), clique
-  seleciona e carrega as imagens dele à direita.
-- Painel direito: grade de cartões por imagem (miniatura via `<img>` direto
-  na URL pública, nome, tamanho, data, link "Abrir", e os três botões
-  Substituir/Renomear/Remover).
-- "+ Adicionar imagem" — Grupo/Subgrupo com `<datalist>` (sugere os já
-  existentes, mas aceita digitar um nome novo — é assim que um
-  Grupo/Subgrupo novo "nasce"), nome do arquivo, seletor de arquivo
-  (`accept="image/png"`), dois botões ("Adicionar nova" = `mode=add`,
-  "Substituir existente" = `mode=replace`) — a tela não tenta adivinhar
-  qual dos dois o usuário quer, até porque o mesmo formulário é reusado
-  tanto pro "+ Adicionar imagem" do topo (pode ser add OU replace) quanto
-  pelo botão "Substituir" de uma linha já existente (pré-preenchido, mas
-  ainda com os dois botões — nada impede o usuário de, ali, optar por
-  "Adicionar nova" com outro nome em vez de substituir).
+- Breadcrumb no topo (`🗀 Raiz / seg1 / seg2 / ...`), cada segmento
+  clicável — navega pra aquele nível, sem precisar "subir" um de cada vez.
+- Coluna esquerda: só as subpastas do caminho atual (`folders`, um nível),
+  clique entra numa delas; "↑ Subir um nível" quando não está na raiz.
+- Painel direito: grade de cartões por imagem do caminho atual (miniatura
+  via `<img>` direto na URL pública, nome, tamanho, data, link "Abrir", e
+  os três botões Substituir/Renomear/Remover).
+- "+ Adicionar imagem" — um único campo "Pasta" (texto livre, `<datalist>`
+  sugere as subpastas do nível atual, mas aceita digitar qualquer caminho
+  com `/`, inclusive um que ainda não existe — é assim que uma pasta nova
+  "nasce"), nome do arquivo, seletor de arquivo (`accept="image/png"`),
+  dois botões ("Adicionar nova" = `mode=add`, "Substituir existente" =
+  `mode=replace`) — a tela não tenta adivinhar qual dos dois o usuário
+  quer, até porque o mesmo formulário é reusado tanto pro "+ Adicionar
+  imagem" do topo (pode ser add OU replace) quanto pelo botão "Substituir"
+  de uma linha já existente (pré-preenchido, mas ainda com os dois botões
+  — nada impede o usuário de, ali, optar por "Adicionar nova" com outro
+  nome em vez de substituir).
 - "Remover" pede confirmação (`window.confirm`) antes de chamar a rota,
   mesmo padrão já usado em telas auxiliares deste projeto (ver
   `specs/telas-auxiliares.md`).

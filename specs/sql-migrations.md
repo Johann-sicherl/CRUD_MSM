@@ -23,6 +23,7 @@ dono do projeto. Convenção dos arquivos "oficiais" (com banner de cabeçalho
 | `msm_add_international_contribution_margin.sql` | Coluna `international_contribution_margin_ratio` em `equipments` (e, se já existir, `equipments_check`) — 11º campo de `FORCE_TO_ONE_FIELDS`, ver `specs/custeio-financeiro.md`. |
 | `msm_replace_protheus_code_equipment.sql` | RPC `replace_protheus_code_equipment` — análoga a `replace_protheus_code`, mas pro código de Cadastro de Equipamentos (`standard_equipment_items`), escopo mais estreito (ver `specs/pdm-protheus-integracao.md`). |
 | `msm_image_change_log.sql` | Tabela `image_change_log` — histórico de upload/substituição/renomeação/remoção de imagens do bucket Cloudflare R2, tela "Grupos de Imagens" (ver `specs/imagens-r2.md`). |
+| `msm_image_change_log_folder_path.sql` | Colunas `folder_path`/`to_folder_path` em `image_change_log` (+ backfill, + `DROP NOT NULL` em `group_name`/`subgroup_name`) — navegação da tela "Grupos de Imagens" virou profundidade livre em vez de 2 níveis fixos (ver `specs/imagens-r2.md`). |
 
 ## Exceções à convenção — sem banner, scripts pontuais
 

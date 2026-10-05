@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidFileName, isValidSegmentName, imageExists, copyImage, deleteImage } from '@/lib/r2Images'
+import { isValidFileName, isValidFolderPath, imageExists, copyImage, deleteImage } from '@/lib/r2Images'
 import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Corrige nome/pasta de um arquivo já enviado (seção 7.4 do manual da TI:
 // "moveto renomeia (ou move) o arquivo dentro do bucket") — o R2/S3 não tem
 // rename de verdade, então é sempre copy pro destino novo + delete do
-// original, exatamente como o rclone faz.
+// original, exatamente como o rclone faz. "path"/"toPath" são caminhos
+// completos de pasta (profundidade livre), não mais um par fixo
+// Grupo/Subgrupo — permite mover uma imagem pra qualquer nível.
 export async function POST(request: NextRequest) {
   const body = await request.json()
   const profile = await getProfileById(String(body?.profileId ?? ''))
@@ -14,40 +16,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Acesso restrito a administradores' }, { status: 403 })
   }
 
-  const group = String(body?.group ?? '').trim()
-  const subgroup = String(body?.subgroup ?? '').trim()
+  const path = String(body?.path ?? '').trim()
   const fileName = String(body?.fileName ?? '').trim()
-  const toGroup = String(body?.toGroup ?? '').trim()
-  const toSubgroup = String(body?.toSubgroup ?? '').trim()
+  const toPath = String(body?.toPath ?? '').trim()
   const toFileName = String(body?.toFileName ?? '').trim()
 
-  if (!isValidSegmentName(group) || !isValidSegmentName(subgroup) || !isValidFileName(fileName)) {
-    return NextResponse.json({ error: 'Grupo/Subgrupo/arquivo de origem inválido' }, { status: 400 })
+  if (!isValidFolderPath(path) || !isValidFileName(fileName)) {
+    return NextResponse.json({ error: 'Pasta/arquivo de origem inválido' }, { status: 400 })
   }
-  if (!isValidSegmentName(toGroup) || !isValidSegmentName(toSubgroup) || !isValidFileName(toFileName)) {
-    return NextResponse.json({ error: 'Grupo/Subgrupo/arquivo de destino inválido' }, { status: 400 })
+  if (!isValidFolderPath(toPath) || !isValidFileName(toFileName)) {
+    return NextResponse.json({ error: 'Pasta/arquivo de destino inválido' }, { status: 400 })
   }
-  if (group === toGroup && subgroup === toSubgroup && fileName === toFileName) {
+  if (path === toPath && fileName === toFileName) {
     return NextResponse.json({ error: 'O destino é igual à origem — nada a fazer' }, { status: 400 })
   }
 
   try {
-    const exists = await imageExists(group, subgroup, fileName)
+    const exists = await imageExists(path, fileName)
     if (!exists) {
-      return NextResponse.json({ error: `Não existe imagem "${fileName}" em ${group}/${subgroup}` }, { status: 404 })
+      return NextResponse.json({ error: `Não existe imagem "${fileName}" em ${path || '(raiz)'}` }, { status: 404 })
     }
-    const destExists = await imageExists(toGroup, toSubgroup, toFileName)
+    const destExists = await imageExists(toPath, toFileName)
     if (destExists) {
       return NextResponse.json({
-        error: `Já existe uma imagem "${toFileName}" em ${toGroup}/${toSubgroup} — remova-a antes, ou escolha outro destino`,
+        error: `Já existe uma imagem "${toFileName}" em ${toPath || '(raiz)'} — remova-a antes, ou escolha outro destino`,
       }, { status: 409 })
     }
 
-    await copyImage(group, subgroup, fileName, toGroup, toSubgroup, toFileName)
-    await deleteImage(group, subgroup, fileName)
+    await copyImage(path, fileName, toPath, toFileName)
+    await deleteImage(path, fileName)
 
     try {
-      await recordImageChange({ action: 'rename', group, subgroup, fileName, toGroup, toSubgroup, toFileName, profile })
+      await recordImageChange({ action: 'rename', folderPath: path, fileName, toFolderPath: toPath, toFileName, profile })
     } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true })

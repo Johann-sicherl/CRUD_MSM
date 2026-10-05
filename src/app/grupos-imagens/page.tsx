@@ -3,14 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppAuth } from '@/lib/appAuthContext'
 
-interface ImageSubgroupNode {
-  name: string
-  count: number
-}
-interface ImageGroupNode {
-  name: string
-  subgroups: ImageSubgroupNode[]
-}
 interface ImageObject {
   fileName: string
   size: number
@@ -20,9 +12,11 @@ interface ImageObject {
 interface ImageChangeRow {
   id: string
   action: 'upload' | 'replace' | 'rename' | 'delete'
-  group_name: string
-  subgroup_name: string
+  folder_path: string | null
+  group_name: string | null
+  subgroup_name: string | null
   file_name: string
+  to_folder_path: string | null
   to_group_name: string | null
   to_subgroup_name: string | null
   to_file_name: string | null
@@ -43,18 +37,26 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
+// folder_path é a coluna atual; group_name/subgroup_name são o formato
+// antigo (linhas gravadas antes da navegação virar profundidade livre —
+// ver msm_image_change_log_folder_path.sql), mantido só como fallback de
+// leitura pra histórico antigo nunca sumir da tela.
+function rowFolderPath(c: ImageChangeRow): string {
+  return c.folder_path ?? [c.group_name, c.subgroup_name].filter(Boolean).join('/')
+}
+function rowToFolderPath(c: ImageChangeRow): string {
+  return c.to_folder_path ?? [c.to_group_name, c.to_subgroup_name].filter(Boolean).join('/')
+}
+
 export default function GruposImagensPage() {
   const { user } = useAppAuth()
 
-  const [tree, setTree] = useState<ImageGroupNode[]>([])
-  const [treeLoading, setTreeLoading] = useState(true)
-  const [treeError, setTreeError] = useState('')
-
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
-  const [selectedSubgroup, setSelectedSubgroup] = useState<string | null>(null)
-  const [images, setImages] = useState<ImageObject[]>([])
-  const [imagesLoading, setImagesLoading] = useState(false)
-  const [imagesError, setImagesError] = useState('')
+  // ── Navegação (estilo Windows Explorer, profundidade livre) ───
+  const [currentPath, setCurrentPath] = useState('')
+  const [folders, setFolders] = useState<string[]>([])
+  const [files, setFiles] = useState<ImageObject[]>([])
+  const [browseLoading, setBrowseLoading] = useState(true)
+  const [browseError, setBrowseError] = useState('')
 
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const showToast = (msg: string, isError = false) => {
@@ -62,48 +64,32 @@ export default function GruposImagensPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  const fetchTree = useCallback(async () => {
-    setTreeLoading(true)
-    setTreeError('')
+  const fetchBrowse = useCallback(async (path: string) => {
+    setBrowseLoading(true)
+    setBrowseError('')
     try {
-      const res = await fetch(`/api/r2-images/tree?profileId=${user.id}`)
+      const res = await fetch(`/api/r2-images/browse?profileId=${user.id}&path=${encodeURIComponent(path)}`)
       const json = await res.json()
-      if (!res.ok) { setTreeError(json.error || 'Falha ao consultar o bucket de imagens'); return }
-      setTree(json.groups || [])
+      if (!res.ok) { setBrowseError(json.error || 'Falha ao consultar o bucket de imagens'); return }
+      setFolders(json.folders || [])
+      setFiles(json.files || [])
     } catch {
-      setTreeError('Falha de rede ao consultar o bucket de imagens')
+      setBrowseError('Falha de rede ao consultar o bucket de imagens')
     } finally {
-      setTreeLoading(false)
+      setBrowseLoading(false)
     }
   }, [user.id])
 
-  useEffect(() => { if (user.isAdmin) fetchTree() }, [user.isAdmin, fetchTree])
+  useEffect(() => { if (user.isAdmin) fetchBrowse(currentPath) }, [user.isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchImages = useCallback(async (group: string, subgroup: string) => {
-    setImagesLoading(true)
-    setImagesError('')
-    try {
-      const res = await fetch(`/api/r2-images/list?profileId=${user.id}&group=${encodeURIComponent(group)}&subgroup=${encodeURIComponent(subgroup)}`)
-      const json = await res.json()
-      if (!res.ok) { setImagesError(json.error || 'Falha ao listar imagens'); return }
-      setImages(json.images || [])
-    } catch {
-      setImagesError('Falha de rede ao listar imagens')
-    } finally {
-      setImagesLoading(false)
-    }
-  }, [user.id])
-
-  const selectSubgroup = (group: string, subgroup: string) => {
-    setSelectedGroup(group)
-    setSelectedSubgroup(subgroup)
-    fetchImages(group, subgroup)
+  const navigateTo = (path: string) => {
+    setCurrentPath(path)
+    fetchBrowse(path)
   }
+  const enterFolder = (name: string) => navigateTo(currentPath ? `${currentPath}/${name}` : name)
+  const refreshCurrent = () => fetchBrowse(currentPath)
 
-  const refreshCurrent = () => {
-    fetchTree()
-    if (selectedGroup && selectedSubgroup) fetchImages(selectedGroup, selectedSubgroup)
-  }
+  const pathSegments = currentPath ? currentPath.split('/') : []
 
   // ── Changes log ──────────────────────────────────────────────
   const [changes, setChanges] = useState<ImageChangeRow[]>([])
@@ -123,16 +109,14 @@ export default function GruposImagensPage() {
 
   // ── Adicionar / Substituir ──────────────────────────────────
   const [addOpen, setAddOpen] = useState(false)
-  const [addGroup, setAddGroup] = useState('')
-  const [addSubgroup, setAddSubgroup] = useState('')
+  const [addPath, setAddPath] = useState('')
   const [addFileName, setAddFileName] = useState('')
   const [addFile, setAddFile] = useState<File | null>(null)
   const [addSaving, setAddSaving] = useState(false)
   const [addError, setAddError] = useState('')
 
   const openAddForm = () => {
-    setAddGroup(selectedGroup ?? '')
-    setAddSubgroup(selectedSubgroup ?? '')
+    setAddPath(currentPath)
     setAddFileName('')
     setAddFile(null)
     setAddError('')
@@ -140,8 +124,8 @@ export default function GruposImagensPage() {
   }
 
   const submitAdd = async (mode: 'add' | 'replace') => {
-    if (!addGroup.trim() || !addSubgroup.trim() || !addFileName.trim() || !addFile) {
-      setAddError('Preencha Grupo, Subgrupo, nome do arquivo e selecione a imagem')
+    if (!addFileName.trim() || !addFile) {
+      setAddError('Preencha o nome do arquivo e selecione a imagem')
       return
     }
     setAddSaving(true)
@@ -149,8 +133,7 @@ export default function GruposImagensPage() {
     try {
       const form = new FormData()
       form.set('profileId', user.id)
-      form.set('group', addGroup.trim())
-      form.set('subgroup', addSubgroup.trim())
+      form.set('path', addPath.trim())
       form.set('fileName', addFileName.trim())
       form.set('mode', mode)
       form.set('file', addFile)
@@ -159,8 +142,7 @@ export default function GruposImagensPage() {
       if (!res.ok) { setAddError(json.error || 'Falha ao enviar a imagem'); return }
       setAddOpen(false)
       showToast(mode === 'replace' ? 'Imagem substituída' : 'Imagem adicionada')
-      selectSubgroup(addGroup.trim(), addSubgroup.trim())
-      fetchTree()
+      navigateTo(addPath.trim())
     } catch {
       setAddError('Falha de rede ao enviar a imagem')
     } finally {
@@ -171,9 +153,7 @@ export default function GruposImagensPage() {
   // Substituir direto numa linha já existente — mesmo formulário de cima,
   // só pré-preenchido e já mandando mode=replace.
   const openReplace = (img: ImageObject) => {
-    if (!selectedGroup || !selectedSubgroup) return
-    setAddGroup(selectedGroup)
-    setAddSubgroup(selectedSubgroup)
+    setAddPath(currentPath)
     setAddFileName(img.fileName)
     setAddFile(null)
     setAddError('')
@@ -182,22 +162,20 @@ export default function GruposImagensPage() {
 
   // ── Renomear/Mover ───────────────────────────────────────────
   const [renameTarget, setRenameTarget] = useState<ImageObject | null>(null)
-  const [renameToGroup, setRenameToGroup] = useState('')
-  const [renameToSubgroup, setRenameToSubgroup] = useState('')
+  const [renameToPath, setRenameToPath] = useState('')
   const [renameToFileName, setRenameToFileName] = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
   const [renameError, setRenameError] = useState('')
 
   const openRename = (img: ImageObject) => {
     setRenameTarget(img)
-    setRenameToGroup(selectedGroup ?? '')
-    setRenameToSubgroup(selectedSubgroup ?? '')
+    setRenameToPath(currentPath)
     setRenameToFileName(img.fileName)
     setRenameError('')
   }
 
   const submitRename = async () => {
-    if (!renameTarget || !selectedGroup || !selectedSubgroup) return
+    if (!renameTarget) return
     setRenameSaving(true)
     setRenameError('')
     try {
@@ -206,8 +184,8 @@ export default function GruposImagensPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           profileId: user.id,
-          group: selectedGroup, subgroup: selectedSubgroup, fileName: renameTarget.fileName,
-          toGroup: renameToGroup.trim(), toSubgroup: renameToSubgroup.trim(), toFileName: renameToFileName.trim(),
+          path: currentPath, fileName: renameTarget.fileName,
+          toPath: renameToPath.trim(), toFileName: renameToFileName.trim(),
         }),
       })
       const json = await res.json()
@@ -225,15 +203,14 @@ export default function GruposImagensPage() {
   // ── Remover ──────────────────────────────────────────────────
   const [deleting, setDeleting] = useState<string | null>(null)
   const removeImage = async (img: ImageObject) => {
-    if (!selectedGroup || !selectedSubgroup) return
-    const ok = window.confirm(`Remover "${img.fileName}" de ${selectedGroup}/${selectedSubgroup}? Uma cópia de segurança é guardada no bucket, mas a imagem some do ar imediatamente.`)
+    const ok = window.confirm(`Remover "${img.fileName}" de ${currentPath || '(raiz)'}? Uma cópia de segurança é guardada no bucket, mas a imagem some do ar imediatamente.`)
     if (!ok) return
     setDeleting(img.fileName)
     try {
       const res = await fetch('/api/r2-images/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: user.id, group: selectedGroup, subgroup: selectedSubgroup, fileName: img.fileName }),
+        body: JSON.stringify({ profileId: user.id, path: currentPath, fileName: img.fileName }),
       })
       const json = await res.json()
       if (!res.ok) { showToast(json.error || 'Falha ao remover a imagem', true); return }
@@ -265,59 +242,74 @@ export default function GruposImagensPage() {
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Grupos de Imagens</h1>
       </div>
 
-      {treeError && <div className="text-error text-sm mb-4">⚠ {treeError}</div>}
+      {browseError && <div className="text-error text-sm mb-4">⚠ {browseError}</div>}
+
+      {/* Breadcrumb — navegação tipo Windows Explorer, profundidade livre */}
+      <div className="flex items-center gap-1 flex-wrap text-sm mb-4 bg-surface-container border border-outline-variant rounded-lg px-4 py-2">
+        <button
+          onClick={() => navigateTo('')}
+          className={`hover:text-primary transition-colors ${currentPath === '' ? 'text-primary font-semibold' : 'text-on-surface-variant'}`}
+        >
+          🗀 Raiz
+        </button>
+        {pathSegments.map((seg, i) => {
+          const isLast = i === pathSegments.length - 1
+          const targetPath = pathSegments.slice(0, i + 1).join('/')
+          return (
+            <span key={i} className="flex items-center gap-1">
+              <span className="text-outline">/</span>
+              <button
+                onClick={() => navigateTo(targetPath)}
+                className={`hover:text-primary transition-colors ${isLast ? 'text-primary font-semibold' : 'text-on-surface-variant'}`}
+              >
+                {seg}
+              </button>
+            </span>
+          )
+        })}
+        <button onClick={refreshCurrent} title="Recarregar" className="ml-auto text-outline hover:text-primary">⟳</button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
-        {/* Árvore Grupo / Subgrupo */}
+        {/* Subpastas do caminho atual */}
         <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
-            <span className="text-sm font-semibold text-on-surface">Grupos / Subgrupos</span>
-            <button onClick={fetchTree} title="Recarregar" className="text-outline hover:text-primary text-sm">⟳</button>
+            <span className="text-sm font-semibold text-on-surface">Pastas</span>
           </div>
           <div className="max-h-[70vh] overflow-y-auto">
-            {treeLoading ? (
+            {currentPath && (
+              <button
+                onClick={() => navigateTo(pathSegments.slice(0, -1).join('/'))}
+                className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm text-on-surface-variant hover:bg-surface-container-high transition-colors border-b border-outline-variant/40"
+              >
+                <span>↑</span> <span>Subir um nível</span>
+              </button>
+            )}
+            {browseLoading ? (
               <div className="p-4 text-sm text-outline">Carregando…</div>
-            ) : tree.length === 0 ? (
-              <div className="p-4 text-sm text-outline italic">Nenhum grupo encontrado no bucket.</div>
+            ) : folders.length === 0 ? (
+              <div className="p-4 text-sm text-outline italic">Nenhuma subpasta aqui.</div>
             ) : (
-              tree.map(g => (
-                <div key={g.name} className="border-b border-outline-variant/40 last:border-b-0">
-                  <div className="px-4 py-2 text-xs font-bold uppercase tracking-wide text-on-surface-variant bg-surface-container-low">
-                    {g.name}
-                  </div>
-                  {g.subgroups.map(sg => {
-                    const isActive = selectedGroup === g.name && selectedSubgroup === sg.name
-                    return (
-                      <button
-                        key={sg.name}
-                        onClick={() => selectSubgroup(g.name, sg.name)}
-                        className={`w-full flex items-center justify-between px-5 py-2 text-left text-sm transition-colors ${
-                          isActive ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:bg-surface-container-high'
-                        }`}
-                      >
-                        <span className="truncate">{sg.name}</span>
-                        <span className="text-xs font-mono text-outline shrink-0 ml-2">{sg.count}</span>
-                      </button>
-                    )
-                  })}
-                </div>
+              folders.map(name => (
+                <button
+                  key={name}
+                  onClick={() => enterFolder(name)}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm text-on-surface-variant hover:bg-surface-container-high transition-colors"
+                >
+                  <span className="text-outline">🗀</span>
+                  <span className="truncate">{name}</span>
+                </button>
               ))
             )}
           </div>
         </div>
 
-        {/* Imagens do subgrupo selecionado */}
+        {/* Imagens do caminho atual */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="text-sm text-on-surface-variant">
-              {selectedGroup && selectedSubgroup ? (
-                <>
-                  <span className="font-mono text-on-surface">{selectedGroup}/{selectedSubgroup}</span>
-                  {' '}— {images.length} imagem{images.length !== 1 ? 'ns' : ''}
-                </>
-              ) : (
-                'Selecione um grupo/subgrupo à esquerda, ou adicione um novo abaixo.'
-              )}
+              <span className="font-mono text-on-surface">{currentPath || '(raiz)'}</span>
+              {' '}— {files.length} imagem{files.length !== 1 ? 'ns' : ''}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -353,9 +345,9 @@ export default function GruposImagensPage() {
                           <td className="px-3 py-2 whitespace-nowrap text-outline">{new Date(c.created_at).toLocaleString('pt-BR')}</td>
                           <td className="px-3 py-2 whitespace-nowrap font-semibold text-on-surface">{ACTION_LABEL[c.action]}</td>
                           <td className="px-3 py-2 font-mono text-on-surface-variant">
-                            {c.group_name}/{c.subgroup_name}/{c.file_name}
+                            {rowFolderPath(c)}/{c.file_name}
                             {c.action === 'rename' && c.to_file_name && (
-                              <> → {c.to_group_name}/{c.to_subgroup_name}/{c.to_file_name}</>
+                              <> → {rowToFolderPath(c)}/{c.to_file_name}</>
                             )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-outline">{c.profile_name || '—'}</td>
@@ -368,44 +360,40 @@ export default function GruposImagensPage() {
             </div>
           )}
 
-          {imagesError && <div className="text-error text-sm">⚠ {imagesError}</div>}
-
-          {selectedGroup && selectedSubgroup && (
-            <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
-              {imagesLoading ? (
-                <div className="p-6 text-sm text-outline">Carregando…</div>
-              ) : images.length === 0 ? (
-                <div className="p-6 text-sm text-outline italic">Nenhuma imagem neste subgrupo ainda.</div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
-                  {images.map(img => (
-                    <div key={img.fileName} className="bg-surface-container p-3 flex flex-col gap-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img.url}
-                        alt={img.fileName}
-                        className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
-                      />
-                      <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
-                      <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
-                      <div className="flex items-center gap-2 flex-wrap text-xs">
-                        <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
-                        <button onClick={() => openReplace(img)} className="text-on-surface-variant hover:text-primary">Substituir</button>
-                        <button onClick={() => openRename(img)} className="text-on-surface-variant hover:text-primary">Renomear</button>
-                        <button
-                          onClick={() => removeImage(img)}
-                          disabled={deleting === img.fileName}
-                          className="text-error hover:underline disabled:opacity-50"
-                        >
-                          {deleting === img.fileName ? 'Removendo…' : 'Remover'}
-                        </button>
-                      </div>
+          <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+            {browseLoading ? (
+              <div className="p-6 text-sm text-outline">Carregando…</div>
+            ) : files.length === 0 ? (
+              <div className="p-6 text-sm text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
+                {files.map(img => (
+                  <div key={img.fileName} className="bg-surface-container p-3 flex flex-col gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={img.fileName}
+                      className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
+                    />
+                    <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
+                    <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
+                      <button onClick={() => openReplace(img)} className="text-on-surface-variant hover:text-primary">Substituir</button>
+                      <button onClick={() => openRename(img)} className="text-on-surface-variant hover:text-primary">Renomear</button>
+                      <button
+                        onClick={() => removeImage(img)}
+                        disabled={deleting === img.fileName}
+                        className="text-error hover:underline disabled:opacity-50"
+                      >
+                        {deleting === img.fileName ? 'Removendo…' : 'Remover'}
+                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -418,33 +406,21 @@ export default function GruposImagensPage() {
             </div>
             <div className="px-5 py-4 flex flex-col gap-3">
               <p className="text-xs text-outline">
-                Grupo e Subgrupo existentes aparecem na lista ao digitar; para criar um novo, basta digitar um
-                nome que ainda não existe — a pasta passa a existir no bucket assim que a imagem for enviada.
+                Pasta é o caminho completo dentro do bucket (ex: Acessórios/CAMERAS) — pode ter qualquer
+                profundidade; pra criar uma pasta nova, basta digitar um caminho que ainda não existe, a pasta
+                passa a existir no bucket assim que a imagem for enviada.
               </p>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Grupo
+                Pasta
                 <input
-                  list="grupo-imagens-groups"
-                  value={addGroup}
-                  onChange={e => setAddGroup(e.target.value)}
-                  placeholder="ex: Acessórios"
-                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
+                  list="grupo-imagens-folders"
+                  value={addPath}
+                  onChange={e => setAddPath(e.target.value)}
+                  placeholder="ex: Acessórios/CAMERAS"
+                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
                 />
-                <datalist id="grupo-imagens-groups">
-                  {tree.map(g => <option key={g.name} value={g.name} />)}
-                </datalist>
-              </label>
-              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Subgrupo
-                <input
-                  list="grupo-imagens-subgroups"
-                  value={addSubgroup}
-                  onChange={e => setAddSubgroup(e.target.value)}
-                  placeholder="ex: CAMERAS"
-                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
-                />
-                <datalist id="grupo-imagens-subgroups">
-                  {tree.find(g => g.name === addGroup)?.subgroups.map(sg => <option key={sg.name} value={sg.name} />)}
+                <datalist id="grupo-imagens-folders">
+                  {folders.map(f => <option key={f} value={currentPath ? `${currentPath}/${f}` : f} />)}
                 </datalist>
               </label>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
@@ -478,7 +454,7 @@ export default function GruposImagensPage() {
                 type="button"
                 onClick={() => submitAdd('replace')}
                 disabled={addSaving}
-                title="Use se já existe uma imagem com esse nome nesse grupo/subgrupo"
+                title="Use se já existe uma imagem com esse nome nessa pasta"
                 className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
               >
                 Substituir existente
@@ -505,15 +481,16 @@ export default function GruposImagensPage() {
             </div>
             <div className="px-5 py-4 flex flex-col gap-3">
               <p className="text-xs text-outline">
-                De: <span className="font-mono text-on-surface">{selectedGroup}/{selectedSubgroup}/{renameTarget.fileName}</span>
+                De: <span className="font-mono text-on-surface">{currentPath || '(raiz)'}/{renameTarget.fileName}</span>
               </p>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Novo Grupo
-                <input value={renameToGroup} onChange={e => setRenameToGroup(e.target.value)} className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary" />
-              </label>
-              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Novo Subgrupo
-                <input value={renameToSubgroup} onChange={e => setRenameToSubgroup(e.target.value)} className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary" />
+                Nova pasta
+                <input
+                  value={renameToPath}
+                  onChange={e => setRenameToPath(e.target.value)}
+                  placeholder="ex: Acessórios/CAMERAS"
+                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
+                />
               </label>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
                 Novo nome do arquivo
