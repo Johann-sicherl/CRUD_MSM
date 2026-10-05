@@ -260,13 +260,19 @@ export async function folderHasContent(folderPath: string): Promise<boolean> {
   return (res.Contents?.length ?? 0) > 0
 }
 
-// Lista TODAS as chaves (qualquer profundidade, sem Delimiter) sob um
-// prefixo — usado só por renameFolder, que precisa mover o conteúdo
-// inteiro da subárvore, não um nível por vez como browseFolder.
-async function listAllKeysUnderPrefix(prefix: string): Promise<string[]> {
+interface RawObject {
+  key: string
+  size: number
+  lastModified: string | null
+}
+
+// Lista TODOS os objetos (qualquer profundidade, sem Delimiter) sob um
+// prefixo — usado por renameFolder (que precisa mover a subárvore inteira,
+// não um nível por vez como browseFolder) e por searchAll (busca global).
+async function listAllObjectsUnderPrefix(prefix: string): Promise<RawObject[]> {
   const client = getClient()
   const bucket = getBucket()
-  const keys: string[] = []
+  const objects: RawObject[] = []
   let token: string | undefined
   do {
     const res = await client.send(new ListObjectsV2Command({
@@ -275,11 +281,11 @@ async function listAllKeysUnderPrefix(prefix: string): Promise<string[]> {
       ContinuationToken: token,
     }))
     for (const obj of res.Contents ?? []) {
-      if (obj.Key) keys.push(obj.Key)
+      if (obj.Key) objects.push({ key: obj.Key, size: obj.Size ?? 0, lastModified: obj.LastModified ? obj.LastModified.toISOString() : null })
     }
     token = res.IsTruncated ? res.NextContinuationToken : undefined
   } while (token)
-  return keys
+  return objects
 }
 
 // Renomeia/move uma pasta inteira (qualquer profundidade) — o R2/S3 não tem
@@ -301,7 +307,8 @@ export async function renameFolder(fromFolderPath: string, toFolderPath: string)
   const client = getClient()
   const bucket = getBucket()
 
-  const keys = await listAllKeysUnderPrefix(fromPrefix)
+  const objects = await listAllObjectsUnderPrefix(fromPrefix)
+  const keys = objects.map(o => o.key)
   const newKeys = keys.map(key => {
     const relative = key.slice(fromPrefix.length)
     return toNormalized ? `${getBasePrefix()}${toNormalized}/${relative}` : `${getBasePrefix()}${relative}`
@@ -318,6 +325,57 @@ export async function renameFolder(fromFolderPath: string, toFolderPath: string)
     await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
   }
   return keys.length
+}
+
+export interface SearchFileResult {
+  folderPath: string
+  fileName: string
+  size: number
+  lastModified: string | null
+  url: string
+}
+
+export interface SearchResult {
+  folders: string[]
+  files: SearchFileResult[]
+}
+
+// Busca global (pastas + imagens) em todo o bucket, não só no nível
+// navegado no momento — pedido explícito do usuário: "Quero que você
+// adicione um filtro de pesquisa para todas as imagens e para todas as
+// pastas também". Diferente de browseFolder (lazy, um nível por vez), isto
+// é uma varredura completa deliberada sob demanda — só dispara quando o
+// usuário pesquisa (nunca automaticamente ao navegar), então o custo de
+// listar tudo de uma vez é aceitável aqui mesmo em buckets grandes/fundos.
+//
+// Uma chamada só a listAllObjectsUnderPrefix cobre as duas buscas: toda
+// pasta é derivada da cadeia de diretórios de cada chave encontrada (sem
+// precisar de uma segunda varredura separada pra pastas).
+export async function searchAll(query: string): Promise<SearchResult> {
+  const q = query.trim().toLowerCase()
+  const base = getBasePrefix()
+  const objects = await listAllObjectsUnderPrefix(base)
+  const folderSet = new Set<string>()
+  const files: SearchFileResult[] = []
+  for (const obj of objects) {
+    const relative = obj.key.slice(base.length)
+    if (!relative) continue
+    const segments = relative.split('/')
+    const fileName = segments.pop()
+    if (!fileName) continue
+    for (let i = 1; i <= segments.length; i++) {
+      folderSet.add(segments.slice(0, i).join('/'))
+    }
+    if (fileName.toLowerCase().includes(q)) {
+      const folderPath = segments.join('/')
+      files.push({ folderPath, fileName, size: obj.size, lastModified: obj.lastModified, url: buildPublicUrl(folderPath, fileName) })
+    }
+  }
+  const folders = Array.from(folderSet)
+    .filter(f => f.toLowerCase().includes(q))
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  files.sort((a, b) => a.fileName.localeCompare(b.fileName, 'pt-BR', { numeric: true }))
+  return { folders, files }
 }
 
 // Backup automático antes de substituir/remover — o manual da TI pede isso

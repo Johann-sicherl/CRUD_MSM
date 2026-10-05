@@ -14,6 +14,13 @@ interface BrowseColumn {
   folders: string[]
   files: ImageObject[]
 }
+interface SearchFileResult {
+  folderPath: string
+  fileName: string
+  size: number
+  lastModified: string | null
+  url: string
+}
 interface ImageChangeRow {
   id: string
   action: 'upload' | 'replace' | 'rename' | 'delete'
@@ -130,21 +137,74 @@ export default function GruposImagensPage() {
     setColumns(prev => prev.slice(0, keepCount + 1))
   }
 
-  // Recarrega todas as colunas abertas no momento (não só a mais funda) —
-  // uma mudança em qualquer nível já visitado também deve aparecer.
-  const refreshAll = async () => {
+  // Carrega todas as colunas (raiz + um nível por segmento) de um caminho
+  // qualquer de uma vez (Promise.all) — usada tanto por refreshAll (recarrega
+  // o caminho atual) quanto por navigateToPath (pula direto pra um resultado
+  // de busca, sem precisar clicar nível por nível na cascata).
+  const loadPath = async (segments: string[]) => {
     setBrowseLoading(true)
     setBrowseError('')
     try {
-      const paths = ['', ...pathSegments.map((_, i) => pathSegments.slice(0, i + 1).join('/'))]
+      const paths = ['', ...segments.map((_, i) => segments.slice(0, i + 1).join('/'))]
       const results = await Promise.all(paths.map(p => fetchBrowseColumn(user.id, p)))
       setColumns(results)
+      setPathSegments(segments)
     } catch (err) {
       setBrowseError(err instanceof Error ? err.message : 'Falha de rede ao consultar o bucket de imagens')
     } finally {
       setBrowseLoading(false)
     }
   }
+
+  // Recarrega todas as colunas abertas no momento (não só a mais funda) —
+  // uma mudança em qualquer nível já visitado também deve aparecer.
+  const refreshAll = () => loadPath(pathSegments)
+
+  // Pula direto pra um caminho vindo de um resultado de busca (pasta ou a
+  // pasta de uma imagem encontrada) — sai do modo de busca e navega até lá.
+  const navigateToPath = (fullPath: string) => {
+    setSearchQuery('')
+    setSearchResults(null)
+    loadPath(fullPath ? fullPath.split('/') : [])
+  }
+
+  // ── Busca global (pastas + imagens, bucket inteiro) ───────────
+  // Pedido explícito do usuário: "Quero que você adicione um filtro de
+  // pesquisa para todas as imagens e para todas as pastas também" — ao
+  // contrário da navegação normal (sempre um nível por vez, lazy), a busca
+  // varre o bucket inteiro sob demanda; substitui a cascata+grade enquanto
+  // o campo tiver pelo menos 2 caracteres, com debounce pra não disparar
+  // uma varredura completa a cada tecla.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<{ folders: string[]; files: SearchFileResult[]; foldersTotal: number; filesTotal: number } | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const searchActive = searchQuery.trim().length >= 2
+
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (q.length < 2) { setSearchResults(null); setSearchError(''); setSearching(false); return }
+    setSearching(true)
+    setSearchError('')
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/r2-images/search?profileId=${user.id}&q=${encodeURIComponent(q)}`)
+        const json = await res.json()
+        if (!res.ok) { setSearchError(json.error || 'Falha na busca'); return }
+        setSearchResults({
+          folders: json.folders || [],
+          files: json.files || [],
+          foldersTotal: json.foldersTotal ?? (json.folders || []).length,
+          filesTotal: json.filesTotal ?? (json.files || []).length,
+        })
+      } catch {
+        setSearchError('Falha de rede na busca')
+      } finally {
+        setSearching(false)
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery, user.id])
 
   // ── Changes log ──────────────────────────────────────────────
   const [changes, setChanges] = useState<ImageChangeRow[]>([])
@@ -444,8 +504,91 @@ export default function GruposImagensPage() {
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Grupos de Imagens</h1>
       </div>
 
-      {browseError && <div className="text-error text-sm mb-4">⚠ {browseError}</div>}
+      {/* Busca global — pastas e imagens em todo o bucket, não só no nível navegado */}
+      <div className="relative mb-6">
+        <input
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Buscar pasta ou imagem em todo o bucket (mínimo 2 letras)…"
+          className="w-full bg-surface-container border border-outline-variant rounded-lg pl-4 pr-9 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            title="Limpar busca"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-primary"
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
+      {browseError && !searchActive && <div className="text-error text-sm mb-4">⚠ {browseError}</div>}
+
+      {searchActive && (
+        <div className="flex flex-col gap-4 mb-6">
+          {searchError && <div className="text-error text-sm">⚠ {searchError}</div>}
+          {searching ? (
+            <div className="text-sm text-outline">Buscando em todo o bucket…</div>
+          ) : searchResults && (
+            <>
+              <div>
+                <div className="text-sm font-semibold text-on-surface mb-2">
+                  Pastas ({searchResults.foldersTotal}{searchResults.foldersTotal > searchResults.folders.length ? `, mostrando ${searchResults.folders.length}` : ''})
+                </div>
+                {searchResults.folders.length === 0 ? (
+                  <div className="text-sm text-outline italic">Nenhuma pasta encontrada.</div>
+                ) : (
+                  <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                    {searchResults.folders.map(f => (
+                      <button
+                        key={f}
+                        onClick={() => navigateToPath(f)}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm text-on-surface-variant hover:bg-surface-container-high transition-colors border-b border-outline-variant/40 last:border-b-0"
+                      >
+                        <span className="text-outline">🗀</span>
+                        <span className="font-mono truncate">{f}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-on-surface mb-2">
+                  Imagens ({searchResults.filesTotal}{searchResults.filesTotal > searchResults.files.length ? `, mostrando ${searchResults.files.length}` : ''})
+                </div>
+                {searchResults.files.length === 0 ? (
+                  <div className="text-sm text-outline italic">Nenhuma imagem encontrada.</div>
+                ) : (
+                  <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
+                      {searchResults.files.map(f => (
+                        <div key={`${f.folderPath}/${f.fileName}`} className="bg-surface-container p-3 flex flex-col gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={f.url}
+                            alt={f.fileName}
+                            className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
+                          />
+                          <div className="font-mono text-xs text-on-surface truncate" title={f.fileName}>{f.fileName}</div>
+                          <div className="text-xs text-outline truncate" title={f.folderPath}>{f.folderPath || '(raiz)'}</div>
+                          <div className="flex items-center gap-2 flex-wrap text-xs">
+                            <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
+                            <button onClick={() => navigateToPath(f.folderPath)} className="text-on-surface-variant hover:text-primary">Ir até a pasta</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {!searchActive && (
+      <>
       {/* Breadcrumb compacto — atalho pra voltar a um nível já aberto sem rolar as caixas */}
       <div className="flex items-center gap-1 flex-wrap text-sm mb-4 bg-surface-container border border-outline-variant rounded-lg px-4 py-2">
         <button
@@ -643,6 +786,8 @@ export default function GruposImagensPage() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* Pop-up Adicionar/Substituir */}
       {addOpen && (

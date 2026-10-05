@@ -405,6 +405,48 @@ subárvore inteira em vez de um objeto só.
   de uma pasta-filha), então recomeçar do zero é mais simples e seguro que
   tentar remendar o estado de navegação em cascata.
 
+### Busca global (pastas + imagens, bucket inteiro)
+
+Pedido explícito do usuário: "Quero que você adicione um filtro de
+pesquisa para todas as imagens e para todas as pastas também." Diferente
+de toda a navegação normal (sempre lazy, um nível por vez — ver "Navegação
+tipo Windows Explorer" acima), a busca é uma **varredura completa do
+bucket sob demanda**, disparada só quando o usuário digita (nunca
+automaticamente ao navegar) — essa é a exceção deliberada à regra de "não
+varrer tudo de uma vez" do resto da tela: busca por substring não tem como
+ser paginada/lazy, então o custo de listar tudo é aceito aqui, só aqui.
+
+- **`searchAll(query)`** (`r2Images.ts`) — uma chamada só a
+  `listAllObjectsUnderPrefix(getBasePrefix())` (a mesma função genérica que
+  `renameFolder` já usava, generalizada pra também trazer `size`/
+  `lastModified` de cada objeto) cobre as duas buscas ao mesmo tempo: toda
+  pasta candidata é derivada da cadeia de diretórios de cada chave
+  encontrada (sem round-trip separado pra pastas), e cada imagem é
+  comparada pelo nome do arquivo. Filtro por substring, case-insensitive,
+  sem acentuação especial.
+- **`GET /api/r2-images/search?q=`** — exige 2+ caracteres (`400` se
+  menor, pra não disparar varredura em cima de uma letra só). Limita a
+  **200 resultados por tipo** na resposta (`MAX_RESULTS`) — a varredura em
+  si sempre examina o bucket inteiro, mas não faz sentido mandar uma lista
+  gigante pro cliente; `foldersTotal`/`filesTotal` vêm separados da
+  contagem recortada, pra tela poder avisar "mostrando X de Y" quando o
+  resultado real for maior que o limite.
+- **Tela** — campo de busca sempre visível, logo abaixo do título (não
+  dentro de nenhuma pasta específica). Debounce de 400ms — só dispara a
+  requisição depois que o usuário parar de digitar, pra não varrer o
+  bucket a cada tecla. Com 2+ caracteres digitados, a busca **substitui**
+  por completo o breadcrumb + caixas em cascata + grade normal (não convive
+  com eles) — mostra duas listas, "Pastas (N)" e "Imagens (N)": clicar
+  numa pasta ou em "Ir até a pasta" (dentro de um resultado de imagem) sai
+  do modo de busca e navega direto pra lá (`navigateToPath`, carrega todas
+  as colunas intermediáras de uma vez com `Promise.all`, mesma lógica que
+  `refreshAll` já usava, extraída pra um `loadPath(segments)` comum aos
+  dois). **Escopo deliberado**: um resultado de busca só tem "Abrir"/"Ir
+  até a pasta" — renomear/substituir/remover uma imagem encontrada exige
+  navegar até ela primeiro (reusa as ações de sempre, de lá), em vez de
+  duplicar cada ação pra funcionar também em cima de um resultado de busca
+  "solto".
+
 ## O que ficou fora do escopo desta 1ª versão
 
 Pra não inflar demais uma primeira entrega, as seguintes seções do manual
