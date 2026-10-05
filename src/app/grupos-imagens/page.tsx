@@ -181,30 +181,44 @@ export default function GruposImagensPage() {
   const [searchError, setSearchError] = useState('')
   const searchActive = searchQuery.trim().length >= 2
 
+  const runSearch = useCallback(async (q: string) => {
+    setSearching(true)
+    setSearchError('')
+    try {
+      const res = await fetch(`/api/r2-images/search?profileId=${user.id}&q=${encodeURIComponent(q)}`)
+      const json = await res.json()
+      if (!res.ok) { setSearchError(json.error || 'Falha na busca'); return }
+      setSearchResults({
+        folders: json.folders || [],
+        files: json.files || [],
+        foldersTotal: json.foldersTotal ?? (json.folders || []).length,
+        filesTotal: json.filesTotal ?? (json.files || []).length,
+      })
+    } catch {
+      setSearchError('Falha de rede na busca')
+    } finally {
+      setSearching(false)
+    }
+  }, [user.id])
+
   useEffect(() => {
     const q = searchQuery.trim()
     if (q.length < 2) { setSearchResults(null); setSearchError(''); setSearching(false); return }
     setSearching(true)
     setSearchError('')
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/r2-images/search?profileId=${user.id}&q=${encodeURIComponent(q)}`)
-        const json = await res.json()
-        if (!res.ok) { setSearchError(json.error || 'Falha na busca'); return }
-        setSearchResults({
-          folders: json.folders || [],
-          files: json.files || [],
-          foldersTotal: json.foldersTotal ?? (json.folders || []).length,
-          filesTotal: json.filesTotal ?? (json.files || []).length,
-        })
-      } catch {
-        setSearchError('Falha de rede na busca')
-      } finally {
-        setSearching(false)
-      }
-    }, 400)
+    const timer = setTimeout(() => runSearch(q), 400)
     return () => clearTimeout(timer)
-  }, [searchQuery, user.id])
+  }, [searchQuery, runSearch])
+
+  // Recarrega depois de editar uma imagem (substituir/renomear/remover) —
+  // se a edição veio de um resultado de busca, refaz a busca (o item pode
+  // ter saído do resultado, ex. depois de renomear); senão recarrega a
+  // navegação normal, como já fazia antes de existir busca.
+  const refreshAfterChange = () => {
+    const q = searchQuery.trim()
+    if (q.length >= 2) runSearch(q)
+    else refreshAll()
+  }
 
   // ── Changes log ──────────────────────────────────────────────
   const [changes, setChanges] = useState<ImageChangeRow[]>([])
@@ -257,7 +271,7 @@ export default function GruposImagensPage() {
       if (!res.ok) { setAddError(json.error || 'Falha ao enviar a imagem'); return }
       setAddOpen(false)
       showToast(mode === 'replace' ? 'Imagem substituída' : 'Imagem adicionada')
-      refreshAll()
+      refreshAfterChange()
     } catch {
       setAddError('Falha de rede ao enviar a imagem')
     } finally {
@@ -266,9 +280,13 @@ export default function GruposImagensPage() {
   }
 
   // Substituir direto numa linha já existente — mesmo formulário de cima,
-  // só pré-preenchido e já mandando mode=replace.
-  const openReplace = (img: ImageObject) => {
-    setAddPath(currentPath)
+  // só pré-preenchido e já mandando mode=replace. folderPath é explícito
+  // (default = pasta atual) pra também funcionar em cima de um resultado de
+  // busca, que pode estar numa pasta diferente da navegada no momento —
+  // pedido explícito do usuário: "Quero poder editar as imagens que estão
+  // sendo apresentadas no meu filtro".
+  const openReplace = (img: { fileName: string }, folderPath: string = currentPath) => {
+    setAddPath(folderPath)
     setAddFileName(img.fileName)
     setAddFile(null)
     setAddError('')
@@ -276,15 +294,15 @@ export default function GruposImagensPage() {
   }
 
   // ── Renomear/Mover ───────────────────────────────────────────
-  const [renameTarget, setRenameTarget] = useState<ImageObject | null>(null)
+  const [renameTarget, setRenameTarget] = useState<{ fileName: string; fromPath: string } | null>(null)
   const [renameToPath, setRenameToPath] = useState('')
   const [renameToFileName, setRenameToFileName] = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
   const [renameError, setRenameError] = useState('')
 
-  const openRename = (img: ImageObject) => {
-    setRenameTarget(img)
-    setRenameToPath(currentPath)
+  const openRename = (img: { fileName: string }, folderPath: string = currentPath) => {
+    setRenameTarget({ fileName: img.fileName, fromPath: folderPath })
+    setRenameToPath(folderPath)
     setRenameToFileName(img.fileName)
     setRenameError('')
   }
@@ -299,7 +317,7 @@ export default function GruposImagensPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           profileId: user.id,
-          path: currentPath, fileName: renameTarget.fileName,
+          path: renameTarget.fromPath, fileName: renameTarget.fileName,
           toPath: renameToPath.trim(), toFileName: renameToFileName.trim(),
         }),
       })
@@ -307,7 +325,7 @@ export default function GruposImagensPage() {
       if (!res.ok) { setRenameError(json.error || 'Falha ao renomear a imagem'); return }
       setRenameTarget(null)
       showToast('Imagem renomeada/movida')
-      refreshAll()
+      refreshAfterChange()
     } catch {
       setRenameError('Falha de rede ao renomear a imagem')
     } finally {
@@ -316,21 +334,26 @@ export default function GruposImagensPage() {
   }
 
   // ── Remover ──────────────────────────────────────────────────
+  // Chave composta pasta+arquivo (não só o nome) — evita que remover uma
+  // imagem numa pasta deixe o botão de outra imagem com o mesmo nome, mas
+  // em pasta diferente, também parecendo "removendo" (pode acontecer com
+  // resultados de busca, que mostram várias pastas ao mesmo tempo).
   const [deleting, setDeleting] = useState<string | null>(null)
-  const removeImage = async (img: ImageObject) => {
-    const ok = window.confirm(`Remover "${img.fileName}" de ${currentPath || '(raiz)'}? Uma cópia de segurança é guardada no bucket, mas a imagem some do ar imediatamente.`)
+  const removeImage = async (img: { fileName: string }, folderPath: string = currentPath) => {
+    const ok = window.confirm(`Remover "${img.fileName}" de ${folderPath || '(raiz)'}? Uma cópia de segurança é guardada no bucket, mas a imagem some do ar imediatamente.`)
     if (!ok) return
-    setDeleting(img.fileName)
+    const key = `${folderPath}/${img.fileName}`
+    setDeleting(key)
     try {
       const res = await fetch('/api/r2-images/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: user.id, path: currentPath, fileName: img.fileName }),
+        body: JSON.stringify({ profileId: user.id, path: folderPath, fileName: img.fileName }),
       })
       const json = await res.json()
       if (!res.ok) { showToast(json.error || 'Falha ao remover a imagem', true); return }
       showToast('Imagem removida')
-      refreshAll()
+      refreshAfterChange()
     } catch {
       showToast('Falha de rede ao remover a imagem', true)
     } finally {
@@ -575,6 +598,15 @@ export default function GruposImagensPage() {
                           <div className="flex items-center gap-2 flex-wrap text-xs">
                             <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
                             <button onClick={() => navigateToPath(f.folderPath)} className="text-on-surface-variant hover:text-primary">Ir até a pasta</button>
+                            <button onClick={() => openReplace(f, f.folderPath)} className="text-on-surface-variant hover:text-primary">Substituir</button>
+                            <button onClick={() => openRename(f, f.folderPath)} className="text-on-surface-variant hover:text-primary">Renomear</button>
+                            <button
+                              onClick={() => removeImage(f, f.folderPath)}
+                              disabled={deleting === `${f.folderPath}/${f.fileName}`}
+                              className="text-error hover:underline disabled:opacity-50"
+                            >
+                              {deleting === `${f.folderPath}/${f.fileName}` ? 'Removendo…' : 'Remover'}
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -773,10 +805,10 @@ export default function GruposImagensPage() {
                     <button onClick={() => openRename(img)} className="text-on-surface-variant hover:text-primary">Renomear</button>
                     <button
                       onClick={() => removeImage(img)}
-                      disabled={deleting === img.fileName}
+                      disabled={deleting === `${currentPath}/${img.fileName}`}
                       className="text-error hover:underline disabled:opacity-50"
                     >
-                      {deleting === img.fileName ? 'Removendo…' : 'Remover'}
+                      {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
                     </button>
                   </div>
                 </div>
@@ -873,7 +905,7 @@ export default function GruposImagensPage() {
             </div>
             <div className="px-5 py-4 flex flex-col gap-3">
               <p className="text-xs text-outline">
-                De: <span className="font-mono text-on-surface">{currentPath || '(raiz)'}/{renameTarget.fileName}</span>
+                De: <span className="font-mono text-on-surface">{renameTarget.fromPath || '(raiz)'}/{renameTarget.fileName}</span>
               </p>
               <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
                 Nova pasta

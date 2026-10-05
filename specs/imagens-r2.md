@@ -441,11 +441,38 @@ ser paginada/lazy, então o custo de listar tudo é aceito aqui, só aqui.
   do modo de busca e navega direto pra lá (`navigateToPath`, carrega todas
   as colunas intermediáras de uma vez com `Promise.all`, mesma lógica que
   `refreshAll` já usava, extraída pra um `loadPath(segments)` comum aos
-  dois). **Escopo deliberado**: um resultado de busca só tem "Abrir"/"Ir
-  até a pasta" — renomear/substituir/remover uma imagem encontrada exige
-  navegar até ela primeiro (reusa as ações de sempre, de lá), em vez de
-  duplicar cada ação pra funcionar também em cima de um resultado de busca
-  "solto".
+  dois).
+
+**2ª rodada, pedido explícito do usuário**: "Quero poder editar as imagens
+que estão sendo apresentadas no meu filtro" — a 1ª versão só tinha
+"Abrir"/"Ir até a pasta" num resultado de busca; renomear/substituir/
+remover exigiam navegar até a pasta primeiro. Cada card de imagem nos
+resultados de busca ganhou os mesmos três botões da grade normal
+(Substituir/Renomear/Remover), agindo direto em cima daquele resultado,
+sem precisar navegar antes:
+- `openReplace`/`openRename`/`removeImage` deixaram de assumir sempre
+  `currentPath` — passaram a aceitar um `folderPath` explícito (parâmetro
+  opcional, default `currentPath`, pra nenhum call site da grade normal
+  precisar mudar). `renameTarget` passou a guardar `fromPath` junto do
+  `fileName` (antes só guardava o objeto `ImageObject`, que não carregava
+  pasta nenhuma — `submitRename` usava `currentPath` direto, que seria
+  **errado** num resultado de busca, já que a imagem pode estar numa pasta
+  diferente da navegada no momento).
+- `deleting` (estado de "removendo…" por linha) passou de chave só
+  `fileName` pra chave composta `${folderPath}/${fileName}` — evita que
+  remover uma imagem numa pasta deixe o botão de outra imagem com o
+  **mesmo nome** só que em pasta diferente também parecendo "removendo";
+  isso nunca acontecia na grade normal (uma pasta só pode ter um arquivo
+  com cada nome), mas os resultados de busca mostram várias pastas ao
+  mesmo tempo, então o nome sozinho deixou de ser uma chave única.
+- **`refreshAfterChange()`** substituiu as chamadas diretas a `refreshAll()`
+  depois de substituir/renomear/remover — se a edição veio de um resultado
+  de busca (`searchQuery` com 2+ caracteres), refaz a busca (`runSearch`,
+  extraída do `useEffect` de debounce pra poder ser chamada também daqui);
+  senão recarrega a navegação normal, como já fazia antes. Importante
+  porque um item editado pode sair do resultado (ex.: renomear o arquivo
+  pra um nome que não bate mais com o termo buscado) — sem refazer a
+  busca, a lista ficaria mostrando um resultado desatualizado.
 
 ## O que ficou fora do escopo desta 1ª versão
 
