@@ -308,11 +308,38 @@ o que cada linha significa.
   de uma linha já existente (pré-preenchido, mas ainda com os dois botões
   — nada impede o usuário de, ali, optar por "Adicionar nova" com outro
   nome em vez de substituir).
-- "Remover" pede confirmação (`window.confirm`) antes de chamar a rota,
-  mesmo padrão já usado em telas auxiliares deste projeto (ver
-  `specs/telas-auxiliares.md`).
+- "Remover" (por linha) pede confirmação (`window.confirm`) antes de
+  chamar a rota, mesmo padrão já usado em telas auxiliares deste projeto
+  (ver `specs/telas-auxiliares.md`).
 - "Ver histórico de alterações" — painel colapsável com as últimas 200
   linhas de `image_change_log`.
+
+### Seleção múltipla + exclusão em lote
+
+Pedido explícito do usuário: "Quero ter o controle total das imagens, que
+em cada imagem que eu possa selecionar mais de uma ao mesmo tempo, neste
+momento que eu consiga deletar estas imagens." Cada cartão de imagem ganhou
+um checkbox (`selectedFiles: Set<string>`, por nome de arquivo) — clicar no
+checkbox **ou** na própria miniatura seleciona (os dois ficam dentro do
+mesmo `<label>`). Acima da grade: "Selecionar todas"/"Limpar seleção"
+(alterna conforme já tem tudo selecionado ou não) e, só quando há pelo
+menos uma selecionada, "Excluir selecionadas (N)".
+
+- **Seleção é sempre relativa à pasta atual** — nomes de arquivo só fazem
+  sentido dentro dela (duas pastas podem ter arquivos com o mesmo nome).
+  `useEffect` limpa `selectedFiles` sempre que `currentPath` muda, pra
+  nunca arrastar uma seleção "fantasma" de outra pasta.
+- **Exclusão em lote é sequencial** (`for...of` + `await`, não
+  `Promise.all`) — mesmo padrão de toda escrita em massa deste projeto
+  (ver `specs/custeio-financeiro.md`, "Escritas financeiras em massa são
+  sequenciais"): erro isolado por imagem, ordem previsível. Cada chamada é
+  um `POST /delete` normal — herda de graça o `backupImage` automático e o
+  registro em `image_change_log` que o delete individual já tinha, sem
+  nenhum caminho de escrita paralelo.
+- Confirmação única (`window.confirm`) antes de começar o lote, mostrando
+  a contagem. Ao final, toast resume quantas foram removidas e quantas
+  falharam (se alguma falhar, o toast fica no estilo de erro) — uma falha
+  isolada numa imagem nunca interrompe as demais do lote.
 
 ## O que ficou fora do escopo desta 1ª versão
 

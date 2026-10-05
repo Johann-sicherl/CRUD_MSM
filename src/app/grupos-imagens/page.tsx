@@ -278,6 +278,58 @@ export default function GruposImagensPage() {
     }
   }
 
+  // ── Seleção múltipla + exclusão em lote ─────────────────────
+  // Pedido explícito do usuário: "quero ter o controle total das imagens,
+  // que em cada imagem que eu possa selecionar mais de uma ao mesmo
+  // tempo... que eu consiga deletar estas imagens". Seleção é sempre
+  // relativa à pasta atual (nomes de arquivo só fazem sentido dentro dela)
+  // — limpa automaticamente ao trocar de pasta, pra nunca arrastar uma
+  // seleção "fantasma" de outro lugar.
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
+  useEffect(() => { setSelectedFiles(new Set()) }, [currentPath])
+
+  const toggleSelected = (fileName: string) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev)
+      if (next.has(fileName)) next.delete(fileName)
+      else next.add(fileName)
+      return next
+    })
+  }
+  const selectAllVisible = () => setSelectedFiles(new Set(files.map(f => f.fileName)))
+  const clearSelection = () => setSelectedFiles(new Set())
+
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const submitBulkDelete = async () => {
+    const targets = Array.from(selectedFiles)
+    if (targets.length === 0) return
+    const ok = window.confirm(`Remover ${targets.length} imagem(ns) de ${currentPath || '(raiz)'}? Uma cópia de segurança é guardada no bucket pra cada uma, mas elas somem do ar imediatamente.`)
+    if (!ok) return
+    setBulkDeleting(true)
+    // Sequencial de propósito (não Promise.all) — erro isolado por imagem e
+    // ordem previsível, mesmo padrão de toda escrita em lote deste projeto.
+    let okCount = 0
+    let failCount = 0
+    for (const fileName of targets) {
+      try {
+        const res = await fetch('/api/r2-images/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId: user.id, path: currentPath, fileName }),
+        })
+        if (res.ok) okCount++
+        else failCount++
+      } catch {
+        failCount++
+      }
+    }
+    setBulkDeleting(false)
+    clearSelection()
+    refreshAll()
+    if (failCount === 0) showToast(`${okCount} imagem(ns) removida(s)`)
+    else showToast(`${okCount} removida(s), ${failCount} falharam`, true)
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!user.isAdmin) {
@@ -361,8 +413,26 @@ export default function GruposImagensPage() {
           <div className="text-sm text-on-surface-variant">
             <span className="font-mono text-on-surface">{currentPath || '(raiz)'}</span>
             {' '}— {files.length} imagem{files.length !== 1 ? 'ns' : ''}
+            {selectedFiles.size > 0 && <> · {selectedFiles.size} selecionada{selectedFiles.size !== 1 ? 's' : ''}</>}
           </div>
           <div className="flex items-center gap-2">
+            {files.length > 0 && (
+              <button
+                onClick={selectedFiles.size === files.length ? clearSelection : selectAllVisible}
+                className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+              >
+                {selectedFiles.size === files.length ? 'Limpar seleção' : 'Selecionar todas'}
+              </button>
+            )}
+            {selectedFiles.size > 0 && (
+              <button
+                onClick={submitBulkDelete}
+                disabled={bulkDeleting}
+                className="px-3 py-2 text-sm border border-error/40 rounded text-error hover:bg-error-container/20 disabled:opacity-50 transition-colors"
+              >
+                {bulkDeleting ? 'Removendo…' : `Excluir selecionadas (${selectedFiles.size})`}
+              </button>
+            )}
             <button
               onClick={() => setChangesOpen(v => !v)}
               className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
@@ -418,14 +488,24 @@ export default function GruposImagensPage() {
             <div className="p-6 text-sm text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
-              {files.map(img => (
-                <div key={img.fileName} className="bg-surface-container p-3 flex flex-col gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.url}
-                    alt={img.fileName}
-                    className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
-                  />
+              {files.map(img => {
+                const isSelected = selectedFiles.has(img.fileName)
+                return (
+                <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelected(img.fileName)}
+                      className="mt-1 shrink-0"
+                    />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={img.fileName}
+                      className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
+                    />
+                  </label>
                   <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
                   <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
                   <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -441,7 +521,8 @@ export default function GruposImagensPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
