@@ -6,54 +6,60 @@ import {
   CopyObjectCommand,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3'
+import { getLocalValue } from './localCredentials'
 
 // Integração com o bucket Cloudflare R2 "images-msm" (ver specs/imagens-r2.md)
 // — mesmo bucket que a equipe de TI/Engenharia já mantém manualmente via
 // rclone/PowerShell. Credenciais (Account ID, Access Key, Secret Key) são
 // infraestrutura compartilhada da equipe (guardadas no cofre de senhas
 // corporativo, segundo o próprio manual da TI) — não são um login pessoal
-// como Protheus/PDM, então ficam em variável de ambiente (.env.local),
-// nunca digitadas numa tela, mesmo padrão de SUPABASE_SECRET_KEY
-// (ver src/lib/supabase.ts).
+// como Protheus/PDM, então nunca são digitadas numa tela. Podem vir de
+// variável de ambiente (.env.local, mesmo padrão de SUPABASE_SECRET_KEY —
+// ver src/lib/supabase.ts) OU do mesmo arquivo local-data/local-access.txt
+// usado pelo botão "Entrar com Dados Locais" do Protheus/PDM (ver
+// localCredentials.ts) — pedido explícito do usuário, pra ter um único
+// lugar com todas as credenciais desta máquina. .env.local tem prioridade
+// quando as duas existirem, pra nunca mudar o comportamento de quem já
+// configurou isso em produção.
 //
 // R2 é compatível com a API S3 — o SDK oficial da AWS (@aws-sdk/client-s3)
 // funciona direto, só trocando o endpoint.
 
 let _client: S3Client | null = null
 
-function env(name: string): string {
-  const v = process.env[name]
-  if (!v) throw new Error(`${name} não configurada no .env.local — necessária para o Gerenciador de Imagens (ver specs/imagens-r2.md)`)
+function envOrLocal(name: string): string {
+  const v = process.env[name] || getLocalValue(name)
+  if (!v) throw new Error(`${name} não configurada — defina no .env.local ou em local-data/local-access.txt (necessária para o Gerenciador de Imagens, ver specs/imagens-r2.md)`)
   return v
 }
 
 function getClient(): S3Client {
   if (_client) return _client
-  const accountId = env('R2_ACCOUNT_ID')
+  const accountId = envOrLocal('R2_ACCOUNT_ID')
   _client = new S3Client({
     region: 'auto',
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: env('R2_ACCESS_KEY_ID'),
-      secretAccessKey: env('R2_SECRET_ACCESS_KEY'),
+      accessKeyId: envOrLocal('R2_ACCESS_KEY_ID'),
+      secretAccessKey: envOrLocal('R2_SECRET_ACCESS_KEY'),
     },
   })
   return _client
 }
 
 function getBucket(): string {
-  return process.env.R2_BUCKET || 'images-msm'
+  return process.env.R2_BUCKET || getLocalValue('R2_BUCKET') || 'images-msm'
 }
 
 // Caminho-base dentro do bucket, exatamente como o manual da TI descreve —
-// sempre com "/" no final. Configurável por env var (nunca hardcoded sem
-// escape) porque o próprio nome tem espaço e acento ("Monte sua Máquina",
-// "Imagens - MSM") — mais seguro deixar a grafia exata numa variável só,
-// conferida uma vez, do que arriscar divergência entre código e bucket
-// real (é exatamente o erro que o manual avisa: "uma letra maiúscula, um
-// acento ou um espaço diferente faz a imagem sumir").
+// sempre com "/" no final. Configurável por env var/arquivo local (nunca
+// hardcoded sem escape) porque o próprio nome tem espaço e acento ("Monte
+// sua Máquina", "Imagens - MSM") — mais seguro deixar a grafia exata numa
+// variável só, conferida uma vez, do que arriscar divergência entre código
+// e bucket real (é exatamente o erro que o manual avisa: "uma letra
+// maiúscula, um acento ou um espaço diferente faz a imagem sumir").
 function getBasePrefix(): string {
-  const raw = process.env.R2_BASE_PREFIX || 'img/Monte sua Máquina/Imagens - MSM/'
+  const raw = process.env.R2_BASE_PREFIX || getLocalValue('R2_BASE_PREFIX') || 'img/Monte sua Máquina/Imagens - MSM/'
   return raw.endsWith('/') ? raw : `${raw}/`
 }
 
@@ -63,7 +69,7 @@ function getBasePrefix(): string {
 // chutar uma das duas, fica configurável por env var — confirme a grafia
 // certa com a TI antes de preencher.
 function getPublicBaseUrl(): string {
-  const raw = env('R2_PUBLIC_BASE_URL')
+  const raw = envOrLocal('R2_PUBLIC_BASE_URL')
   return raw.endsWith('/') ? raw.slice(0, -1) : raw
 }
 

@@ -1,0 +1,33 @@
+# ============================================================
+# Credenciais locais — Protheus, PDM e Cloudflare R2
+# ============================================================
+# Copie este arquivo para local-data/local-access.txt (crie a pasta
+# "local-data" na raiz do projeto se ela ainda não existir) e preencha os
+# valores reais abaixo. Esse arquivo NUNCA é enviado ao Git (local-data/
+# está no .gitignore) — fica só nesta máquina.
+#
+# Depois de preenchido, o botão "Entrar com Dados Locais" nos pop-ups de
+# conexão ao Protheus e ao PDM usa estes usuário/senha automaticamente, em
+# vez de digitar toda vez. As chaves do R2 (seção "Cloudflare R2") são
+# usadas pela tela "Grupos de Imagens" como alternativa a configurar
+# R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/etc. no .env.local — se as duas existirem,
+# o .env.local tem prioridade.
+#
+# Linhas começando com # são comentário. Uma linha "CHAVE=valor" por
+# credencial — não use aspas, não deixe espaço antes/depois do "=".
+# ============================================================
+
+# ── Protheus (SQL Server, PROTHEUS12) ────────────────────────
+PROTHEUS_USER=
+PROTHEUS_PASSWORD=
+
+# ── PDM (SQL Server, base VMI, servidor srvvmis03) ───────────
+PDM_USER=
+PDM_PASSWORD=
+
+# ── Cloudflare R2 (bucket images-msm — ver specs/imagens-r2.md) ─
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=images-msm
+R2_PUBLIC_BASE_URL=https://images-msm.vmisecurity.com

@@ -19,6 +19,74 @@ variável de ambiente, nem em sessão). Cada chamada abre e fecha seu próprio
 `sql.ConnectionPool`. Mesmo padrão replicado de `protheusDb.ts` (a conexão
 Protheus já existente antes desta integração).
 
+## Credenciais locais — botão "Entrar com Dados Locais" nos pop-ups de Protheus/PDM
+
+Pedido explícito do usuário: "É possível puxar do ambiente local o usuário
+de acesso ao banco de dados do prothues e do PDM? Se sim, crie um arquivo
+.txt unico onde eu vou colocar estes acessos ao R2, usuario e senho PDM e
+Prothues... mas que tenha um botão de 'Logar com Dados Locais' aí já entra
+no Protheues eu no PDM ao clicar nestes botões." Resposta à primeira
+pergunta: não há nenhum "usuário do ambiente local" que o app possa ler
+sozinho (não existe sessão de SO nem variável de ambiente já populada com
+login do Protheus/PDM) — a solução é um arquivo próprio, preenchido à mão
+uma vez, nesta máquina.
+
+- **`local-data/local-access.txt`** (gitignored, nunca sobe pro Git — mesma
+  pasta/convenção de `local-data/real-costs.json`, ver
+  `specs/custeio-financeiro.md`) — um arquivo `CHAVE=valor` por linha
+  (`#` para comentário), com `PROTHEUS_USER`/`PROTHEUS_PASSWORD`,
+  `PDM_USER`/`PDM_PASSWORD`, e as chaves `R2_*` (ver
+  `specs/imagens-r2.md`, seção "Fallback pra `local-data/local-access.txt`")
+  — um único arquivo pra todas as credenciais desta máquina, como pedido.
+- **`local-access.example.txt`** (raiz do repo, committed) — template
+  comentado, mesmo padrão de `.env.local.example` → `.env.local`. Instrui a
+  copiar para `local-data/local-access.txt` e preencher.
+- **`src/lib/localCredentials.ts`** (server-only) — `readLocalAccess()` lê e
+  faz parse do arquivo (tenta/`catch` devolvendo `{}` se o arquivo não
+  existir ainda — mesmo padrão de tolerância de `localCostStore.ts`), sem
+  nenhum cache em memória: relê do disco a cada chamada, porque o arquivo
+  pode ser editado à mão entre uma tentativa de login e outra.
+  `getLocalProtheusCreds()`/`getLocalPdmCreds()` devolvem `{ user, password
+  }` ou `null` se as duas chaves correspondentes não estiverem preenchidas;
+  `getLocalValue(key)` é o acesso genérico (usado por `r2Images.ts`).
+- **`GET /api/protheus-local-credentials`** / **`GET /api/pdm-local-credentials`**
+  (novas rotas) — devolvem `{ user, password }` lidos do arquivo local, ou
+  404 com uma mensagem explicando como criar o arquivo. Mesmo nível de
+  exposição das rotas de teste de conexão já existentes — não exigem
+  `profileId`/checagem de admin, porque só devolvem o que já está num
+  arquivo local *desta mesma máquina*, nunca um segredo vindo de outro
+  lugar ou de outro usuário.
+- **Botão "📁 Entrar com Dados Locais"** — adicionado em `ProtheusLoginModal`
+  (`protheusAuthContext.tsx`) e `PdmLoginModal` (`pdmAuthContext.tsx`), ao
+  lado dos botões "Agora não"/"Conectar" já existentes. Ao clicar: busca a
+  rota local correspondente, preenche os campos Usuário/Senha do próprio
+  formulário com o que veio do arquivo, e chama o **mesmo** `testAndConnect`
+  que o submit manual já usava (extraído do corpo de `handleSubmit` pra ser
+  reusado) — ou seja, a credencial do arquivo local passa pelo **mesmo**
+  teste real contra o banco (`/api/protheus-test-connection`/
+  `/api/pdm-test-connection`, `SELECT 1`) antes de marcar como conectado,
+  nunca pula essa checagem. Pedido explícito do usuário foi só um jeito
+  mais rápido de logar sem digitar — nunca um caminho que contorne a
+  verificação "senha errada não pode conectar" já corrigida (ver seção
+  abaixo). Os pop-ups continuam exatamente como eram antes (campos, texto,
+  botões "Agora não"/"Conectar") — só o botão novo foi adicionado, nada
+  removido/alterado no fluxo manual existente.
+
+**Risco encontrado e corrigido antes de considerar a tarefa concluída**:
+as duas rotas novas (`GET` sem nenhum parâmetro, sem tocar
+`request.url`/cookies/headers) seriam classificadas pelo Next como
+estáticas e pré-renderizadas em `next build` — a resposta ficaria
+congelada pra sempre no que `local-access.txt` continha **no momento do
+build**, nunca relendo o arquivo depois disso em produção (confirmado:
+`npm run build` sem a correção listava as duas como `○`, não `ƒ`). Mesma
+categoria de risco (rota de caminho fixo sem opt-out explícito do cache
+estático) já documentada em `specs/telas-auxiliares.md`, só que lá o
+gatilho era GET+método mutante causando 405 — aqui o gatilho é um GET cujo
+resultado depende de um arquivo que muda em runtime. Corrigido com
+`export const dynamic = 'force-dynamic'` + `export const fetchCache =
+'force-no-store'` nas duas rotas — confirmado depois com `npm run build`
+mostrando `ƒ /api/protheus-local-credentials` e `ƒ /api/pdm-local-credentials`.
+
 ## Bug real já corrigido: login "conectava" mesmo com senha errada
 
 Pedido explícito do usuário: "quando eu faço o login dos bancos de dados,

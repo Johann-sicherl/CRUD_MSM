@@ -1,0 +1,65 @@
+import fs from 'fs'
+import path from 'path'
+
+// Arquivo local, só nesta máquina, nunca commitado (local-data/ está no
+// .gitignore) — onde o usuário guarda à mão as credenciais que ele mesmo
+// digitaria nos pop-ups de login do Protheus/PDM e as chaves do bucket R2
+// (ver local-access.example.txt na raiz do projeto pro formato exato).
+// Pedido explícito do usuário: "é possível puxar do ambiente local o
+// usuário de acesso ao banco de dados do Protheus e do PDM?... crie um
+// arquivo .txt único". Só leitura — o app nunca escreve neste arquivo, só
+// o próprio usuário edita.
+//
+// Nunca cacheado em memória: o arquivo é pequeno e pode ser editado à mão
+// entre uma tentativa de login e outra (ex.: usuário corrige uma senha
+// digitada errada) — relê do disco em toda chamada, pra nunca servir um
+// valor desatualizado.
+
+const FILE_PATH = path.join(process.cwd(), 'local-data', 'local-access.txt')
+
+function parseLocalAccessFile(raw: string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq === -1) continue
+    const key = trimmed.slice(0, eq).trim()
+    const value = trimmed.slice(eq + 1).trim()
+    if (key) result[key] = value
+  }
+  return result
+}
+
+export function readLocalAccess(): Record<string, string> {
+  try {
+    const raw = fs.readFileSync(FILE_PATH, 'utf-8')
+    return parseLocalAccessFile(raw)
+  } catch {
+    return {} // arquivo ainda não existe (usuário não criou, ou renomeou errado) — vazio é um estado válido
+  }
+}
+
+export interface LocalDbCreds { user: string; password: string }
+
+export function getLocalProtheusCreds(): LocalDbCreds | null {
+  const data = readLocalAccess()
+  if (!data.PROTHEUS_USER || !data.PROTHEUS_PASSWORD) return null
+  return { user: data.PROTHEUS_USER, password: data.PROTHEUS_PASSWORD }
+}
+
+export function getLocalPdmCreds(): LocalDbCreds | null {
+  const data = readLocalAccess()
+  if (!data.PDM_USER || !data.PDM_PASSWORD) return null
+  return { user: data.PDM_USER, password: data.PDM_PASSWORD }
+}
+
+// Usado por r2Images.ts como alternativa às variáveis de ambiente — a
+// mesma chave (ex. "R2_ACCOUNT_ID") pode vir de .env.local OU deste
+// arquivo; .env.local tem prioridade quando as duas existirem, pra nunca
+// mudar o comportamento de quem já configurou em produção (ver
+// specs/imagens-r2.md).
+export function getLocalValue(key: string): string | undefined {
+  const data = readLocalAccess()
+  return data[key] || undefined
+}

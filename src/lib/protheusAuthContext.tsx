@@ -72,25 +72,52 @@ function ProtheusLoginModal({ onClose, onConnect }: {
   // conectado se autenticar; senão mostra o erro do driver (ex.: "Login
   // failed for user '...'") e deixa o modal aberto pra tentar de novo.
   const [testing, setTesting] = useState(false)
+  const [localTesting, setLocalTesting] = useState(false)
   const [error, setError] = useState('')
+
+  const testAndConnect = async (u: string, p: string) => {
+    const res = await fetch('/api/protheus-test-connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: u, password: p }),
+    })
+    const json = await res.json()
+    if (!res.ok) { setError(json.error || 'Usuário ou senha incorretos'); return }
+    onConnect(u, p)
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setTesting(true)
     setError('')
     try {
-      const res = await fetch('/api/protheus-test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user, password }),
-      })
-      const json = await res.json()
-      if (!res.ok) { setError(json.error || 'Usuário ou senha incorretos'); return }
-      onConnect(user, password)
+      await testAndConnect(user, password)
     } catch {
       setError('Erro de comunicação ao testar a conexão')
     } finally {
       setTesting(false)
+    }
+  }
+
+  // Pedido explícito do usuário: "crie um arquivo .txt único onde eu vou
+  // colocar estes acessos... que tenha um botão de 'Logar com Dados
+  // Locais'" — lê usuário/senha de local-data/local-access.txt (nunca
+  // commitado, só nesta máquina — ver localCredentials.ts) e testa/conecta
+  // exatamente como o submit normal, sem precisar digitar nada.
+  const handleLocalLogin = async () => {
+    setLocalTesting(true)
+    setError('')
+    try {
+      const credRes = await fetch('/api/protheus-local-credentials')
+      const credJson = await credRes.json()
+      if (!credRes.ok) { setError(credJson.error || 'Nenhuma credencial local encontrada'); return }
+      setUser(credJson.user)
+      setPassword(credJson.password)
+      await testAndConnect(credJson.user, credJson.password)
+    } catch {
+      setError('Erro de comunicação ao testar a conexão')
+    } finally {
+      setLocalTesting(false)
     }
   }
 
@@ -144,17 +171,28 @@ function ProtheusLoginModal({ onClose, onConnect }: {
               className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
             />
           </label>
-          <div className="flex items-center justify-end gap-2 mt-2">
-            <button type="button" onClick={onClose} disabled={testing} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
-              Agora não
-            </button>
+          <div className="flex items-center justify-between gap-2 mt-2">
             <button
-              type="submit"
-              disabled={!user.trim() || !password || testing}
-              className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
+              type="button"
+              onClick={handleLocalLogin}
+              disabled={testing || localTesting}
+              title="Lê usuário e senha de local-data/local-access.txt (ver local-access.example.txt)"
+              className="px-3 py-1.5 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
             >
-              {testing ? 'Conectando…' : 'Conectar'}
+              {localTesting ? 'Conectando…' : '📁 Entrar com Dados Locais'}
             </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={onClose} disabled={testing || localTesting} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
+                Agora não
+              </button>
+              <button
+                type="submit"
+                disabled={!user.trim() || !password || testing || localTesting}
+                className="px-4 py-1.5 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-50 transition-all"
+              >
+                {testing ? 'Conectando…' : 'Conectar'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

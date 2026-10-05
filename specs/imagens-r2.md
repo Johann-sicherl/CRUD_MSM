@@ -117,6 +117,22 @@ login pessoal como Protheus/PDM (`protheusAuthContext.tsx`/
 Mesmo tratamento já dado a `SUPABASE_SECRET_KEY` — uma credencial de
 sistema, configurada uma vez no servidor, nunca digitada numa tela.
 
+**Fallback pra `local-data/local-access.txt`, adicionado numa sessão
+posterior**: `envOrLocal()`/`getBucket()`/`getBasePrefix()` (`r2Images.ts`)
+agora leem `process.env[X] || getLocalValue(X)` (`src/lib/localCredentials.ts`)
+em vez de só `process.env[X]` — pedido explícito do usuário ao criar o
+mecanismo de "Entrar com Dados Locais" (ver
+`specs/pdm-protheus-integracao.md`, seção "Credenciais locais..."): ter um
+único arquivo nesta máquina com todas as credenciais (Protheus, PDM, R2),
+em vez de precisar configurar o `.env.local` separadamente só pra testar
+este módulo localmente. **`.env.local` sempre tem prioridade** quando as
+duas fontes existirem — quem já configurou R2 em produção via `.env.local`
+não tem nenhuma mudança de comportamento; o arquivo local é só um fallback
+de conveniência para desenvolvimento/uso pessoal na própria máquina.
+`R2_PUBLIC_BASE_URL` continua exigindo que pelo menos uma das duas fontes
+tenha o valor (`envOrLocal`, lança erro se nenhuma tiver) — nunca um
+default hardcoded, pelo mesmo motivo de grafia ambígua já explicado acima.
+
 **`R2_PUBLIC_BASE_URL` não tem um valor hardcoded de propósito**: o manual
 enviado pelo usuário tem duas grafias diferentes pro mesmo domínio
 (`imagesmsm.vmisecurity.com` numa tabela, `images-msm.vmisecurity.com` nos
