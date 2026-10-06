@@ -338,33 +338,6 @@ export default function GruposImagensPage() {
     else refreshAll()
   }
 
-  // ── Limpar backups antigos ──────────────────────────────────
-  // Pedido explícito do usuário: "Eu não quero ter backup de nada...
-  // todo e qualquer backup que esteja sendo criado, delete-o." O
-  // mecanismo automático foi removido (ver specs/imagens-r2.md, "Backup
-  // automático removido") — isto é a limpeza única das cópias que esse
-  // mecanismo já tinha criado em `_backup/` antes da remoção.
-  const [purgingBackups, setPurgingBackups] = useState(false)
-  const purgeBackups = async () => {
-    const ok = window.confirm('Apagar permanentemente todas as cópias de segurança já criadas no bucket (prefixo "_backup/")? Isso não afeta nenhuma imagem em uso — só libera espaço das cópias antigas.')
-    if (!ok) return
-    setPurgingBackups(true)
-    try {
-      const res = await fetch('/api/r2-images/purge-backups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: user.id }),
-      })
-      const json = await res.json()
-      if (!res.ok) { showToast(json.error || 'Falha ao limpar os backups', true); return }
-      showToast(`${json.count ?? 0} arquivo(s) de backup removido(s)`)
-    } catch {
-      showToast('Falha de rede ao limpar os backups', true)
-    } finally {
-      setPurgingBackups(false)
-    }
-  }
-
   // ── Adicionar / Substituir ──────────────────────────────────
   const [addOpen, setAddOpen] = useState(false)
   const [addPath, setAddPath] = useState('')
@@ -946,14 +919,6 @@ export default function GruposImagensPage() {
                 {bulkDeleting ? 'Removendo…' : `Excluir selecionadas (${selectedFiles.size})`}
               </button>
             )}
-            <button
-              onClick={purgeBackups}
-              disabled={purgingBackups}
-              title="Apaga permanentemente qualquer cópia de segurança antiga guardada no bucket — o app não cria mais backups automáticos"
-              className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-error hover:text-error disabled:opacity-50 transition-colors"
-            >
-              {purgingBackups ? 'Limpando…' : '🗑 Limpar backups antigos'}
-            </button>
             <button
               onClick={openNewFolder}
               className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"

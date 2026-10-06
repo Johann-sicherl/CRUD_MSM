@@ -429,21 +429,3 @@ export async function searchAll(query: string): Promise<SearchResult> {
   files.sort((a, b) => a.fileName.localeCompare(b.fileName, 'pt-BR', { numeric: true }))
   return { folders, files }
 }
-
-// Apaga tudo sob o prefixo `_backup/` (bucket inteiro, fora do
-// prefixo-base) — limpeza das cópias de segurança que o mecanismo antigo
-// (`backupImage`, removido) já tinha criado antes desta mudança. Pedido
-// explícito do usuário: "Eu não quero ter backup de nada... todo e
-// qualquer backup que esteja sendo criado, delete-o." `_backup/` nunca
-// aparece em `browseFolder` (que só varre o prefixo-base de produção),
-// então essa limpeza não tem nenhum efeito sobre a árvore navegável normal
-// — só libera espaço de cópias que não são mais criadas.
-export async function purgeBackups(): Promise<number> {
-  const client = getClient()
-  const bucket = getBucket()
-  const objects = await listAllObjectsUnderPrefix('_backup/')
-  for (const o of objects) {
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: o.key }))
-  }
-  return objects.length
-}

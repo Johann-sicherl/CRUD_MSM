@@ -145,9 +145,6 @@ só).
 - `uploadImage` / `copyImage` / `deleteImage` / `imageExists` — operações
   básicas (`PutObjectCommand`/`CopyObjectCommand`/`DeleteObjectCommand`/
   `HeadObjectCommand`), todas parametrizadas por `(folderPath, fileName)`.
-- `purgeBackups()` — apaga tudo sob `_backup/` no bucket. Ver "Backup
-  automático removido" abaixo — não cria cópia nenhuma, só limpa o que o
-  mecanismo antigo (`backupImage`, removido) já tinha criado.
 - `isValidFileName` / `isValidFolderPath` — validação antes de qualquer
   operação: arquivo precisa terminar em `.png` (case-sensitive, minúsculo —
   mesma regra do manual da TI) e não pode ter barra no nome (pra nunca
@@ -253,8 +250,6 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
 - `POST /delete` — `deleteImage`, sem cópia de segurança (ver "Backup
   automático removido" abaixo). Confirmação (`window.confirm`) é só no
   cliente — a rota em si não teria como "desfazer" a remoção.
-- `POST /purge-backups` — apaga tudo sob `_backup/` (ver "Backup automático
-  removido" abaixo).
 
 ## Backup automático removido
 
@@ -276,14 +271,18 @@ qualquer backup que esteja sendo criado, delete-o."
   alterações removido" abaixo. Na época desta mudança o mecanismo ainda
   existia (só o campo `backup_key` passou a ficar sempre `null`); isso não
   é mais verdade — nenhuma linha nova é gravada em `image_change_log` hoje.
-- **`purgeBackups()`** (`r2Images.ts`) — limpeza única das cópias que o
-  mecanismo antigo já tinha criado antes de ser removido: lista tudo sob
-  `_backup/` (fora do prefixo-base, nunca aparece em `browseFolder`) e
-  apaga, sem nenhuma confirmação adicional além da da própria tela. `POST
-  /api/r2-images/purge-backups` (admin-only, mesmo padrão
-  `getProfileById`/`isAdmin` de toda rota desta tela) expõe isso; botão
-  "🗑 Limpar backups antigos" na tela, com confirmação (`window.confirm`) e
-  toast mostrando quantos arquivos foram removidos.
+- **`purgeBackups()` também foi removida, numa rodada seguinte — pedido
+  explícito do usuário**: "REMOVA O BOTÃO DE LIMPAR BACKUP ANTIGO", logo
+  depois de confirmar que o fix de `isValidFileName` resolveu o problema
+  original de exclusão. A versão original desta seção tinha uma limpeza
+  única das cópias que o mecanismo antigo já tinha criado em `_backup/`
+  (botão "🗑 Limpar backups antigos" na tela, `POST
+  /api/r2-images/purge-backups`, função `purgeBackups()` em
+  `r2Images.ts`) — os três foram deletados por completo, sem deixar nada
+  no lugar. Qualquer conteúdo que já estivesse sob `_backup/` continua lá
+  (fora do prefixo-base, nunca aparece em `browseFolder`) — só não há mais
+  um botão na tela pra limpar isso; quem precisar, usa o `rclone`/console
+  do R2 diretamente.
 - Todo texto de confirmação (`window.confirm`) que mencionava "uma cópia
   de segurança é guardada" (remover uma imagem, remover em lote, remover
   uma pasta inteira) foi atualizado pra deixar claro que a remoção agora é
@@ -298,7 +297,9 @@ qualquer backup que esteja sendo criado, delete-o."
   independentes, não a mesma**: o bug de validação (que bloqueava
   qualquer ação nesses dois arquivos específicos) e a remoção do backup
   automático (pedido à parte, decidido depois, não uma consequência do
-  bug).
+  bug). **Confirmado pelo usuário**: o fix de `isValidFileName` resolveu o
+  problema — as duas imagens (`"13 - BRANCO_CINZA.png"`/`"13 -
+  CINZA.png"`) excluem normalmente agora.
 
 ## Histórico de alterações removido
 
