@@ -404,13 +404,15 @@ que seja em formato de agrupamento de imagens pelo tipo de grupo."
   `group`: cada grupo nomeado vira sua própria caixa (mesmo visual de
   "caixa por seção" já usado no resto do app), com cabeçalho mostrando o
   nome do grupo + contagem (`"<grupo> (N)"`) e a grade de cartões daquele
-  grupo logo abaixo. Grupos nomeados saem em **ordem alfabética entre si**
-  (`localeCompare` pt-BR); dentro de cada grupo, a ordem alfabética de
-  arquivo já vinda do servidor é preservada. Arquivos cujo nome não bate
-  com nenhum `protheus_code` cadastrado (ou que bate mas o componente não
-  tem grupo) caem numa caixa própria, rótulo fixo "Sem grupo / não
-  cadastrado", **sempre por último** — nunca intercalada alfabeticamente
-  com os grupos de verdade.
+  grupo logo abaixo — ver "Cada grupo em dropdown + filtro de grupos"
+  abaixo pro cabeçalho ter virado um `<button>` colapsável. Grupos
+  nomeados saem em **ordem alfabética entre si** (`localeCompare` pt-BR);
+  dentro de cada grupo, a ordem alfabética de arquivo já vinda do
+  servidor é preservada. Arquivos cujo nome não bate com nenhum
+  `protheus_code` cadastrado (ou que bate mas o componente não tem grupo)
+  caem numa caixa própria, rótulo fixo "Sem grupo / não cadastrado",
+  **sempre por último** — nunca intercalada alfabeticamente com os grupos
+  de verdade.
 - **O que NÃO mudou**: seleção múltipla (`selectedFiles`), "Selecionar
   todas"/"Limpar seleção", exclusão/mover em lote continuam operando
   sobre a lista plana de arquivos da pasta, **através** das caixas de
@@ -421,6 +423,56 @@ que seja em formato de agrupamento de imagens pelo tipo de grupo."
   alfabética "crua" incomodava; a busca já mostra os resultados batendo
   com o termo digitado, uma lista normalmente curta o bastante pra não
   precisar de agrupamento.
+
+### Cada grupo em dropdown + filtro de grupos
+
+Pedido explícito do usuário, rodada seguinte: "Quero que a exibição de
+cada grupo seja por um drop-down. Adicione na mesma altura do filtro já
+existente, um filtro para filtrar os grupos que foram encontrados nas
+pastas."
+
+- **Dropdown por grupo** — o cabeçalho de cada caixa de grupo (antes só
+  um `<div>` estático) virou um `<button>` clicável com `GroupChevron`
+  (mesmo ícone/rotação de 90° já usado nos grupos colapsáveis da
+  Sidebar — componente local, o de `Sidebar.tsx` não é exportado).
+  `expandedGroups: Set<string>` (chave = rótulo do grupo) controla o
+  estado — **nasce sempre vazio** (tudo colapsado), mesma convenção já
+  estabelecida na Sidebar ("sempre começar com tudo colapsado"); clicar
+  no cabeçalho expande/colapsa só aquele grupo, sem afetar os outros (não
+  é accordion). Reseta ao trocar de pasta (`useEffect` em `currentPath`,
+  mesmo padrão de `selectedFiles`) — os grupos de uma pasta não têm nada
+  a ver com os da próxima.
+- **Filtro de grupos** — botão "🗂 Filtrar grupos (X/Y)" ao lado do campo
+  de busca global, **mesma linha/altura** (`flex items-start gap-2`, o
+  campo de busca em `flex-1` e o botão do filtro com `shrink-0`), só
+  visível fora do modo de busca (`!searchActive` — o agrupamento não se
+  aplica a resultados de busca, ver acima). Abre um dropdown (não um
+  pop-up de tela cheia, diferente dos outros modais desta tela) com um
+  checkbox por grupo encontrado **na pasta atual** (`availableGroups`,
+  derivado de `files`, mesma ordem de `groupFiles` — alfabética entre si,
+  "Sem grupo / não cadastrado" sempre por último) — fecha sozinho ao
+  clicar fora (`groupFilterRef` + listener de `mousedown` no
+  `document`).
+- **`hiddenGroups: Set<string>`, não `selectedGroups`** — decisão
+  deliberada: o Set guarda os grupos **desmarcados**, não os marcados.
+  Modelar como "visível por padrão, oculto por exceção" evita um caso
+  especial irritante: com `selectedGroups` (vazio = nenhum visível,
+  precisaria inicializar com todos os grupos só pra poder tirar um),
+  desmarcar o 1º checkbox exigiria popular o Set inteiro antes; com
+  `hiddenGroups` (vazio = nada oculto = tudo visível), desmarcar um
+  checkbox é só adicionar aquele rótulo ao Set, sem nenhuma inicialização
+  especial. Reseta ao trocar de pasta, mesmo motivo de `expandedGroups`
+  acima.
+- Se o filtro deixar **zero** grupos visíveis, a grade mostra um aviso
+  ("Nenhum grupo selecionado no filtro...") em vez de ficar vazia sem
+  explicação nenhuma.
+- **O que NÃO mudou**: o conteúdo de cada grupo (quais arquivos, em que
+  ordem) é exatamente o mesmo de antes — só ganhou um estado de
+  expandido/colapsado por cima, e um filtro por cima disso pra decidir
+  quais caixas aparecem na lista. Seleção múltipla/mover/excluir em lote
+  continuam operando sobre `selectedFiles` normalmente, inclusive dentro
+  de um grupo colapsado (uma imagem selecionada antes de colapsar o
+  grupo continua selecionada, só não visível até expandir de novo).
 
 ### Nome do arquivo vem do próprio arquivo, seleção múltipla pra adicionar
 

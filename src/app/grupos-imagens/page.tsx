@@ -61,6 +61,26 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
+// Mesmo chevron (gira 90°) já usado nos grupos colapsáveis da Sidebar —
+// replicado aqui localmente (o de Sidebar.tsx não é exportado).
+function GroupChevron({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}
+    >
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  )
+}
+
 async function fetchBrowseColumn(profileId: string, path: string): Promise<BrowseColumn> {
   const res = await fetch(`/api/r2-images/browse?profileId=${profileId}&path=${encodeURIComponent(path)}`)
   const json = await res.json()
@@ -238,6 +258,14 @@ export default function GruposImagensPage() {
   const currentPath = pathSegments.join('/')
   const currentColumn = columns[pathSegments.length] as BrowseColumn | undefined
   const files = currentColumn?.files ?? []
+  // Grupos encontrados nas imagens desta pasta — alimenta o dropdown de
+  // "Filtrar grupos" (mesma ordem de groupFiles: alfabética entre si,
+  // UNGROUPED_LABEL sempre por último).
+  const availableGroups = Array.from(new Set(files.map(f => f.group ?? UNGROUPED_LABEL))).sort((a, b) => {
+    if (a === UNGROUPED_LABEL) return 1
+    if (b === UNGROUPED_LABEL) return -1
+    return a.localeCompare(b, 'pt-BR')
+  })
 
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const showToast = (msg: string, isError = false) => {
@@ -490,6 +518,55 @@ export default function GruposImagensPage() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   useEffect(() => { setSelectedFiles(new Set()) }, [currentPath])
 
+  // ── Agrupamento por grupo de componentes — dropdown por grupo + filtro ──
+  // Pedido explícito do usuário: "Quero que a exibição de cada grupo seja
+  // por um drop-down. Adicione... um filtro para filtrar os grupos que
+  // foram encontrados nas pastas." `expandedGroups` começa sempre vazio
+  // (tudo colapsado) — mesma convenção já usada na Sidebar (grupos sempre
+  // nascem colapsados). `hiddenGroups` guarda os grupos DESMARCADOS no
+  // filtro (vazio = nenhum oculto = mostra todos) — modelado como "o que
+  // está oculto", não "o que está selecionado", pra marcar/desmarcar um
+  // checkbox nunca precisar de um caso especial pro estado inicial (sem
+  // isso, desmarcar o 1º grupo com o filtro "vazio = tudo visível" exigiria
+  // primeiro popular o Set com todos os outros grupos, só pra depois tirar
+  // um). Os três resetam ao trocar de pasta, pelo mesmo motivo de
+  // `selectedFiles` acima — os grupos disponíveis mudam de pasta pra
+  // pasta.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set())
+  const [groupFilterOpen, setGroupFilterOpen] = useState(false)
+  useEffect(() => { setExpandedGroups(new Set()); setHiddenGroups(new Set()); setGroupFilterOpen(false) }, [currentPath])
+
+  const toggleGroupExpanded = (label: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
+  const toggleGroupHidden = (label: string) => {
+    setHiddenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
+
+  // Fecha o dropdown de filtro de grupos ao clicar fora dele.
+  const groupFilterRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!groupFilterOpen) return
+    const onClickOutside = (e: MouseEvent) => {
+      if (groupFilterRef.current && !groupFilterRef.current.contains(e.target as Node)) {
+        setGroupFilterOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [groupFilterOpen])
+
   const toggleSelected = (fileName: string) => {
     setSelectedFiles(prev => {
       const next = new Set(prev)
@@ -726,22 +803,69 @@ export default function GruposImagensPage() {
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">Grupos de Imagens</h1>
       </div>
 
-      {/* Busca global — pastas e imagens em todo o bucket, não só no nível navegado */}
-      <div className="relative mb-6">
-        <input
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="Buscar pasta ou imagem em todo o bucket (mínimo 2 letras)…"
-          className="w-full bg-surface-container border border-outline-variant rounded-lg pl-4 pr-9 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            title="Limpar busca"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-primary"
-          >
-            ✕
-          </button>
+      {/* Busca global (pastas e imagens em todo o bucket) + filtro de
+          grupos (só na navegação normal de pasta, ver abaixo) — mesma
+          altura, lado a lado. Pedido explícito do usuário: "Adicione na
+          mesma altura do filtro já existente, um filtro para filtrar os
+          grupos que foram encontrados nas pastas." */}
+      <div className="flex items-start gap-2 mb-6">
+        <div className="relative flex-1">
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Buscar pasta ou imagem em todo o bucket (mínimo 2 letras)…"
+            className="w-full bg-surface-container border border-outline-variant rounded-lg pl-4 pr-9 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              title="Limpar busca"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-primary"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Filtro de grupos — não durante uma busca (o agrupamento em si
+            não se aplica a resultados de busca, ver specs/imagens-r2.md). */}
+        {!searchActive && (
+          <div className="relative shrink-0" ref={groupFilterRef}>
+            <button
+              type="button"
+              onClick={() => setGroupFilterOpen(v => !v)}
+              className="h-full px-3 py-2.5 text-sm border border-outline-variant rounded-lg text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
+            >
+              🗂 Filtrar grupos{availableGroups.length > 0 ? ` (${availableGroups.length - hiddenGroups.size}/${availableGroups.length})` : ''}
+            </button>
+            {groupFilterOpen && (
+              <div className="absolute right-0 mt-1 z-20 w-64 max-h-80 overflow-y-auto bg-surface-container border border-outline-variant rounded-lg shadow-2xl">
+                <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between sticky top-0 bg-surface-container">
+                  <span className="text-xs font-semibold text-on-surface-variant">Grupos nesta pasta</span>
+                  {hiddenGroups.size > 0 && (
+                    <button type="button" onClick={() => setHiddenGroups(new Set())} className="text-xs text-primary hover:underline">
+                      Mostrar todos
+                    </button>
+                  )}
+                </div>
+                {availableGroups.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
+                ) : (
+                  availableGroups.map(label => (
+                    <label key={label} className="flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-surface-container-high cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!hiddenGroups.has(label)}
+                        onChange={() => toggleGroupHidden(label)}
+                        className="shrink-0"
+                      />
+                      <span className="truncate">{label}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -945,55 +1069,72 @@ export default function GruposImagensPage() {
         </div>
 
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {browseLoading ? (
             <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline">Carregando…</div>
           ) : files.length === 0 ? (
             <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
-          ) : (
-            groupFiles(files).map(({ label, files: groupImages }) => (
-              <div key={label} className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
-                <div className="px-4 py-2 bg-surface-container-high border-b border-outline-variant text-xs font-bold text-on-surface-variant uppercase tracking-[0.1em]">
-                  {label} ({groupImages.length})
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
-                  {groupImages.map(img => {
-                    const isSelected = selectedFiles.has(img.fileName)
-                    return (
-                    <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
-                      <label className="flex items-start gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelected(img.fileName)}
-                          className="mt-1 shrink-0"
-                        />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={img.url}
-                          alt={img.fileName}
-                          className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
-                        />
-                      </label>
-                      <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
-                      <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
-                      <div className="flex items-center gap-2 flex-wrap text-xs">
-                        <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
-                        <button
-                          onClick={() => removeImage(img)}
-                          disabled={deleting === `${currentPath}/${img.fileName}`}
-                          className="text-error hover:underline disabled:opacity-50"
-                        >
-                          {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
-                        </button>
-                      </div>
-                    </div>
-                    )
-                  })}
-                </div>
+          ) : (() => {
+            const visibleGroups = groupFiles(files).filter(g => !hiddenGroups.has(g.label))
+            return visibleGroups.length === 0 ? (
+              <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline italic">
+                Nenhum grupo selecionado no filtro — marque ao menos um em &quot;Filtrar grupos&quot;.
               </div>
-            ))
-          )}
+            ) : visibleGroups.map(({ label, files: groupImages }) => {
+              const isExpanded = expandedGroups.has(label)
+              return (
+                <div key={label} className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroupExpanded(label)}
+                    className={`w-full flex items-center justify-between px-4 py-2 bg-surface-container-high text-xs font-bold text-on-surface-variant uppercase tracking-[0.1em] hover:text-on-surface transition-colors ${
+                      isExpanded ? 'border-b border-outline-variant' : ''
+                    }`}
+                  >
+                    <span className="text-left">{label} ({groupImages.length})</span>
+                    <GroupChevron collapsed={!isExpanded} />
+                  </button>
+                  {isExpanded && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
+                      {groupImages.map(img => {
+                        const isSelected = selectedFiles.has(img.fileName)
+                        return (
+                        <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelected(img.fileName)}
+                              className="mt-1 shrink-0"
+                            />
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={img.url}
+                              alt={img.fileName}
+                              className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
+                            />
+                          </label>
+                          <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
+                          <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
+                          <div className="flex items-center gap-2 flex-wrap text-xs">
+                            <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
+                            <button
+                              onClick={() => removeImage(img)}
+                              disabled={deleting === `${currentPath}/${img.fileName}`}
+                              className="text-error hover:underline disabled:opacity-50"
+                            >
+                              {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
+                            </button>
+                          </div>
+                        </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          })()}
         </div>
       </div>
       </>
