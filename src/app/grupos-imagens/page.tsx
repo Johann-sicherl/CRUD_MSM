@@ -8,6 +8,39 @@ interface ImageObject {
   size: number
   lastModified: string | null
   url: string
+  // Nome do grupo de Cadastro de Componentes (accessory_groups) a que o
+  // protheus_code (o próprio nome do arquivo, sem ".png") pertence — null
+  // se o arquivo não bate com nenhum protheus_code cadastrado, ou bate mas
+  // o componente não tem grupo. Resolvido no servidor (GET /browse), ver
+  // src/lib/imageAccessoryGroups.ts.
+  group: string | null
+}
+// Rótulo fixo pro grupo de imagens que não casam com nenhum protheus_code
+// cadastrado em accessories (ou casam mas sem grupo) — sempre por último
+// na grade agrupada.
+const UNGROUPED_LABEL = 'Sem grupo / não cadastrado'
+
+// Agrupa os arquivos de uma pasta pelo `group` resolvido no servidor,
+// mantendo a ordem alfabética já aplicada por `browseFolder` dentro de
+// cada grupo — pedido explícito do usuário: "hoje as imagens estão sendo
+// exibidas em ordem alfabética... quero que seja em formato de
+// agrupamento de imagens pelo tipo de grupo." Grupos nomeados saem em
+// ordem alfabética entre si; `UNGROUPED_LABEL` sempre por último.
+function groupFiles(files: ImageObject[]): { label: string; files: ImageObject[] }[] {
+  const byGroup = new Map<string, ImageObject[]>()
+  for (const f of files) {
+    const label = f.group ?? UNGROUPED_LABEL
+    const bucket = byGroup.get(label)
+    if (bucket) bucket.push(f)
+    else byGroup.set(label, [f])
+  }
+  return Array.from(byGroup.entries())
+    .sort(([a], [b]) => {
+      if (a === UNGROUPED_LABEL) return 1
+      if (b === UNGROUPED_LABEL) return -1
+      return a.localeCompare(b, 'pt-BR')
+    })
+    .map(([label, files]) => ({ label, files }))
 }
 interface BrowseColumn {
   path: string
@@ -912,47 +945,54 @@ export default function GruposImagensPage() {
         </div>
 
 
-        <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+        <div className="flex flex-col gap-4">
           {browseLoading ? (
-            <div className="p-6 text-sm text-outline">Carregando…</div>
+            <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline">Carregando…</div>
           ) : files.length === 0 ? (
-            <div className="p-6 text-sm text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
+            <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
-              {files.map(img => {
-                const isSelected = selectedFiles.has(img.fileName)
-                return (
-                <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelected(img.fileName)}
-                      className="mt-1 shrink-0"
-                    />
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.url}
-                      alt={img.fileName}
-                      className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
-                    />
-                  </label>
-                  <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
-                  <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
-                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                    <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
-                    <button
-                      onClick={() => removeImage(img)}
-                      disabled={deleting === `${currentPath}/${img.fileName}`}
-                      className="text-error hover:underline disabled:opacity-50"
-                    >
-                      {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
-                    </button>
-                  </div>
+            groupFiles(files).map(({ label, files: groupImages }) => (
+              <div key={label} className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-surface-container-high border-b border-outline-variant text-xs font-bold text-on-surface-variant uppercase tracking-[0.1em]">
+                  {label} ({groupImages.length})
                 </div>
-                )
-              })}
-            </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
+                  {groupImages.map(img => {
+                    const isSelected = selectedFiles.has(img.fileName)
+                    return (
+                    <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelected(img.fileName)}
+                          className="mt-1 shrink-0"
+                        />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.url}
+                          alt={img.fileName}
+                          className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
+                        />
+                      </label>
+                      <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
+                      <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
+                        <button
+                          onClick={() => removeImage(img)}
+                          disabled={deleting === `${currentPath}/${img.fileName}`}
+                          className="text-error hover:underline disabled:opacity-50"
+                        >
+                          {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
+                        </button>
+                      </div>
+                    </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>

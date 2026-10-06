@@ -234,7 +234,9 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
 - `GET /browse?path=` — substituiu `/tree` e `/list` (ver "Navegação tipo
   Windows Explorer" acima). Devolve `{ path, folders, files }` de **um
   nível só** — as subpastas e as imagens diretamente dentro de `path`
-  (`""`/omitido = raiz).
+  (`""`/omitido = raiz). Cada item de `files` também traz `group` (nome do
+  grupo de Cadastro de Componentes, ou `null`) — ver "Agrupamento por
+  grupo de componentes" abaixo.
 - `POST /upload` — `multipart/form-data` (upload de arquivo de verdade):
   `profileId`, `path`, `fileName`, `file`. Sempre recusa se já existir uma
   imagem com esse nome na pasta (equivalente ao passo manual "confirme que
@@ -358,15 +360,67 @@ quanto parar de gravar (não só esconder o botão).
   > 0`; `columns` continua guardando a entrada mesmo vazia (preserva o
   índice usado por `pathSegments`/`selectAt`), só a caixa em si não
   aparece quando não há nenhuma subpasta pra mostrar.
-- Abaixo das caixas: grade de cartões por imagem do caminho selecionado
-  (miniatura via `<img>` direto na URL pública, nome, tamanho, data, link
-  "Abrir", e o botão "Remover" — ver "Substituir e Renomear removidos"
-  abaixo pro porquê de não terem mais botão próprio).
+- Abaixo das caixas: grade de cartões por imagem do caminho selecionado,
+  **agrupada por grupo de Cadastro de Componentes** (não mais uma lista
+  única em ordem alfabética — ver "Agrupamento por grupo de componentes"
+  abaixo), miniatura via `<img>` direto na URL pública, nome, tamanho,
+  data, link "Abrir", e o botão "Remover" (ver "Substituir e Renomear
+  removidos" abaixo pro porquê de não terem mais botão próprio).
 - "+ Adicionar imagem" — ver "Nome do arquivo vem do próprio arquivo, só
   aceita selecionar vários de uma vez" abaixo.
 - "Remover" (por linha) pede confirmação (`window.confirm`) antes de
   chamar a rota, mesmo padrão já usado em telas auxiliares deste projeto
   (ver `specs/telas-auxiliares.md`).
+
+### Agrupamento por grupo de componentes
+
+Pedido explícito do usuário: "Faça um JOIN com os Protheus_code de
+Cadastro de Componentes, ou seja, tabela accessories, também com a tabela
+de grupos de componentes, busque o grupo em que cada imagem/componente
+está, hoje as imagens estão sendo exibidas em ordem alfabética... quero
+que seja em formato de agrupamento de imagens pelo tipo de grupo."
+
+- **`resolveFileGroups(fileNames)`** (`src/lib/imageAccessoryGroups.ts`,
+  novo arquivo) — recebe os nomes dos arquivos de uma pasta e devolve um
+  `Map<fileName, groupName | null>`. O **nome do arquivo sem a extensão
+  `.png`** é o candidato a `protheus_code` (mesma convenção de
+  nomenclatura das imagens do catálogo, ex. `"27.02.00683.png"` ->
+  `"27.02.00683"`). Busca `accessories` inteira (`select('protheus_code,
+  legacy_group_id').limit(25000)` — sem `.limit()` explícito o PostgREST
+  capa em 1000 linhas, e Cadastro de Componentes passa disso facilmente)
+  e compara em JS, sempre normalizado `.trim().toUpperCase()` nos dois
+  lados — nunca via `.in()` do Postgres, que é sensível a caixa/espaço
+  (ver `specs/dados-e-schema.md`, "Armadilha do `.in()`"; mesmo padrão já
+  usado em `clone-architecture/route.ts`). Com os `legacy_group_id`
+  resolvidos, busca só os grupos necessários em `accessory_groups`
+  (`.in('legacy_id', ...)` — seguro aqui, é coluna numérica, não texto).
+- **`GET /api/r2-images/browse`** — depois de `browseFolder` (puramente
+  R2/S3), chama `resolveFileGroups` e anexa `group` em cada item de
+  `files` antes de devolver a resposta. `browseFolder`/`r2Images.ts` em si
+  **não foram tocados** — continuam só falando com o bucket; o JOIN com o
+  banco de dados MSM vive só na rota, não na camada S3.
+- **Tela** — `groupFiles(files)` (`grupos-imagens/page.tsx`) agrupa a
+  lista (já ordenada alfabeticamente por `browseFolder`) pelo campo
+  `group`: cada grupo nomeado vira sua própria caixa (mesmo visual de
+  "caixa por seção" já usado no resto do app), com cabeçalho mostrando o
+  nome do grupo + contagem (`"<grupo> (N)"`) e a grade de cartões daquele
+  grupo logo abaixo. Grupos nomeados saem em **ordem alfabética entre si**
+  (`localeCompare` pt-BR); dentro de cada grupo, a ordem alfabética de
+  arquivo já vinda do servidor é preservada. Arquivos cujo nome não bate
+  com nenhum `protheus_code` cadastrado (ou que bate mas o componente não
+  tem grupo) caem numa caixa própria, rótulo fixo "Sem grupo / não
+  cadastrado", **sempre por último** — nunca intercalada alfabeticamente
+  com os grupos de verdade.
+- **O que NÃO mudou**: seleção múltipla (`selectedFiles`), "Selecionar
+  todas"/"Limpar seleção", exclusão/mover em lote continuam operando
+  sobre a lista plana de arquivos da pasta, **através** das caixas de
+  grupo — selecionar uma imagem num grupo e outra em outro grupo funciona
+  normalmente, o agrupamento é só visual. Os resultados de busca global
+  (ver "Busca global" abaixo) **não foram agrupados** — o pedido foi
+  especificamente sobre a navegação normal de pasta, que é onde a ordem
+  alfabética "crua" incomodava; a busca já mostra os resultados batendo
+  com o termo digitado, uma lista normalmente curta o bastante pra não
+  precisar de agrupamento.
 
 ### Nome do arquivo vem do próprio arquivo, seleção múltipla pra adicionar
 
