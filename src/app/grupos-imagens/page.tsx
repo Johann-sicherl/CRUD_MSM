@@ -518,6 +518,17 @@ export default function GruposImagensPage() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   useEffect(() => { setSelectedFiles(new Set()) }, [currentPath])
 
+  // ── Agrupado × Lista única ───────────────────────────────────
+  // Pedido explícito do usuário: "Quero uma chave na parte superior da
+  // tela para o usuário escolher se vai obter a visualização separada por
+  // grupos, como é feito hoje, ou se vai ser sem essa separação, todas as
+  // imagens juntas em ordem crescente." Default `true` (agrupado) —
+  // "como é feito hoje" é o ponto de partida, a chave só dá a opção de
+  // desligar. Não persiste entre pastas de propósito — nunca foi pedido
+  // pra lembrar a escolha, e cada pasta pode ter uma quantidade de grupos
+  // bem diferente (faz sentido escolher de novo ao navegar).
+  const [groupingEnabled, setGroupingEnabled] = useState(true)
+
   // ── Agrupamento por grupo de componentes — dropdown por grupo + filtro ──
   // Pedido explícito do usuário: "Quero que a exibição de cada grupo seja
   // por um drop-down. Adicione... um filtro para filtrar os grupos que
@@ -786,6 +797,43 @@ export default function GruposImagensPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Cartão de uma imagem — extraído pra ser reusado tanto no modo "Por
+  // grupo" (dentro de cada dropdown) quanto no modo "Lista única" (grade
+  // plana, sem agrupamento nenhum).
+  const renderImageCard = (img: ImageObject) => {
+    const isSelected = selectedFiles.has(img.fileName)
+    return (
+      <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => toggleSelected(img.fileName)}
+            className="mt-1 shrink-0"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={img.url}
+            alt={img.fileName}
+            className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
+          />
+        </label>
+        <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
+        <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
+          <button
+            onClick={() => removeImage(img)}
+            disabled={deleting === `${currentPath}/${img.fileName}`}
+            className="text-error hover:underline disabled:opacity-50"
+          >
+            {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (!user.isAdmin) {
     return (
       <div className="p-8">
@@ -798,9 +846,40 @@ export default function GruposImagensPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-6">
-        <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">Administração · grupos de imagens</div>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Grupos de Imagens</h1>
+      <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-xs font-mono text-outline uppercase tracking-[0.2em] mb-1">Administração · grupos de imagens</div>
+          <h1 className="text-3xl font-bold text-on-surface tracking-tight">Grupos de Imagens</h1>
+        </div>
+
+        {/* Agrupado × Lista única — pedido explícito do usuário: "uma
+            chave na parte superior da tela para o usuário escolher se vai
+            obter a visualização separada por grupos... ou... todas as
+            imagens juntas em ordem crescente". Só faz sentido na
+            navegação normal de pasta (busca global tem a própria
+            exibição, nunca foi agrupada). */}
+        {!searchActive && (
+          <div className="flex items-center gap-1 bg-surface-container border border-outline-variant rounded-lg p-1">
+            <button
+              type="button"
+              onClick={() => setGroupingEnabled(true)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${
+                groupingEnabled ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              Por grupo
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupingEnabled(false)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${
+                !groupingEnabled ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              Lista única
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Busca global (pastas e imagens em todo o bucket) + filtro de
@@ -828,8 +907,9 @@ export default function GruposImagensPage() {
         </div>
 
         {/* Filtro de grupos — não durante uma busca (o agrupamento em si
-            não se aplica a resultados de busca, ver specs/imagens-r2.md). */}
-        {!searchActive && (
+            não se aplica a resultados de busca, ver specs/imagens-r2.md),
+            nem no modo "Lista única" (não há grupo nenhum pra filtrar). */}
+        {!searchActive && groupingEnabled && (
           <div className="relative shrink-0" ref={groupFilterRef}>
             <button
               type="button"
@@ -1074,6 +1154,14 @@ export default function GruposImagensPage() {
             <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline">Carregando…</div>
           ) : files.length === 0 ? (
             <div className="bg-surface-container border border-outline-variant rounded-lg p-6 text-sm text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
+          ) : !groupingEnabled ? (
+            // "Lista única" — mesma ordem alfabética que o servidor já
+            // devolve (browseFolder), sem nenhuma separação por grupo.
+            <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
+                {files.map(renderImageCard)}
+              </div>
+            </div>
           ) : (() => {
             const visibleGroups = groupFiles(files).filter(g => !hiddenGroups.has(g.label))
             return visibleGroups.length === 0 ? (
@@ -1096,39 +1184,7 @@ export default function GruposImagensPage() {
                   </button>
                   {isExpanded && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
-                      {groupImages.map(img => {
-                        const isSelected = selectedFiles.has(img.fileName)
-                        return (
-                        <div key={img.fileName} className={`p-3 flex flex-col gap-2 transition-colors ${isSelected ? 'bg-primary/10' : 'bg-surface-container'}`}>
-                          <label className="flex items-start gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSelected(img.fileName)}
-                              className="mt-1 shrink-0"
-                            />
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={img.url}
-                              alt={img.fileName}
-                              className="w-full h-32 object-contain bg-surface-container-low rounded border border-outline-variant/40"
-                            />
-                          </label>
-                          <div className="font-mono text-xs text-on-surface truncate" title={img.fileName}>{img.fileName}</div>
-                          <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
-                          <div className="flex items-center gap-2 flex-wrap text-xs">
-                            <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
-                            <button
-                              onClick={() => removeImage(img)}
-                              disabled={deleting === `${currentPath}/${img.fileName}`}
-                              className="text-error hover:underline disabled:opacity-50"
-                            >
-                              {deleting === `${currentPath}/${img.fileName}` ? 'Removendo…' : 'Remover'}
-                            </button>
-                          </div>
-                        </div>
-                        )
-                      })}
+                      {groupImages.map(renderImageCard)}
                     </div>
                   )}
                 </div>

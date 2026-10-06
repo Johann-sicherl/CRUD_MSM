@@ -235,8 +235,9 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
   Windows Explorer" acima). Devolve `{ path, folders, files }` de **um
   nível só** — as subpastas e as imagens diretamente dentro de `path`
   (`""`/omitido = raiz). Cada item de `files` também traz `group` (nome do
-  grupo de Cadastro de Componentes, ou `null`) — ver "Agrupamento por
-  grupo de componentes" abaixo.
+  grupo de Cadastro de Componentes, ou o nome do equipamento se o código
+  for de Cadastro de Equipamentos, ou `null`) — ver "Agrupamento por grupo
+  de componentes" abaixo.
 - `POST /upload` — `multipart/form-data` (upload de arquivo de verdade):
   `profileId`, `path`, `fileName`, `file`. Sempre recusa se já existir uma
   imagem com esse nome na pasta (equivalente ao passo manual "confirme que
@@ -361,11 +362,13 @@ quanto parar de gravar (não só esconder o botão).
   índice usado por `pathSegments`/`selectAt`), só a caixa em si não
   aparece quando não há nenhuma subpasta pra mostrar.
 - Abaixo das caixas: grade de cartões por imagem do caminho selecionado,
-  **agrupada por grupo de Cadastro de Componentes** (não mais uma lista
-  única em ordem alfabética — ver "Agrupamento por grupo de componentes"
-  abaixo), miniatura via `<img>` direto na URL pública, nome, tamanho,
-  data, link "Abrir", e o botão "Remover" (ver "Substituir e Renomear
-  removidos" abaixo pro porquê de não terem mais botão próprio).
+  **agrupada por grupo de Cadastro de Componentes/Equipamentos por padrão**
+  (não mais uma lista única em ordem alfabética — ver "Agrupamento por
+  grupo de componentes" abaixo, e "Chave 'Por grupo' / 'Lista única'"
+  pra como desligar esse agrupamento), miniatura via `<img>` direto na
+  URL pública, nome, tamanho, data, link "Abrir", e o botão "Remover" (ver
+  "Substituir e Renomear removidos" abaixo pro porquê de não terem mais
+  botão próprio).
 - "+ Adicionar imagem" — ver "Nome do arquivo vem do próprio arquivo, só
   aceita selecionar vários de uma vez" abaixo.
 - "Remover" (por linha) pede confirmação (`window.confirm`) antes de
@@ -394,6 +397,17 @@ que seja em formato de agrupamento de imagens pelo tipo de grupo."
   usado em `clone-architecture/route.ts`). Com os `legacy_group_id`
   resolvidos, busca só os grupos necessários em `accessory_groups`
   (`.in('legacy_id', ...)` — seguro aqui, é coluna numérica, não texto).
+  **Rodada seguinte, pedido explícito do usuário**: "Quero que faça a
+  mesma conexão com standard_equipment_items com o seu respectivo
+  protheus_code, o mesmo link do protheus_code de accessories já
+  existente" — mesmo mecanismo replicado pra Cadastro de Equipamentos:
+  `standard_equipment_items.protheus_code` -> `legacy_equipment_id` ->
+  `equipments.name` (pra um equipamento, o "grupo" é o próprio
+  equipamento, igual `accessory_groups.name` é o grupo de um componente).
+  `accessories` é checada primeiro; `standard_equipment_items` é o
+  fallback pra código que não bate em `accessories` — as duas buscas (e
+  as duas buscas de nome, `accessory_groups`/`equipments`) rodam em
+  paralelo (`Promise.all`), não sequencial.
 - **`GET /api/r2-images/browse`** — depois de `browseFolder` (puramente
   R2/S3), chama `resolveFileGroups` e anexa `group` em cada item de
   `files` antes de devolver a resposta. `browseFolder`/`r2Images.ts` em si
@@ -473,6 +487,43 @@ pastas."
   continuam operando sobre `selectedFiles` normalmente, inclusive dentro
   de um grupo colapsado (uma imagem selecionada antes de colapsar o
   grupo continua selecionada, só não visível até expandir de novo).
+
+### Chave "Por grupo" / "Lista única"
+
+Pedido explícito do usuário: "Quero uma chave na parte superior da tela
+para o usuário escolher se vai obter a visualização separada por grupos,
+como é feito hoje, ou se vai ser sem essa separação, todas as imagens
+juntas em ordem crescente."
+
+- **`groupingEnabled: boolean`** (`grupos-imagens/page.tsx`) — **nasce
+  `true`** ("como é feito hoje" é o ponto de partida, a chave só dá a
+  opção de desligar). Não persiste entre pastas nem em `localStorage` de
+  propósito — nunca foi pedido pra lembrar a escolha, e pastas diferentes
+  podem ter quantidades de grupo bem diferentes (faz sentido poder
+  escolher de novo a cada navegação).
+- **Posição** — par de botões "Por grupo"/"Lista única" (estilo toggle,
+  um deles sempre destacado em `bg-primary`) no canto superior direito da
+  tela, na mesma linha do título "Grupos de Imagens" (`flex
+  items-end justify-between` no cabeçalho) — "na parte superior da tela",
+  pedido explícito. Some durante uma busca global (`!searchActive`) —
+  a busca tem a própria exibição, nunca foi agrupada (ver "Busca global"
+  abaixo), então a chave não faria sentido ali.
+- **`groupingEnabled = false` ("Lista única")** — a grade volta a ser uma
+  lista única, sem nenhuma caixa de grupo por cima, na mesma ordem
+  alfabética ascendente que `browseFolder` já devolve do servidor
+  (nenhum `sort` novo no cliente — a ordem "crescente" pedida já é a
+  ordem natural, nunca foi alterada). O botão "🗂 Filtrar grupos" também
+  some nesse modo (`!searchActive && groupingEnabled`) — não há grupo
+  nenhum pra filtrar.
+- **`renderImageCard(img)`** — o cartão de uma imagem (miniatura,
+  checkbox, nome, tamanho/data, "Abrir"/"Remover") foi extraído pra uma
+  função só, reusada tanto dentro de cada dropdown de grupo quanto na
+  grade plana da "Lista única" — nunca duas implementações divergentes do
+  mesmo cartão.
+- **O que NÃO mudou**: a chave só decide COMO agrupar visualmente — os
+  dados por trás (`files`, já com `group` resolvido pelo servidor) são os
+  mesmos nos dois modos; `selectedFiles`/mover/excluir em lote continuam
+  operando sobre a lista inteira da pasta independente do modo escolhido.
 
 ### Nome do arquivo vem do próprio arquivo, seleção múltipla pra adicionar
 
