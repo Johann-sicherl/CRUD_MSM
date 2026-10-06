@@ -53,6 +53,18 @@ hardcoded direto no render de `Sidebar.tsx` (não gerado a partir de
 erro de configuração no checklist de "módulos visíveis" de um perfil não
 pode fazer esse link aparecer para quem não tem a permissão.
 
+**Posição do link de `/grupos-imagens` na Sidebar — pedido explícito do
+usuário**: "remova Grupos de Imagens de Administração, mova para sistema".
+Até esta mudança, o link vivia dentro do bloco "Administração" (junto de
+"Configuração de Usuários"). Passou a ser renderizado dentro da caixa do
+grupo "Sistema" (mesmo `<div>` de `MODULE_GROUPS`, logo depois do link
+hardcoded de "Consulta PDM x Banco MSM" dentro do grupo "Consulta Banco de
+Dados" — mesmo padrão: um `{group === 'Sistema' && appUser.isAdmin && (...)}`
+dentro do `.map()` de `byGroup`, não uma entrada em `MODULES`). **A
+permissão não mudou** — continua `isAdmin`, sem equivalente a
+`canConnectPdm`, hardcoded, nunca lido de `visibleModules` — só a posição
+visual na Sidebar mudou de grupo.
+
 ## "+Novo Registro" (criação em lote) escondido do Gerente Adm Comercial
 
 O botão "+Novo Registro" / "Importar Excel" (fila de insert, mecanismo (c)

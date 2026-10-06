@@ -192,6 +192,30 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                         <span className="truncate">Consulta PDM x Banco MSM</span>
                       </Link>
                     )}
+                    {/* Grupos de Imagens (bucket Cloudflare R2) — fora de
+                        MODULES/visibleModules de propósito, admin-only sem
+                        equivalente a canConnectPdm (ver specs/imagens-r2.md e
+                        specs/permissoes-e-perfis.md) — só entra pelo isAdmin do
+                        perfil, nunca por uma entrada de módulo comum. Pedido
+                        explícito do usuário: "remova Grupos de Imagens de
+                        Administração, mova para sistema" — morava dentro do
+                        bloco "Administração" (junto de Configuração de
+                        Usuários); passou pra dentro da caixa do grupo
+                        "Sistema", mesmo padrão hardcoded da Consulta PDM x
+                        Banco MSM acima. */}
+                    {group === 'Sistema' && appUser.isAdmin && (
+                      <Link
+                        href="/grupos-imagens"
+                        prefetch={false}
+                        className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
+                          pathname === '/grupos-imagens'
+                            ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
+                            : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                        }`}
+                      >
+                        <span className="truncate">Grupos de Imagens</span>
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>
@@ -222,21 +246,6 @@ export default function Sidebar({ pinned, onPinChange }: Props) {
                     }`}
                   >
                     <span className="truncate">Configuração de Usuários</span>
-                  </Link>
-                  {/* Grupos de Imagens (bucket Cloudflare R2) — mesmo
-                      tratamento admin-only de Configuração de Usuários, não
-                      entra em MODULES/visibleModules de propósito (ver
-                      specs/imagens-r2.md). */}
-                  <Link
-                    href="/grupos-imagens"
-                    prefetch={false}
-                    className={`flex items-center px-4 py-2 mx-2 rounded text-sm transition-all ${
-                      pathname === '/grupos-imagens'
-                        ? 'bg-primary/10 text-primary border-l-2 border-primary pl-[14px]'
-                        : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                    }`}
-                  >
-                    <span className="truncate">Grupos de Imagens</span>
                   </Link>
                 </div>
               )}

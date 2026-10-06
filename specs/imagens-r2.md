@@ -1,7 +1,9 @@
 # Grupos de Imagens (bucket Cloudflare R2)
 
-Tela `/grupos-imagens` (grupo "Administração", admin-only, fora do sistema
-de `visibleModules`/`MODULES` — ver `specs/permissoes-e-perfis.md`). Pedido
+Tela `/grupos-imagens` (link na caixa do grupo "Sistema" da Sidebar,
+admin-only, fora do sistema de `visibleModules`/`MODULES` — ver
+`specs/permissoes-e-perfis.md`, "Posição do link de `/grupos-imagens` na
+Sidebar", pra por que não está em "Administração"). Pedido
 explícito do usuário: criar, dentro do CRUD_MSM, um módulo pra gerenciar o
 bucket Cloudflare R2 (`images-msm`) onde ficam as imagens dos itens do
 catálogo, hoje mantido manualmente pela equipe de TI/Engenharia via
