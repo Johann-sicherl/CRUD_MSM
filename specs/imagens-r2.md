@@ -502,13 +502,20 @@ vez.
   "Grupo A" inteiro, abrir "Grupo B" e marcar algumas imagens avulsas
   dele, sem perder a seleção de A).
 - **Cabeçalho do grupo deixou de ser um `<button>` só** — virou um
-  `<div>` com **dois** `<button>` lado a lado (não dá pra aninhar
-  `<button>` dentro de `<button>`): o da esquerda (`flex-1`) continua
-  expandindo/colapsando o grupo; o novo, à direita, alterna "Selecionar
-  grupo"/"Limpar grupo" (rótulo muda conforme `groupAllSelected =
-  groupImages.every(img => selectedFiles.has(img.fileName))`) — os dois
-  cliques são independentes, clicar em "Selecionar grupo" não
-  expande/colapsa o grupo e vice-versa.
+  `<div>` com um checkbox (`<input type="checkbox">`) e um `<button>`
+  lado a lado (não dá pra aninhar `<button>` dentro de `<button>`, e um
+  `<input>` como irmão resolve isso sem precisar de dois botões). O
+  checkbox fica à esquerda do nome do grupo (`checked={groupAllSelected}`,
+  `groupAllSelected = groupImages.every(img =>
+  selectedFiles.has(img.fileName))`) e alterna `toggleSelectGroup` ao
+  marcar/desmarcar; o `<button>` à direita dele (`flex-1`) continua
+  expandindo/colapsando o grupo. **Rodada seguinte, pedido explícito do
+  usuário**: "a função de selecionar grupo já está ótima, mas que seja
+  apenas um checkbox antes do lado esquerdo do nome do grupo no dropdown"
+  — substituiu o botão de texto "Selecionar grupo"/"Limpar grupo" que
+  existia antes (mesma lógica por trás, só a UI mudou de botão pra
+  checkbox). Os dois cliques continuam independentes: marcar/desmarcar o
+  checkbox não expande/colapsa o grupo, e vice-versa.
 - **Disponível com o grupo colapsado ou expandido** — de propósito, pra
   marcar um grupo inteiro sem precisar abri-lo primeiro (útil pra, por
   exemplo, selecionar vários grupos inteiros de uma vez antes de mover ou

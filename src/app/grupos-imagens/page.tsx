@@ -1236,6 +1236,13 @@ export default function GruposImagensPage() {
                       isExpanded ? 'border-b border-outline-variant' : ''
                     }`}
                   >
+                    <input
+                      type="checkbox"
+                      checked={groupAllSelected}
+                      onChange={() => toggleSelectGroup(groupImages)}
+                      title={groupAllSelected ? 'Limpar seleção do grupo' : 'Selecionar todas as imagens do grupo'}
+                      className="shrink-0 w-4 h-4 accent-primary cursor-pointer"
+                    />
                     <button
                       type="button"
                       onClick={() => toggleGroupExpanded(label)}
@@ -1243,13 +1250,6 @@ export default function GruposImagensPage() {
                     >
                       <span className="text-left truncate">{label} ({groupImages.length})</span>
                       <GroupChevron collapsed={!isExpanded} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleSelectGroup(groupImages)}
-                      className="shrink-0 normal-case font-semibold text-on-surface-variant hover:text-primary transition-colors"
-                    >
-                      {groupAllSelected ? 'Limpar grupo' : 'Selecionar grupo'}
                     </button>
                   </div>
                   {isExpanded && (
