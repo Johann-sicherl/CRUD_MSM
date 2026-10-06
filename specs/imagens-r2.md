@@ -360,20 +360,57 @@ quanto parar de gravar (não só esconder o botão).
 - Abaixo das caixas: grade de cartões por imagem do caminho selecionado
   (miniatura via `<img>` direto na URL pública, nome, tamanho, data, link
   "Abrir", e os três botões Substituir/Renomear/Remover).
-- "+ Adicionar imagem" — um único campo "Pasta" (texto livre, `<datalist>`
-  sugere as subpastas do nível atual, mas aceita digitar qualquer caminho
-  com `/`, inclusive um que ainda não existe — é assim que uma pasta nova
-  "nasce"), nome do arquivo, seletor de arquivo (`accept="image/png"`),
-  dois botões ("Adicionar nova" = `mode=add`, "Substituir existente" =
-  `mode=replace`) — a tela não tenta adivinhar qual dos dois o usuário
-  quer, até porque o mesmo formulário é reusado tanto pro "+ Adicionar
-  imagem" do topo (pode ser add OU replace) quanto pelo botão "Substituir"
-  de uma linha já existente (pré-preenchido, mas ainda com os dois botões
-  — nada impede o usuário de, ali, optar por "Adicionar nova" com outro
-  nome em vez de substituir).
+- "+ Adicionar imagem" — ver "Nome do arquivo vem do próprio arquivo, só
+  aceita selecionar vários de uma vez" abaixo.
 - "Remover" (por linha) pede confirmação (`window.confirm`) antes de
   chamar a rota, mesmo padrão já usado em telas auxiliares deste projeto
   (ver `specs/telas-auxiliares.md`).
+
+### Nome do arquivo vem do próprio arquivo, seleção múltipla pra adicionar
+
+Pedido explícito do usuário: "tenho no pop-up que selecionar a imagem e
+ainda preencher o nome do arquivo? Não faz sentido, a imagem é o arquivo,
+e o nome da imagem é o nome do arquivo. Quero poder selecionar várias
+imagens de uma só vez." A 1ª versão do pop-up "Adicionar / Substituir
+imagem" tinha um campo "Nome do arquivo" solto, separado do seletor de
+arquivo (`<input type="file">`) — digitado à mão mesmo quando o nome
+óbvio já estava certo ali no próprio arquivo selecionado.
+
+O pop-up agora tem **dois comportamentos distintos**, dependendo de como
+foi aberto — a diferença real é que só um dos dois tem um "nome-alvo"
+fixo que precisa continuar igual depois da operação:
+
+- **Aberto pelo botão "+ Adicionar imagem" do topo** (`openAddForm`,
+  `addTargetFileName = null`) — sem nome-alvo nenhum. O campo "Nome do
+  arquivo" **foi removido**; o seletor de arquivo passou a ter
+  `multiple`, e o nome de cada imagem enviada é sempre o próprio
+  `File.name` do arquivo escolhido, nunca digitado. Os dois botões
+  ("Adicionar nova(s)"/"Substituir existente(s)") continuam existindo e
+  agora operam em **lote** — um `POST /upload` por arquivo selecionado,
+  sequencial (mesmo motivo de toda escrita em lote deste projeto: erro
+  isolado por arquivo, ordem previsível), cada um usando o próprio nome
+  do arquivo como `fileName`. Isso também cobre o caso de "atualizar o
+  conteúdo de vários códigos já cadastrados de uma vez" — selecionar N
+  arquivos cujos nomes já existem no bucket e clicar "Substituir
+  existentes" sobrescreve cada um mantendo o próprio nome.
+- **Aberto pelo botão "Substituir" de uma linha já existente**
+  (`openReplace`, `addTargetFileName = img.fileName`) — aqui o nome-alvo
+  **precisa** continuar fixo (a imagem que já está cadastrada), porque o
+  arquivo novo escolhido no disco pode ter um nome local completamente
+  diferente — não dá pra derivar o nome-alvo do `File.name` nesse fluxo.
+  O pop-up mostra o nome-alvo como texto fixo ("Substituindo:
+  `<nome>`"), não mais um campo editável, e o seletor de arquivo continua
+  single (sem `multiple` — é sempre uma substituição de uma imagem
+  específica por vez). Só o botão "Substituir" aparece (não faz sentido
+  "Adicionar nova" quando já se sabe que existe uma linha pra substituir).
+- **Toast/erro cobrem lote parcial** — se algum arquivo falhar no meio do
+  lote (nome inválido, já existe/não existe conforme o modo, erro de
+  rede), o pop-up continua aberto e mostra quantos enviaram com sucesso e
+  quais falharam (com o motivo de cada um); só fecha sozinho quando
+  **todos** os arquivos do lote tiverem sucesso. `refreshAfterChange()` é
+  chamado de qualquer forma, pra qualquer envio que tenha dado certo já
+  aparecer na grade mesmo que o pop-up continue aberto por causa de uma
+  falha parcial.
 
 ### Seleção múltipla + exclusão em lote
 

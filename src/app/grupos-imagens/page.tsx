@@ -339,58 +339,87 @@ export default function GruposImagensPage() {
   }
 
   // ── Adicionar / Substituir ──────────────────────────────────
+  // Pedido explícito do usuário: "tenho no pop-up que selecionar a imagem e
+  // ainda preencher o nome do arquivo? Não faz sentido, a imagem é o
+  // arquivo, e o nome da imagem é o nome do arquivo. Quero poder selecionar
+  // várias imagens de uma só vez." — o campo "Nome do arquivo" separado só
+  // fazia sentido mesmo no fluxo de "Substituir" disparado por uma linha já
+  // existente (`openReplace`): ali o nome-alvo é fixo (a imagem que já está
+  // cadastrada), e o arquivo novo selecionado no disco pode ter outro nome
+  // — o nome final tem que continuar sendo o da linha, não o do arquivo
+  // local. `addTargetFileName` (não-nulo só nesse fluxo) guarda esse nome
+  // fixo; fora dele (abrindo pelo botão "+ Adicionar imagem" do topo), o
+  // nome de cada arquivo enviado é sempre o próprio `File.name`, nunca
+  // digitado — e o seletor aceita múltiplos arquivos de uma vez.
   const [addOpen, setAddOpen] = useState(false)
   const [addPath, setAddPath] = useState('')
-  const [addFileName, setAddFileName] = useState('')
-  const [addFile, setAddFile] = useState<File | null>(null)
+  const [addTargetFileName, setAddTargetFileName] = useState<string | null>(null)
+  const [addFiles, setAddFiles] = useState<File[]>([])
   const [addSaving, setAddSaving] = useState(false)
   const [addError, setAddError] = useState('')
 
   const openAddForm = () => {
     setAddPath(currentPath)
-    setAddFileName('')
-    setAddFile(null)
+    setAddTargetFileName(null)
+    setAddFiles([])
     setAddError('')
     setAddOpen(true)
   }
 
   const submitAdd = async (mode: 'add' | 'replace') => {
-    if (!addFileName.trim() || !addFile) {
-      setAddError('Preencha o nome do arquivo e selecione a imagem')
+    if (addFiles.length === 0) {
+      setAddError('Selecione ao menos uma imagem')
       return
     }
     setAddSaving(true)
     setAddError('')
-    try {
-      const form = new FormData()
-      form.set('profileId', user.id)
-      form.set('path', addPath.trim())
-      form.set('fileName', addFileName.trim())
-      form.set('mode', mode)
-      form.set('file', addFile)
-      const res = await fetch('/api/r2-images/upload', { method: 'POST', body: form })
-      const json = await res.json()
-      if (!res.ok) { setAddError(json.error || 'Falha ao enviar a imagem'); return }
-      setAddOpen(false)
-      showToast(mode === 'replace' ? 'Imagem substituída' : 'Imagem adicionada')
-      refreshAfterChange()
-    } catch {
-      setAddError('Falha de rede ao enviar a imagem')
-    } finally {
-      setAddSaving(false)
+    // Sequencial de propósito (não Promise.all) — mesmo padrão de toda
+    // escrita em lote deste projeto: erro isolado por arquivo, ordem
+    // previsível (ver specs/custeio-financeiro.md).
+    let okCount = 0
+    const failed: string[] = []
+    for (const file of addFiles) {
+      const fileName = (addTargetFileName ?? file.name).trim()
+      try {
+        const form = new FormData()
+        form.set('profileId', user.id)
+        form.set('path', addPath.trim())
+        form.set('fileName', fileName)
+        form.set('mode', mode)
+        form.set('file', file)
+        const res = await fetch('/api/r2-images/upload', { method: 'POST', body: form })
+        if (res.ok) {
+          okCount++
+        } else {
+          const json = await res.json().catch(() => ({}))
+          failed.push(`${fileName}${json.error ? ` — ${json.error}` : ''}`)
+        }
+      } catch {
+        failed.push(`${fileName} — falha de rede`)
+      }
     }
+    setAddSaving(false)
+    if (failed.length === 0) {
+      setAddOpen(false)
+      showToast(okCount === 1
+        ? (mode === 'replace' ? 'Imagem substituída' : 'Imagem adicionada')
+        : `${okCount} imagem(ns) ${mode === 'replace' ? 'substituída(s)' : 'adicionada(s)'}`)
+    } else {
+      setAddError(`${okCount} enviada(s), ${failed.length} falharam: ${failed.join('; ')}`)
+    }
+    refreshAfterChange()
   }
 
   // Substituir direto numa linha já existente — mesmo formulário de cima,
-  // só pré-preenchido e já mandando mode=replace. folderPath é explícito
-  // (default = pasta atual) pra também funcionar em cima de um resultado de
-  // busca, que pode estar numa pasta diferente da navegada no momento —
-  // pedido explícito do usuário: "Quero poder editar as imagens que estão
-  // sendo apresentadas no meu filtro".
+  // só pré-preenchido com o nome-alvo fixo e já mandando mode=replace.
+  // folderPath é explícito (default = pasta atual) pra também funcionar em
+  // cima de um resultado de busca, que pode estar numa pasta diferente da
+  // navegada no momento — pedido explícito do usuário: "Quero poder editar
+  // as imagens que estão sendo apresentadas no meu filtro".
   const openReplace = (img: { fileName: string }, folderPath: string = currentPath) => {
     setAddPath(folderPath)
-    setAddFileName(img.fileName)
-    setAddFile(null)
+    setAddTargetFileName(img.fileName)
+    setAddFiles([])
     setAddError('')
     setAddOpen(true)
   }
@@ -989,7 +1018,9 @@ export default function GruposImagensPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setAddOpen(false)}>
           <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-outline-variant">
-              <span className="text-base font-semibold text-on-surface">Adicionar / Substituir imagem</span>
+              <span className="text-base font-semibold text-on-surface">
+                {addTargetFileName ? 'Substituir imagem' : 'Adicionar / Substituir imagem'}
+              </span>
             </div>
             <div className="px-5 py-4 flex flex-col gap-3">
               <p className="text-xs text-outline">
@@ -1010,25 +1041,41 @@ export default function GruposImagensPage() {
                   {(currentColumn?.folders ?? []).map(f => <option key={f} value={currentPath ? `${currentPath}/${f}` : f} />)}
                 </datalist>
               </label>
-              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Nome do arquivo (ex: 27.02.00683.png)
-                <input
-                  value={addFileName}
-                  onChange={e => setAddFileName(e.target.value)}
-                  placeholder="codigo.png"
-                  className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
-                />
-              </label>
-              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Arquivo (.png)
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png"
-                  onChange={e => setAddFile(e.target.files?.[0] ?? null)}
-                  className="text-sm text-on-surface"
-                />
-              </label>
+              {addTargetFileName ? (
+                <>
+                  <p className="text-xs text-outline">
+                    Substituindo: <span className="font-mono text-on-surface">{addTargetFileName}</span> — o nome
+                    não muda, só o conteúdo da imagem.
+                  </p>
+                  <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+                    Novo arquivo (.png)
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png"
+                      onChange={e => setAddFiles(e.target.files?.[0] ? [e.target.files[0]] : [])}
+                      className="text-sm text-on-surface"
+                    />
+                  </label>
+                </>
+              ) : (
+                <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+                  Arquivo(s) (.png) — o nome de cada imagem já vem do próprio arquivo selecionado
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png"
+                    multiple
+                    onChange={e => setAddFiles(Array.from(e.target.files ?? []))}
+                    className="text-sm text-on-surface"
+                  />
+                  {addFiles.length > 0 && (
+                    <span className="text-xs text-outline font-mono">
+                      {addFiles.length} arquivo(s): {addFiles.map(f => f.name).join(', ')}
+                    </span>
+                  )}
+                </label>
+              )}
               {addError && (
                 <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {addError}</div>
               )}
@@ -1037,22 +1084,28 @@ export default function GruposImagensPage() {
               <button type="button" onClick={() => setAddOpen(false)} disabled={addSaving} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
                 Cancelar
               </button>
+              {!addTargetFileName && (
+                <button
+                  type="button"
+                  onClick={() => submitAdd('replace')}
+                  disabled={addSaving}
+                  title="Use se já existe imagem com o mesmo nome dos arquivos selecionados nessa pasta"
+                  className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
+                >
+                  Substituir existente{addFiles.length > 1 ? `s (${addFiles.length})` : ''}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => submitAdd('replace')}
-                disabled={addSaving}
-                title="Use se já existe uma imagem com esse nome nessa pasta"
-                className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
-              >
-                Substituir existente
-              </button>
-              <button
-                type="button"
-                onClick={() => submitAdd('add')}
+                onClick={() => submitAdd(addTargetFileName ? 'replace' : 'add')}
                 disabled={addSaving}
                 className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
               >
-                {addSaving ? 'Enviando…' : 'Adicionar nova'}
+                {addSaving
+                  ? 'Enviando…'
+                  : addTargetFileName
+                    ? 'Substituir'
+                    : `Adicionar nova${addFiles.length > 1 ? `s (${addFiles.length})` : ''}`}
               </button>
             </div>
           </div>
