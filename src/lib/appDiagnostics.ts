@@ -6,6 +6,7 @@ import { readStructurePropertyRules } from './structurePropertyRules'
 import { computeStructurePropertyResults } from './structurePropertyMatch'
 import { tables } from './schema'
 import { REVERSE_SEARCH_GROUPS, PDM_COMPARE_GROUPS } from './appDiagnosticsGroups'
+import { computeImageReverseSearch } from './imageReverseSearch'
 
 // Diagnóstico da Aplicação — pedido explícito do usuário: um pop-up que
 // roda sozinho na primeira abertura do app (ou depois de uma atualização,
@@ -272,6 +273,33 @@ async function checkPdmVsSupabase(pdm: PdmCredentials | null): Promise<Diagnosti
   return issues
 }
 
+// Cadastros sem Imagem — pedido explícito do usuário: "Adicione em Visão
+// Geral Avançada Global um Dropdown que me fala quantos cadastros não
+// possuem imagem." Reaproveita o mesmo núcleo da Busca Reversa de Imagens
+// já usada na tela Grupos de Imagens (computeImageReverseSearch,
+// imageReverseSearch.ts) — nenhuma lógica de contagem nova, nenhuma query
+// nova ao bucket/banco além da que aquela tela já fazia. Não precisa de
+// credencial nenhuma (Protheus/PDM) — é só Supabase + bucket R2 — mas
+// entra no mesmo CHECKS/runAppDiagnostics de qualquer forma, já que o
+// pop-up só dispara depois que os dois já conectaram de qualquer jeito.
+//
+// Modo 'problems' (default, não 'summary'): diferente de Busca Reversa
+// (Protheus)/Consulta PDM x Banco MSM, aqui o usuário quer exatamente "me
+// fala quantos" — só os códigos SEM imagem entram como issue, então o
+// badge do dropdown já mostra direto "N problema(s)" = quantos cadastros
+// não têm imagem, sem precisar abrir o dropdown pra achar esse número. Os
+// códigos COM imagem não aparecem aqui (não é um inventário completo como
+// as outras duas checagens "summary" — é pontualmente sobre o que falta).
+async function checkImagesMissing(): Promise<DiagnosticIssue[]> {
+  const result = await computeImageReverseSearch()
+  return result.items
+    .filter(item => !item.hasImage)
+    .map(item => ({
+      rowLabel: item.code,
+      message: 'Sem imagem no bucket (R2) — nenhum arquivo <código>.png cadastrado.',
+    }))
+}
+
 // Chave/rótulo da Checagem #4 extraídos em constantes — reusados tanto no
 // registro em CHECKS quanto em runPdmDiagnosticSection (re-execução
 // avulsa, abaixo), pra nunca divergir entre os dois.
@@ -283,6 +311,7 @@ const CHECKS: Check[] = [
   { key: 'accessories', tableLabel: 'Cadastro de Componentes', run: checkProtheusStatusVsActive('accessories', 'Cadastro de Componentes') },
   { key: 'reverse_search_27_04_27_03', tableLabel: 'Busca Reversa (Protheus) 27.04 / 27.03', mode: 'summary', run: checkReverseSearchStructures },
   { key: PDM_CHECK_KEY, tableLabel: PDM_CHECK_LABEL, mode: 'summary', run: creds => checkPdmVsSupabase(creds.pdm) },
+  { key: 'images_missing', tableLabel: 'Cadastros sem Imagem', run: () => checkImagesMissing() },
 ]
 
 // Roda uma checagem (já resolvida pra uma função sem argumento) e embrulha

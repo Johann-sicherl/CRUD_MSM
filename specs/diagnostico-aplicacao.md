@@ -461,6 +461,42 @@ nenhum componente novo foi criado, `EquipmentBox` já era genérico o
 bastante (rótulo = `rowLabel`, badge = `details.length` erro(s) ou a
 `message`, mini-tabela a partir de `details`).
 
+## Checagem #5 — Cadastros sem Imagem
+
+Pedido explícito do usuário: "Adicione em Visão Geral Avançada Global um
+Dropdown que me fala quantos cadastros não possuem imagem." Reaproveita o
+mesmo núcleo da Busca Reversa de Imagens já usada na tela Grupos de
+Imagens (`computeImageReverseSearch`, `src/lib/imageReverseSearch.ts`,
+ver `specs/imagens-r2.md`) — nenhuma lógica de contagem nova: a mesma
+conta (DISTINCT `standard_equipment_items.protheus_code` com status
+`active`, + `relationship_equip_accessory.protheus_code` cujo componente
+correspondente em `accessories` também está `active`, cruzados contra o
+bucket R2) foi extraída pra um módulo próprio justamente pra poder ser
+chamada dos dois lugares sem duplicar/arriscar divergir — `GET
+/api/r2-images/reverse-search` (tela Grupos de Imagens) também passou a
+chamar essa mesma função em vez de ter a conta inline.
+
+**Diferente das Checagens #3 e #4 (`mode: 'summary'`), esta é `mode:
+'problems'` (o padrão)** — decisão deliberada pra responder exatamente o
+que foi pedido ("me fala **quantos**"): só os códigos **sem** imagem
+entram como `issue` (`checkImagesMissing`, `appDiagnostics.ts`); os
+códigos com imagem não aparecem em lugar nenhum aqui — isto não é um
+inventário completo como Busca Reversa (Protheus)/Consulta PDM x Banco
+MSM, é pontualmente sobre o que falta. Isso faz o badge do próprio
+cabeçalho do dropdown já mostrar `N problema(s)` = exatamente quantos
+cadastros (ativos) não têm imagem, sem precisar expandir pra achar esse
+número — e esse total também soma em `totalProblems`, o resumo no topo
+do pop-up (diferente das seções `summary`, que são excluídas de propósito
+dessa soma). Sem `group`/blocos (lista única, mesmo padrão simples das
+Checagens #1/#2) — não há um segundo estado pra separar em blocos, já que
+"com imagem" nunca aparece aqui.
+
+Não precisa de nenhuma credencial (Protheus/PDM) — é só Supabase + bucket
+R2 — mas entra no mesmo `CHECKS`/`runAppDiagnostics` de qualquer forma,
+já que o pop-up só dispara depois que os dois já conectaram mesmo assim
+(ver "Quando aparece" acima); não haveria ganho em tratá-la separado só
+por essa diferença.
+
 ## O que NÃO faz parte disto
 
 - Não é a mesma coisa que o "Comparar" removido do Atualizador Global (ver

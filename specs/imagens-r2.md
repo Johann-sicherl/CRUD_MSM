@@ -327,6 +327,18 @@ consultado pra responder sim/não por código.
   bruta inteira — por isso funciona igual nas três abas (Todos/Sem
   imagem/Com imagem) e também respeita o filtro de texto por código, se
   algum estiver digitado. Desabilitado quando a lista visível está vazia.
+- **`computeImageReverseSearch()` extraído pra `src/lib/imageReverseSearch.ts`
+  — rodada seguinte, motivada por reuso em `specs/diagnostico-aplicacao.md`
+  (Checagem #5, "Cadastros sem Imagem")**: todo o núcleo de conta descrito
+  acima (as três queries, o `Map` de status de `accessories`, a união
+  normalizada dos códigos, o cruzamento com `listAllImageCodes()`) deixou
+  de viver inline em `GET /api/r2-images/reverse-search` — virou essa
+  função, devolvendo `{ items, total, withImage, withoutImage }`. A rota
+  passou a só chamar essa função e devolver o resultado; nenhum
+  comportamento mudou pra tela Grupos de Imagens, só a localização do
+  código — pra Visão Geral Avançada Global poder chamar exatamente a
+  mesma conta sem duplicá-la (ou arriscar as duas divergirem com o
+  tempo).
 
 ## Backup automático removido
 
