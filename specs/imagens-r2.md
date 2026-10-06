@@ -236,14 +236,15 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
   nível só** — as subpastas e as imagens diretamente dentro de `path`
   (`""`/omitido = raiz).
 - `POST /upload` — `multipart/form-data` (upload de arquivo de verdade):
-  `profileId`, `path`, `fileName`, `mode` (`add`|`replace`), `file`.
-  `mode=add` recusa se já existir uma imagem com esse nome (equivalente ao
-  passo manual "confirme que ainda não existe imagem com esse código" do
-  guia — aqui é checado pelo servidor, não só lembrado na checklist);
-  `mode=replace` recusa se **não** existir (evita criar uma substituição
-  "no vazio" sem querer). Só aceita `file.type === 'image/png'`. Sem cópia
-  de segurança antes de sobrescrever (ver "Backup automático removido"
-  abaixo) — sobrescreve direto.
+  `profileId`, `path`, `fileName`, `file`. Sempre recusa se já existir uma
+  imagem com esse nome na pasta (equivalente ao passo manual "confirme que
+  ainda não existe imagem com esse código" do guia — aqui é checado pelo
+  servidor, não só lembrado na checklist) — **nunca sobrescreve**. Só
+  aceita `file.type === 'image/png'`. **Histórico**: até uma rodada
+  posterior, tinha um parâmetro `mode` (`add`|`replace`) — `mode=replace`
+  sobrescrevia o conteúdo de uma imagem já cadastrada; removido por
+  completo, pedido explícito do usuário ("Remova a função de substituir e
+  renomear a imagem"), ver "Substituir removido" abaixo.
 - `POST /rename` — copy + delete (S3/R2 não tem rename nativo, mesmo
   motivo do `rclone` usar `moveto`) — equivalente à seção 7.4 do manual
   ("corrigir o nome de um arquivo enviado errado"), `path`/`toPath`
@@ -359,7 +360,8 @@ quanto parar de gravar (não só esconder o botão).
   aparece quando não há nenhuma subpasta pra mostrar.
 - Abaixo das caixas: grade de cartões por imagem do caminho selecionado
   (miniatura via `<img>` direto na URL pública, nome, tamanho, data, link
-  "Abrir", e os três botões Substituir/Renomear/Remover).
+  "Abrir", e o botão "Remover" — ver "Substituir e Renomear removidos"
+  abaixo pro porquê de não terem mais botão próprio).
 - "+ Adicionar imagem" — ver "Nome do arquivo vem do próprio arquivo, só
   aceita selecionar vários de uma vez" abaixo.
 - "Remover" (por linha) pede confirmação (`window.confirm`) antes de
@@ -376,41 +378,65 @@ imagem" tinha um campo "Nome do arquivo" solto, separado do seletor de
 arquivo (`<input type="file">`) — digitado à mão mesmo quando o nome
 óbvio já estava certo ali no próprio arquivo selecionado.
 
-O pop-up agora tem **dois comportamentos distintos**, dependendo de como
-foi aberto — a diferença real é que só um dos dois tem um "nome-alvo"
-fixo que precisa continuar igual depois da operação:
+O campo "Nome do arquivo" **foi removido**; o seletor de arquivo passou a
+ter `multiple`, e o nome de cada imagem enviada é sempre o próprio
+`File.name` do arquivo escolhido, nunca digitado. "Adicionar nova(s)"
+opera em **lote** — um `POST /upload` por arquivo selecionado, sequencial
+(mesmo motivo de toda escrita em lote deste projeto: erro isolado por
+arquivo, ordem previsível), cada um usando o próprio nome do arquivo como
+`fileName`. **Toast/erro cobrem lote parcial** — se algum arquivo falhar
+no meio do lote (nome inválido, já existe, erro de rede), o pop-up
+continua aberto e mostra quantos enviaram com sucesso e quais falharam
+(com o motivo de cada um); só fecha sozinho quando **todos** os arquivos
+do lote tiverem sucesso. `refreshAfterChange()` é chamado de qualquer
+forma, pra qualquer envio que tenha dado certo já aparecer na grade mesmo
+que o pop-up continue aberto por causa de uma falha parcial.
 
-- **Aberto pelo botão "+ Adicionar imagem" do topo** (`openAddForm`,
-  `addTargetFileName = null`) — sem nome-alvo nenhum. O campo "Nome do
-  arquivo" **foi removido**; o seletor de arquivo passou a ter
-  `multiple`, e o nome de cada imagem enviada é sempre o próprio
-  `File.name` do arquivo escolhido, nunca digitado. Os dois botões
-  ("Adicionar nova(s)"/"Substituir existente(s)") continuam existindo e
-  agora operam em **lote** — um `POST /upload` por arquivo selecionado,
-  sequencial (mesmo motivo de toda escrita em lote deste projeto: erro
-  isolado por arquivo, ordem previsível), cada um usando o próprio nome
-  do arquivo como `fileName`. Isso também cobre o caso de "atualizar o
-  conteúdo de vários códigos já cadastrados de uma vez" — selecionar N
-  arquivos cujos nomes já existem no bucket e clicar "Substituir
-  existentes" sobrescreve cada um mantendo o próprio nome.
-- **Aberto pelo botão "Substituir" de uma linha já existente**
-  (`openReplace`, `addTargetFileName = img.fileName`) — aqui o nome-alvo
-  **precisa** continuar fixo (a imagem que já está cadastrada), porque o
-  arquivo novo escolhido no disco pode ter um nome local completamente
-  diferente — não dá pra derivar o nome-alvo do `File.name` nesse fluxo.
-  O pop-up mostra o nome-alvo como texto fixo ("Substituindo:
-  `<nome>`"), não mais um campo editável, e o seletor de arquivo continua
-  single (sem `multiple` — é sempre uma substituição de uma imagem
-  específica por vez). Só o botão "Substituir" aparece (não faz sentido
-  "Adicionar nova" quando já se sabe que existe uma linha pra substituir).
-- **Toast/erro cobrem lote parcial** — se algum arquivo falhar no meio do
-  lote (nome inválido, já existe/não existe conforme o modo, erro de
-  rede), o pop-up continua aberto e mostra quantos enviaram com sucesso e
-  quais falharam (com o motivo de cada um); só fecha sozinho quando
-  **todos** os arquivos do lote tiverem sucesso. `refreshAfterChange()` é
-  chamado de qualquer forma, pra qualquer envio que tenha dado certo já
-  aparecer na grade mesmo que o pop-up continue aberto por causa de uma
-  falha parcial.
+**Histórico**: na rodada em que isso foi implementado, o pop-up ainda
+tinha dois comportamentos (o descrito acima, mais um segundo fluxo aberto
+pelo botão "Substituir" de uma linha já existente, com um nome-alvo fixo
+diferente de cada arquivo selecionado) e um botão "Substituir
+existente(s)" pra sobrescrever em lote. Os dois foram removidos por
+completo numa rodada seguinte — ver "Substituir e Renomear removidos"
+abaixo.
+
+### Substituir e Renomear removidos
+
+Pedido explícito do usuário: "Remova a função de substituir e renomear a
+imagem." Confirmado via `AskUserQuestion` (duas perguntas, já que os dois
+recursos tinham uma segunda forma de acesso que podia ou não estar
+incluída no pedido):
+
+1. **"Renomear" por linha foi removido; "Mover selecionadas (N)" em lote
+   NÃO foi** — recomendado e confirmado pelo usuário. O botão "Renomear"
+   de cada imagem (e de cada resultado de busca) abria o pop-up "Renomear
+   / Mover imagem" (um arquivo por vez, nome e pasta editáveis juntos) —
+   removido por completo: `openRename`/`submitRename`/`renameTarget`/
+   `renameToPath`/`renameToFileName`/`renameSaving`/`renameError` e o
+   próprio pop-up (`grupos-imagens/page.tsx`). "Mover selecionadas (N)"
+   (ver "Mover (uma imagem ou várias selecionadas)" abaixo) continua
+   existindo — é reorganizar pastas movendo várias imagens de uma vez
+   mantendo o nome original, um conceito diferente de "renomear uma
+   imagem", apesar de usar a mesma rota `POST /rename` por trás.
+   `FolderTreePicker` (pop-up de árvore de pastas) continua existindo —
+   era compartilhado entre os dois fluxos (`folderPickerFor: 'rename' |
+   'bulk'`), agora só serve o Mover em lote (`folderPickerFor: 'bulk' |
+   null`).
+2. **"Substituir" por linha E "Substituir existente(s)" em lote foram os
+   dois removidos** — recomendado e confirmado pelo usuário: nenhuma
+   forma de sobrescrever o conteúdo de uma imagem já cadastrada continua
+   na tela, nem por linha nem em lote. O botão "Substituir" de cada
+   imagem (e de cada resultado de busca) e a opção "Substituir
+   existente(s)" dentro do pop-up "+ Adicionar imagem" foram os dois
+   removidos — `openReplace`/`addTargetFileName` (`grupos-imagens/
+   page.tsx`) não existem mais; `submitAdd` perdeu o parâmetro `mode`
+   (sempre adiciona). `POST /api/r2-images/upload` também perdeu o
+   parâmetro `mode` — sempre recusa se já existir uma imagem com o mesmo
+   nome na pasta, nunca sobrescreve (ver "Rotas" acima).
+
+**O que NÃO mudou**: "Remover" por linha continua normal (nunca foi
+mencionado no pedido). A rota `POST /api/r2-images/rename` em si não foi
+tocada — continua existindo e sendo usada por "Mover selecionadas (N)".
 
 ### Seleção múltipla + exclusão em lote
 
@@ -445,51 +471,57 @@ menos uma selecionada, "Excluir selecionadas (N)".
   o sintoma reportado era só "0 removidas, N falharam", sem pista
   nenhuma).
 
-### Mover (uma imagem ou várias selecionadas)
+### Mover em lote (várias selecionadas)
 
 Pedido explícito do usuário: "Quero ter a capacidade de mover imagens de
 uma pasta para outra, podem ser uma única imagem ou várias selecionadas."
-Dois caminhos, mesma rota por trás (`POST /rename`):
-- **Uma imagem** — botão "Renomear" por linha já existente (pop-up
-  "Renomear/Mover") — já permitia trocar pasta e/ou nome juntos desde a
-  reescrita pra profundidade livre, sem mudança nesta rodada.
-- **Várias selecionadas** — botão "Mover selecionadas (N)" (só aparece
-  junto de "Excluir selecionadas" quando `selectedFiles.size > 0`) abre um
-  pop-up com um único campo "Pasta de destino"; `submitBulkMove` chama
-  `POST /rename` **uma vez por imagem selecionada**, sequencial (mesmo
-  motivo do delete em lote: erro isolado, ordem previsível), sempre com
-  `toFileName` igual ao nome original — **o lote não renomeia arquivo
-  nenhum, só move**; trocar nome continua sendo só pelo fluxo de uma
-  imagem por vez. Se o destino já tiver uma imagem com o mesmo nome, só
-  aquela falha (a rota já recusa colisão de nome) — as outras do lote
-  continuam normalmente; toast final resume quantas moveram e lista os
-  nomes que falharam.
+Botão "Mover selecionadas (N)" (só aparece junto de "Excluir
+selecionadas" quando `selectedFiles.size > 0`) abre um pop-up com um
+único campo "Pasta de destino"; `submitBulkMove` chama `POST /rename`
+**uma vez por imagem selecionada**, sequencial (mesmo motivo do delete em
+lote: erro isolado, ordem previsível), sempre com `toFileName` igual ao
+nome original — **o lote não renomeia arquivo nenhum, só move**. Se o
+destino já tiver uma imagem com o mesmo nome, só aquela falha (a rota já
+recusa colisão de nome) — as outras do lote continuam normalmente; toast
+final resume quantas moveram e lista os nomes que falharam.
+
+**Histórico**: o caminho de "uma única imagem" citado no pedido original
+era o botão "Renomear" por linha (pop-up "Renomear/Mover imagem" — também
+permitia trocar o nome, não só a pasta). Removido por completo numa
+rodada seguinte, pedido explícito do usuário: "Remova a função de
+substituir e renomear a imagem" — ver "Substituir e Renomear removidos"
+acima. O mecanismo de mover em lote descrito aqui **não foi afetado** —
+confirmado explicitamente com o usuário que só queria remover o renomear
+de uma imagem por vez, não a reorganização de pastas em lote.
 
 **Escolher a pasta de destino por árvore, não só por texto — pedido
 explícito do usuário**: "Quando eu usar a função de Mover imagem, quero
 que eu tenha um pop-up para ver a árvore de pastas para mover as imagens,
 hoje está apenas um caminho de texto." `FolderTreePicker`
-(`grupos-imagens/page.tsx`) é um componente de pop-up próprio, reusado
-pelos dois fluxos de mover (uma imagem no pop-up "Renomear/Mover imagem",
-e o lote no pop-up "Mover N imagem(ns)") — um botão "🗀 Escolher pasta" ao
-lado do campo de texto ("Nova pasta"/"Pasta de destino") abre o pop-up já
-navegado até o caminho que estava no campo. Mesmo visual de cascata
-(colunas lado a lado, estilo Finder/macOS) da navegação principal da tela
-— ver "Navegação tipo Windows Explorer" abaixo —, só que **confinado ao
-pop-up** (estado próprio, nunca compartilha `columns`/`pathSegments` com a
-navegação de fundo) e **só pastas** (nenhuma imagem é listada — não faz
-sentido escolher um arquivo como destino de um move). Clicar numa pasta
-abre a próxima coluna; o breadcrumb no topo do pop-up permite voltar a um
-nível mais raso; "Selecionar esta pasta" devolve o caminho navegado pro
-campo de texto que abriu o pop-up (`renameToPath` ou `bulkMoveToPath`) e
-fecha. **O campo de texto não foi removido** — digitar continua funcionando
-normalmente (inclusive pra apontar pra uma pasta que ainda não existe,
-criada implicitamente ao mover a primeira imagem pra lá, mesmo
-comportamento de sempre); o pop-up é só um jeito mais rápido de apontar
-pra uma pasta já existente, sem precisar saber/digitar o caminho de
-cabeça. Não foi estendido ao pop-up "Renomear / mover pasta inteira" nem
-ao "+ Adicionar imagem" — o pedido foi especificamente sobre "mover
+(`grupos-imagens/page.tsx`) é um componente de pop-up próprio — um botão
+"🗀 Escolher pasta" ao lado do campo de texto ("Pasta de destino") abre o
+pop-up já navegado até o caminho que estava no campo. Mesmo visual de
+cascata (colunas lado a lado, estilo Finder/macOS) da navegação principal
+da tela — ver "Navegação tipo Windows Explorer" abaixo —, só que
+**confinado ao pop-up** (estado próprio, nunca compartilha
+`columns`/`pathSegments` com a navegação de fundo) e **só pastas**
+(nenhuma imagem é listada — não faz sentido escolher um arquivo como
+destino de um move). Clicar numa pasta abre a próxima coluna; o
+breadcrumb no topo do pop-up permite voltar a um nível mais raso;
+"Selecionar esta pasta" devolve o caminho navegado pro campo de texto que
+abriu o pop-up e fecha. **O campo de texto não foi removido** — digitar
+continua funcionando normalmente (inclusive pra apontar pra uma pasta que
+ainda não existe, criada implicitamente ao mover a primeira imagem pra
+lá, mesmo comportamento de sempre); o pop-up é só um jeito mais rápido de
+apontar pra uma pasta já existente, sem precisar saber/digitar o caminho
+de cabeça. Não foi estendido ao pop-up "Renomear / mover pasta inteira"
+nem ao "+ Adicionar imagem" — o pedido foi especificamente sobre "mover
 imagem", não sobre mover uma pasta inteira ou escolher pasta no upload.
+**Histórico**: na época desta mudança, `FolderTreePicker` era
+compartilhado com o pop-up "Renomear/Mover imagem" (`folderPickerFor:
+'rename' | 'bulk'`) — essa parte do componente foi retirada junto da
+remoção do "Renomear" por linha (acima); hoje `folderPickerFor` só tem
+`'bulk' | null`.
 
 **A pasta de origem nunca "some sozinha" ao ser esvaziada por um move ou
 por uma exclusão — pedido explícito do usuário**: "É de conveniência do R2
@@ -659,8 +691,13 @@ que estão sendo apresentadas no meu filtro" — a 1ª versão só tinha
 "Abrir"/"Ir até a pasta" num resultado de busca; renomear/substituir/
 remover exigiam navegar até a pasta primeiro. Cada card de imagem nos
 resultados de busca ganhou os mesmos três botões da grade normal
-(Substituir/Renomear/Remover), agindo direto em cima daquele resultado,
-sem precisar navegar antes:
+(Substituir/Renomear/Remover, na época), agindo direto em cima daquele
+resultado, sem precisar navegar antes. **Histórico — `openReplace`/
+`openRename` não existem mais**: os dois (e os botões "Substituir"/
+"Renomear" correspondentes, tanto na grade normal quanto nos resultados
+de busca) foram removidos numa rodada seguinte — ver "Substituir e
+Renomear removidos" acima. Só `removeImage` continua, inclusive nos
+resultados de busca.
 - `openReplace`/`openRename`/`removeImage` deixaram de assumir sempre
   `currentPath` — passaram a aceitar um `folderPath` explícito (parâmetro
   opcional, default `currentPath`, pra nenhum call site da grade normal

@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isValidFileName, isValidFolderPath, imageExists, uploadImage } from '@/lib/r2Images'
 import { getProfileById } from '@/lib/userProfileStore'
 
-// Envia uma imagem nova (mode=add, seção 7.2 do manual da TI) ou substitui
-// uma já existente (mode=replace, seção 7.3) — multipart/form-data porque é
-// upload de arquivo de verdade. "path" é o caminho completo da pasta
-// (profundidade livre, ex. "Acessórios/CAMERAS") — nunca mais um par fixo
-// Grupo/Subgrupo. "Criar uma pasta nova" não é uma ação separada: é só
+// Envia uma imagem nova (seção 7.2 do manual da TI) — multipart/form-data
+// porque é upload de arquivo de verdade. "path" é o caminho completo da
+// pasta (profundidade livre, ex. "Acessórios/CAMERAS") — nunca mais um par
+// fixo Grupo/Subgrupo. "Criar uma pasta nova" não é uma ação separada: é só
 // digitar um caminho que ainda não existe aqui — a pasta passa a existir no
 // R2 no mesmo instante que o primeiro arquivo chega (ver browseFolder em
 // r2Images.ts).
+//
+// Sempre recusa se já existir uma imagem com esse nome na pasta — nunca
+// sobrescreve. O modo "substituir" (mode=replace, sobrescrever o conteúdo
+// de uma imagem já cadastrada) existiu numa versão anterior e foi removido
+// por completo, pedido explícito do usuário: "Remova a função de
+// substituir e renomear a imagem" (ver grupos-imagens/page.tsx).
 export async function POST(request: NextRequest) {
   const form = await request.formData()
   const profileId = String(form.get('profileId') ?? '')
@@ -20,7 +25,6 @@ export async function POST(request: NextRequest) {
 
   const path = String(form.get('path') ?? '').trim()
   const fileName = String(form.get('fileName') ?? '').trim()
-  const mode = String(form.get('mode') ?? 'add') === 'replace' ? 'replace' : 'add'
   const file = form.get('file')
 
   if (!isValidFolderPath(path)) {
@@ -38,14 +42,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const alreadyExists = await imageExists(path, fileName)
-    if (mode === 'add' && alreadyExists) {
+    if (alreadyExists) {
       return NextResponse.json({
-        error: `Já existe uma imagem "${fileName}" em ${path || '(raiz)'} — use "Substituir" em vez de "Adicionar"`,
-      }, { status: 409 })
-    }
-    if (mode === 'replace' && !alreadyExists) {
-      return NextResponse.json({
-        error: `Não existe imagem "${fileName}" em ${path || '(raiz)'} ainda — use "Adicionar" em vez de "Substituir"`,
+        error: `Já existe uma imagem "${fileName}" em ${path || '(raiz)'}`,
       }, { status: 409 })
     }
 

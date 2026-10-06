@@ -338,35 +338,36 @@ export default function GruposImagensPage() {
     else refreshAll()
   }
 
-  // ── Adicionar / Substituir ──────────────────────────────────
-  // Pedido explícito do usuário: "tenho no pop-up que selecionar a imagem e
-  // ainda preencher o nome do arquivo? Não faz sentido, a imagem é o
-  // arquivo, e o nome da imagem é o nome do arquivo. Quero poder selecionar
-  // várias imagens de uma só vez." — o campo "Nome do arquivo" separado só
-  // fazia sentido mesmo no fluxo de "Substituir" disparado por uma linha já
-  // existente (`openReplace`): ali o nome-alvo é fixo (a imagem que já está
-  // cadastrada), e o arquivo novo selecionado no disco pode ter outro nome
-  // — o nome final tem que continuar sendo o da linha, não o do arquivo
-  // local. `addTargetFileName` (não-nulo só nesse fluxo) guarda esse nome
-  // fixo; fora dele (abrindo pelo botão "+ Adicionar imagem" do topo), o
-  // nome de cada arquivo enviado é sempre o próprio `File.name`, nunca
-  // digitado — e o seletor aceita múltiplos arquivos de uma vez.
+  // ── Adicionar ────────────────────────────────────────────────
+  // Pedido explícito do usuário (rodada anterior): "a imagem é o arquivo,
+  // o nome da imagem é o nome do arquivo. Quero poder selecionar várias
+  // imagens de uma só vez" — o nome de cada arquivo enviado é sempre o
+  // próprio `File.name`, nunca digitado, e o seletor aceita múltiplos
+  // arquivos de uma vez. **Rodada seguinte, pedido explícito do usuário**:
+  // "Remova a função de substituir e renomear a imagem" — a opção
+  // "Substituir existente(s)" (sobrescrever o conteúdo de uma imagem já
+  // cadastrada) foi removida por completo daqui (só sobra "Adicionar
+  // nova(s)", que recusa se já existir uma imagem com o mesmo nome — ver
+  // `POST /api/r2-images/upload`); o botão "Substituir" por linha/resultado
+  // de busca também foi removido, junto do botão "Renomear" por linha
+  // (pop-up "Renomear/Mover imagem" de uma imagem — o `FolderTreePicker`
+  // abaixo continua existindo, agora só pro Mover em lote). "Mover
+  // selecionadas (N)" em lote não foi tocado — pedido explícito do
+  // usuário via `AskUserQuestion`: é reorganizar pastas, não renomear.
   const [addOpen, setAddOpen] = useState(false)
   const [addPath, setAddPath] = useState('')
-  const [addTargetFileName, setAddTargetFileName] = useState<string | null>(null)
   const [addFiles, setAddFiles] = useState<File[]>([])
   const [addSaving, setAddSaving] = useState(false)
   const [addError, setAddError] = useState('')
 
   const openAddForm = () => {
     setAddPath(currentPath)
-    setAddTargetFileName(null)
     setAddFiles([])
     setAddError('')
     setAddOpen(true)
   }
 
-  const submitAdd = async (mode: 'add' | 'replace') => {
+  const submitAdd = async () => {
     if (addFiles.length === 0) {
       setAddError('Selecione ao menos uma imagem')
       return
@@ -379,13 +380,12 @@ export default function GruposImagensPage() {
     let okCount = 0
     const failed: string[] = []
     for (const file of addFiles) {
-      const fileName = (addTargetFileName ?? file.name).trim()
+      const fileName = file.name.trim()
       try {
         const form = new FormData()
         form.set('profileId', user.id)
         form.set('path', addPath.trim())
         form.set('fileName', fileName)
-        form.set('mode', mode)
         form.set('file', file)
         const res = await fetch('/api/r2-images/upload', { method: 'POST', body: form })
         if (res.ok) {
@@ -401,73 +401,23 @@ export default function GruposImagensPage() {
     setAddSaving(false)
     if (failed.length === 0) {
       setAddOpen(false)
-      showToast(okCount === 1
-        ? (mode === 'replace' ? 'Imagem substituída' : 'Imagem adicionada')
-        : `${okCount} imagem(ns) ${mode === 'replace' ? 'substituída(s)' : 'adicionada(s)'}`)
+      showToast(okCount === 1 ? 'Imagem adicionada' : `${okCount} imagem(ns) adicionada(s)`)
     } else {
       setAddError(`${okCount} enviada(s), ${failed.length} falharam: ${failed.join('; ')}`)
     }
     refreshAfterChange()
   }
 
-  // Substituir direto numa linha já existente — mesmo formulário de cima,
-  // só pré-preenchido com o nome-alvo fixo e já mandando mode=replace.
-  // folderPath é explícito (default = pasta atual) pra também funcionar em
-  // cima de um resultado de busca, que pode estar numa pasta diferente da
-  // navegada no momento — pedido explícito do usuário: "Quero poder editar
-  // as imagens que estão sendo apresentadas no meu filtro".
-  const openReplace = (img: { fileName: string }, folderPath: string = currentPath) => {
-    setAddPath(folderPath)
-    setAddTargetFileName(img.fileName)
-    setAddFiles([])
-    setAddError('')
-    setAddOpen(true)
-  }
-
-  // ── Pop-up de escolha de pasta por árvore (compartilhado entre o
-  // Renomear/Mover de uma imagem e o Mover em lote) — pedido explícito do
-  // usuário, ver FolderTreePicker acima.
-  const [folderPickerFor, setFolderPickerFor] = useState<'rename' | 'bulk' | null>(null)
-
-  // ── Renomear/Mover ───────────────────────────────────────────
-  const [renameTarget, setRenameTarget] = useState<{ fileName: string; fromPath: string } | null>(null)
-  const [renameToPath, setRenameToPath] = useState('')
-  const [renameToFileName, setRenameToFileName] = useState('')
-  const [renameSaving, setRenameSaving] = useState(false)
-  const [renameError, setRenameError] = useState('')
-
-  const openRename = (img: { fileName: string }, folderPath: string = currentPath) => {
-    setRenameTarget({ fileName: img.fileName, fromPath: folderPath })
-    setRenameToPath(folderPath)
-    setRenameToFileName(img.fileName)
-    setRenameError('')
-  }
-
-  const submitRename = async () => {
-    if (!renameTarget) return
-    setRenameSaving(true)
-    setRenameError('')
-    try {
-      const res = await fetch('/api/r2-images/rename', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profileId: user.id,
-          path: renameTarget.fromPath, fileName: renameTarget.fileName,
-          toPath: renameToPath.trim(), toFileName: renameToFileName.trim(),
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) { setRenameError(json.error || 'Falha ao renomear a imagem'); return }
-      setRenameTarget(null)
-      showToast('Imagem renomeada/movida')
-      refreshAfterChange()
-    } catch {
-      setRenameError('Falha de rede ao renomear a imagem')
-    } finally {
-      setRenameSaving(false)
-    }
-  }
+  // ── Pop-up de escolha de pasta por árvore (usado pelo Mover em lote) —
+  // pedido explícito do usuário, ver FolderTreePicker acima.
+  // `folderPickerFor` indica se o pop-up de árvore de pastas está aberto —
+  // só um consumidor hoje (Mover em lote); mantido como union pra não
+  // precisar remexer no componente `FolderTreePicker` (`onSelect`/
+  // `initialPath` já são genéricos). **Histórico**: até uma rodada
+  // seguinte, também era usado pelo pop-up de Renomear/Mover de uma
+  // imagem — removido junto (pedido explícito do usuário: "Remova a
+  // função de substituir e renomear a imagem"), ver seção abaixo.
+  const [folderPickerFor, setFolderPickerFor] = useState<'bulk' | null>(null)
 
   // ── Remover ──────────────────────────────────────────────────
   // Chave composta pasta+arquivo (não só o nome) — evita que remover uma
@@ -814,8 +764,6 @@ export default function GruposImagensPage() {
                           <div className="flex items-center gap-2 flex-wrap text-xs">
                             <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
                             <button onClick={() => navigateToPath(f.folderPath)} className="text-on-surface-variant hover:text-primary">Ir até a pasta</button>
-                            <button onClick={() => openReplace(f, f.folderPath)} className="text-on-surface-variant hover:text-primary">Substituir</button>
-                            <button onClick={() => openRename(f, f.folderPath)} className="text-on-surface-variant hover:text-primary">Renomear</button>
                             <button
                               onClick={() => removeImage(f, f.folderPath)}
                               disabled={deleting === `${f.folderPath}/${f.fileName}`}
@@ -993,8 +941,6 @@ export default function GruposImagensPage() {
                   <div className="text-xs text-outline">{formatBytes(img.size)} · {img.lastModified ? new Date(img.lastModified).toLocaleDateString('pt-BR') : '—'}</div>
                   <div className="flex items-center gap-2 flex-wrap text-xs">
                     <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Abrir</a>
-                    <button onClick={() => openReplace(img)} className="text-on-surface-variant hover:text-primary">Substituir</button>
-                    <button onClick={() => openRename(img)} className="text-on-surface-variant hover:text-primary">Renomear</button>
                     <button
                       onClick={() => removeImage(img)}
                       disabled={deleting === `${currentPath}/${img.fileName}`}
@@ -1018,9 +964,7 @@ export default function GruposImagensPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setAddOpen(false)}>
           <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-outline-variant">
-              <span className="text-base font-semibold text-on-surface">
-                {addTargetFileName ? 'Substituir imagem' : 'Adicionar / Substituir imagem'}
-              </span>
+              <span className="text-base font-semibold text-on-surface">Adicionar imagem</span>
             </div>
             <div className="px-5 py-4 flex flex-col gap-3">
               <p className="text-xs text-outline">
@@ -1041,41 +985,22 @@ export default function GruposImagensPage() {
                   {(currentColumn?.folders ?? []).map(f => <option key={f} value={currentPath ? `${currentPath}/${f}` : f} />)}
                 </datalist>
               </label>
-              {addTargetFileName ? (
-                <>
-                  <p className="text-xs text-outline">
-                    Substituindo: <span className="font-mono text-on-surface">{addTargetFileName}</span> — o nome
-                    não muda, só o conteúdo da imagem.
-                  </p>
-                  <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                    Novo arquivo (.png)
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png"
-                      onChange={e => setAddFiles(e.target.files?.[0] ? [e.target.files[0]] : [])}
-                      className="text-sm text-on-surface"
-                    />
-                  </label>
-                </>
-              ) : (
-                <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                  Arquivo(s) (.png) — o nome de cada imagem já vem do próprio arquivo selecionado
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png"
-                    multiple
-                    onChange={e => setAddFiles(Array.from(e.target.files ?? []))}
-                    className="text-sm text-on-surface"
-                  />
-                  {addFiles.length > 0 && (
-                    <span className="text-xs text-outline font-mono">
-                      {addFiles.length} arquivo(s): {addFiles.map(f => f.name).join(', ')}
-                    </span>
-                  )}
-                </label>
-              )}
+              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
+                Arquivo(s) (.png) — o nome de cada imagem já vem do próprio arquivo selecionado
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png"
+                  multiple
+                  onChange={e => setAddFiles(Array.from(e.target.files ?? []))}
+                  className="text-sm text-on-surface"
+                />
+                {addFiles.length > 0 && (
+                  <span className="text-xs text-outline font-mono">
+                    {addFiles.length} arquivo(s): {addFiles.map(f => f.name).join(', ')}
+                  </span>
+                )}
+              </label>
               {addError && (
                 <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {addError}</div>
               )}
@@ -1084,82 +1009,13 @@ export default function GruposImagensPage() {
               <button type="button" onClick={() => setAddOpen(false)} disabled={addSaving} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
                 Cancelar
               </button>
-              {!addTargetFileName && (
-                <button
-                  type="button"
-                  onClick={() => submitAdd('replace')}
-                  disabled={addSaving}
-                  title="Use se já existe imagem com o mesmo nome dos arquivos selecionados nessa pasta"
-                  className="px-4 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
-                >
-                  Substituir existente{addFiles.length > 1 ? `s (${addFiles.length})` : ''}
-                </button>
-              )}
               <button
                 type="button"
-                onClick={() => submitAdd(addTargetFileName ? 'replace' : 'add')}
+                onClick={() => submitAdd()}
                 disabled={addSaving}
                 className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
               >
-                {addSaving
-                  ? 'Enviando…'
-                  : addTargetFileName
-                    ? 'Substituir'
-                    : `Adicionar nova${addFiles.length > 1 ? `s (${addFiles.length})` : ''}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pop-up Renomear/Mover */}
-      {renameTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setRenameTarget(null)}>
-          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-outline-variant">
-              <span className="text-base font-semibold text-on-surface">Renomear / Mover imagem</span>
-            </div>
-            <div className="px-5 py-4 flex flex-col gap-3">
-              <p className="text-xs text-outline">
-                De: <span className="font-mono text-on-surface">{renameTarget.fromPath || '(raiz)'}/{renameTarget.fileName}</span>
-              </p>
-              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Nova pasta
-                <div className="flex items-center gap-2">
-                  <input
-                    value={renameToPath}
-                    onChange={e => setRenameToPath(e.target.value)}
-                    placeholder="ex: Acessórios/CAMERAS"
-                    className="flex-1 bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setFolderPickerFor('rename')}
-                    className="px-3 py-2 text-xs font-semibold text-on-surface-variant hover:text-primary border border-outline-variant rounded whitespace-nowrap"
-                  >
-                    🗀 Escolher pasta
-                  </button>
-                </div>
-              </label>
-              <label className="text-xs font-semibold text-on-surface-variant flex flex-col gap-1">
-                Novo nome do arquivo
-                <input value={renameToFileName} onChange={e => setRenameToFileName(e.target.value)} className="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-primary" />
-              </label>
-              {renameError && (
-                <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2">⚠ {renameError}</div>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-outline-variant">
-              <button type="button" onClick={() => setRenameTarget(null)} disabled={renameSaving} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50">
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={submitRename}
-                disabled={renameSaving}
-                className="px-4 py-2 bg-primary text-on-primary rounded text-sm font-semibold hover:shadow-neon disabled:opacity-60 transition-shadow"
-              >
-                {renameSaving ? 'Movendo…' : 'Confirmar'}
+                {addSaving ? 'Enviando…' : `Adicionar nova${addFiles.length > 1 ? `s (${addFiles.length})` : ''}`}
               </button>
             </div>
           </div>
@@ -1218,15 +1074,14 @@ export default function GruposImagensPage() {
         </div>
       )}
 
-      {/* Pop-up Escolher pasta por árvore (Renomear/Mover imagem e Mover em lote) */}
+      {/* Pop-up Escolher pasta por árvore (Mover em lote) */}
       {folderPickerFor && (
         <FolderTreePicker
           userId={user.id}
-          initialPath={folderPickerFor === 'rename' ? renameToPath : bulkMoveToPath}
+          initialPath={bulkMoveToPath}
           onClose={() => setFolderPickerFor(null)}
           onSelect={path => {
-            if (folderPickerFor === 'rename') setRenameToPath(path)
-            else setBulkMoveToPath(path)
+            setBulkMoveToPath(path)
             setFolderPickerFor(null)
           }}
         />
