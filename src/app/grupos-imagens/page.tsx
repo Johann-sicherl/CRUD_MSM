@@ -897,6 +897,19 @@ export default function GruposImagensPage() {
     return true
   })
 
+  // Copia os códigos da lista atualmente visível — funciona igual nas três
+  // abas (Todos/Sem imagem/Com imagem), sempre em cima de
+  // `reverseSearchFiltered` (o que está na tela naquele momento, já com o
+  // filtro de texto aplicado também), nunca a lista bruta inteira.
+  const [reverseSearchCopied, setReverseSearchCopied] = useState(false)
+  const copyReverseSearchCodes = () => {
+    const text = reverseSearchFiltered.map(item => item.code).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setReverseSearchCopied(true)
+      setTimeout(() => setReverseSearchCopied(false), 1500)
+    }).catch(() => {})
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Cartão de uma imagem — extraído pra ser reusado tanto no modo "Por
@@ -1550,7 +1563,7 @@ export default function GruposImagensPage() {
       {/* Pop-up Busca Reversa de Imagens */}
       {reverseSearchOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setReverseSearchOpen(false)}>
-          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in" onClick={e => e.stopPropagation()}>
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-outline-variant flex items-center justify-between">
               <span className="text-base font-semibold text-on-surface">Busca Reversa de Imagens</span>
               <button type="button" onClick={() => setReverseSearchOpen(false)} className="text-on-surface-variant hover:text-on-surface text-xl leading-none">✕</button>
@@ -1591,6 +1604,15 @@ export default function GruposImagensPage() {
                   placeholder="Filtrar por código…"
                   className="flex-1 min-w-[10rem] bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-xs text-on-surface font-mono focus:outline-none focus:border-primary"
                 />
+                <button
+                  type="button"
+                  onClick={copyReverseSearchCodes}
+                  disabled={reverseSearchFiltered.length === 0}
+                  title="Copiar os códigos listados abaixo (respeita a aba e o filtro de texto atuais)"
+                  className="shrink-0 px-3 py-1.5 text-xs font-semibold border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {reverseSearchCopied ? '✓ Copiado' : `⧉ Copiar códigos (${reverseSearchFiltered.length})`}
+                </button>
                 <button
                   type="button"
                   onClick={runReverseSearch}

@@ -299,6 +299,17 @@ consultado pra responder sim/não por código.
   resto das telas de consulta deste projeto; pra cadastrar a imagem que
   falta, o Admin ainda usa "+ Adicionar imagem" normalmente, navegando até
   a pasta certa.
+- **Pop-up mais largo + "Copiar códigos" — rodada seguinte, pedido
+  explícito do usuário**: "Aumente a largura da janela de pop-up,
+  adicione um botão para copiar os N códigos listados em todas as três
+  abas." `max-w-2xl` → `max-w-5xl`. Botão "⧉ Copiar códigos (N)" (mesmo
+  padrão "✓ Copiado" por 1.5s já usado em `explorador-relacoes.tsx`/
+  `inteligencia-produto/page.tsx`) copia (`navigator.clipboard.writeText`,
+  um código por linha) sempre em cima de `reverseSearchFiltered` — a
+  lista **já filtrada** que está na tela naquele momento, nunca a lista
+  bruta inteira — por isso funciona igual nas três abas (Todos/Sem
+  imagem/Com imagem) e também respeita o filtro de texto por código, se
+  algum estiver digitado. Desabilitado quando a lista visível está vazia.
 
 ## Backup automático removido
 
