@@ -112,10 +112,17 @@ export function buildPublicUrl(folderPath: string, fileName: string): string {
 }
 
 // Só .png minúsculo — mesma regra do manual ("extensão .png minúscula").
-// Aceita ponto/letra/número/hífen/underscore no nome (os códigos Protheus
-// são cheios de ponto, ex. "27.02.00683.png"), mas nunca barra, pra nunca
-// criar um "subcaminho" por engano a partir de um nome de arquivo.
-const FILE_NAME_RE = /^[A-Za-z0-9._-]+\.png$/
+// Aceita qualquer caractere no nome (espaço, acento, parênteses etc. — já
+// existem arquivos reais no bucket assim, ex. "13 - BRANCO_CINZA.png",
+// cadastrados fora do app via rclone), mas nunca barra, pra nunca criar um
+// "subcaminho" por engano a partir de um nome de arquivo. **Histórico**: a
+// 1ª versão só aceitava `[A-Za-z0-9._-]` — bug real já corrigido:
+// "Remover"/"Renomear"/"Substituir" recusavam com "Pasta/arquivo inválido"
+// qualquer arquivo já existente cujo nome tivesse espaço, mesmo sendo um
+// nome perfeitamente válido no bucket — a tela listava a imagem
+// normalmente (browseFolder não valida nome nenhum), só as ações
+// recusavam agir nela.
+const FILE_NAME_RE = /^[^/]+\.png$/
 export function isValidFileName(name: string): boolean {
   return FILE_NAME_RE.test(name)
 }
@@ -249,10 +256,9 @@ export async function createFolder(folderPath: string): Promise<void> {
   }))
 }
 
-// Copia um objeto pra outra chave — usado tanto pra renomear (copy + delete
-// do original, já que o S3/R2 não tem "rename" de verdade, mesma razão do
-// rclone usar moveto) quanto pra guardar uma cópia de segurança antes de
-// substituir/remover (ver backupImage abaixo).
+// Copia um objeto pra outra chave — usado pra renomear (copy + delete do
+// original, já que o S3/R2 não tem "rename" de verdade, mesma razão do
+// rclone usar moveto).
 export async function copyImage(
   fromFolderPath: string, fromFileName: string,
   toFolderPath: string, toFileName: string,
@@ -353,18 +359,12 @@ export async function renameFolder(fromFolderPath: string, toFolderPath: string)
 
 export interface DeleteFolderResult {
   count: number
-  backupPrefix: string
 }
 
 // Remove uma pasta inteira (qualquer profundidade) — pedido explícito do
-// usuário: "Quero poder deletar uma pasta por completo." Mesma ordem
-// segura de renameFolder: faz backup de TUDO primeiro, só apaga depois que
-// todas as cópias de segurança deram certo — se uma cópia falhar no meio,
-// a função lança antes de apagar qualquer coisa, a pasta original fica
-// 100% intacta. Um timestamp só pra todo o lote (não um por arquivo, como
-// backupImage faz pra uma substituição avulsa) — mantém a cópia de
-// segurança inteira agrupada sob o mesmo prefixo, preservando a
-// subestrutura original dentro de `_backup/`.
+// usuário: "Quero poder deletar uma pasta por completo." Sem cópia de
+// segurança (ver "Backup automático removido" — pedido explícito do
+// usuário: "não quero ter backup de nada") — apaga os originais direto.
 export async function deleteFolder(folderPath: string): Promise<DeleteFolderResult> {
   const normalized = normalizeFolderPath(folderPath)
   const base = getBasePrefix()
@@ -373,21 +373,10 @@ export async function deleteFolder(folderPath: string): Promise<DeleteFolderResu
   const bucket = getBucket()
 
   const objects = await listAllObjectsUnderPrefix(prefix)
-  const ts = Date.now()
-  const backupPrefix = `_backup/${ts}-`
-  const backupKeys = objects.map(o => `${backupPrefix}${o.key.slice(base.length)}`)
-
-  for (let i = 0; i < objects.length; i++) {
-    await client.send(new CopyObjectCommand({
-      Bucket: bucket,
-      Key: backupKeys[i],
-      CopySource: `${bucket}/${objects[i].key.split('/').map(encodeURIComponent).join('/')}`,
-    }))
-  }
   for (const o of objects) {
     await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: o.key }))
   }
-  return { count: objects.length, backupPrefix }
+  return { count: objects.length }
 }
 
 export interface SearchFileResult {
@@ -441,25 +430,20 @@ export async function searchAll(query: string): Promise<SearchResult> {
   return { folders, files }
 }
 
-// Backup automático antes de substituir/remover — o manual da TI pede isso
-// como passo manual ("guarde uma cópia da versão atual"); aqui é automático
-// a cada substituição/remoção, pra nunca depender de alguém lembrar de
-// fazer isso na hora. Grava dentro do próprio bucket, num prefixo
-// `_backup/<folderPath>/<timestamp>-<fileName>` — fora da árvore navegável
-// normal (nunca aparece em browseFolder, que só varre o prefixo-base),
-// então nunca é confundido com uma imagem "em uso" pela aplicação.
-export async function backupImage(folderPath: string, fileName: string): Promise<string | null> {
-  const exists = await imageExists(folderPath, fileName)
-  if (!exists) return null
+// Apaga tudo sob o prefixo `_backup/` (bucket inteiro, fora do
+// prefixo-base) — limpeza das cópias de segurança que o mecanismo antigo
+// (`backupImage`, removido) já tinha criado antes desta mudança. Pedido
+// explícito do usuário: "Eu não quero ter backup de nada... todo e
+// qualquer backup que esteja sendo criado, delete-o." `_backup/` nunca
+// aparece em `browseFolder` (que só varre o prefixo-base de produção),
+// então essa limpeza não tem nenhum efeito sobre a árvore navegável normal
+// — só libera espaço de cópias que não são mais criadas.
+export async function purgeBackups(): Promise<number> {
   const client = getClient()
   const bucket = getBucket()
-  const sourceKey = buildKey(folderPath, fileName)
-  const normalized = normalizeFolderPath(folderPath)
-  const backupKey = `_backup/${normalized ? `${normalized}/` : ''}${Date.now()}-${fileName}`
-  await client.send(new CopyObjectCommand({
-    Bucket: bucket,
-    Key: backupKey,
-    CopySource: `${bucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
-  }))
-  return backupKey
+  const objects = await listAllObjectsUnderPrefix('_backup/')
+  for (const o of objects) {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: o.key }))
+  }
+  return objects.length
 }

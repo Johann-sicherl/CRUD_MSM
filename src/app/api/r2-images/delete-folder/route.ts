@@ -4,10 +4,9 @@ import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Remove uma pasta inteira (todo o conteúdo, qualquer profundidade) — pedido
-// explícito do usuário: "Quero poder deletar uma pasta por completo."
-// backup automático de cada arquivo antes de apagar (ver deleteFolder em
-// r2Images.ts), igual ao delete de uma imagem avulsa, só que pra subárvore
-// inteira.
+// explícito do usuário: "Quero poder deletar uma pasta por completo." Sem
+// cópia de segurança (ver "Backup automático removido" em
+// specs/imagens-r2.md) — apaga direto.
 export async function POST(request: NextRequest) {
   const body = await request.json()
   const profile = await getProfileById(String(body?.profileId ?? ''))
@@ -30,11 +29,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Pasta "${path}" não encontrada ou vazia` }, { status: 404 })
     }
 
-    const { count, backupPrefix } = await deleteFolder(path)
+    const { count } = await deleteFolder(path)
 
     try {
       const label = `(pasta — ${count} imagem${count !== 1 ? 'ns' : ''})`
-      await recordImageChange({ action: 'delete', folderPath: path, fileName: label, backupKey: backupPrefix, profile })
+      await recordImageChange({ action: 'delete', folderPath: path, fileName: label, profile })
     } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true, count })

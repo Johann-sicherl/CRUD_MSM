@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidFileName, isValidFolderPath, imageExists, deleteImage, backupImage, folderHasContent, createFolder } from '@/lib/r2Images'
+import { isValidFileName, isValidFolderPath, imageExists, deleteImage, folderHasContent, createFolder } from '@/lib/r2Images'
 import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Remove uma imagem (seção 7.5 do manual da TI) — "a remoção é imediata e
-// não há lixeira no bucket". Guarda uma cópia de segurança (backupImage)
-// antes de apagar, automático aqui (o manual pede isso como passo manual).
+// não há lixeira no bucket". Sem cópia de segurança (ver "Backup
+// automático removido" em specs/imagens-r2.md — pedido explícito do
+// usuário) — apaga direto.
 export async function POST(request: NextRequest) {
   const body = await request.json()
   const profile = await getProfileById(String(body?.profileId ?? ''))
@@ -25,7 +26,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Não existe imagem "${fileName}" em ${path || '(raiz)'}` }, { status: 404 })
     }
 
-    const backupKey = await backupImage(path, fileName)
     await deleteImage(path, fileName)
 
     // Mesma proteção do move (ver POST /rename) — pedido explícito do
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await recordImageChange({ action: 'delete', folderPath: path, fileName, backupKey, profile })
+      await recordImageChange({ action: 'delete', folderPath: path, fileName, profile })
     } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true })

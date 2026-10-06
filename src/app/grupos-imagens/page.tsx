@@ -386,6 +386,33 @@ export default function GruposImagensPage() {
   }, [user.id])
   useEffect(() => { if (changesOpen) fetchChanges() }, [changesOpen, fetchChanges])
 
+  // ── Limpar backups antigos ──────────────────────────────────
+  // Pedido explícito do usuário: "Eu não quero ter backup de nada...
+  // todo e qualquer backup que esteja sendo criado, delete-o." O
+  // mecanismo automático foi removido (ver specs/imagens-r2.md, "Backup
+  // automático removido") — isto é a limpeza única das cópias que esse
+  // mecanismo já tinha criado em `_backup/` antes da remoção.
+  const [purgingBackups, setPurgingBackups] = useState(false)
+  const purgeBackups = async () => {
+    const ok = window.confirm('Apagar permanentemente todas as cópias de segurança já criadas no bucket (prefixo "_backup/")? Isso não afeta nenhuma imagem em uso — só libera espaço das cópias antigas.')
+    if (!ok) return
+    setPurgingBackups(true)
+    try {
+      const res = await fetch('/api/r2-images/purge-backups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: user.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) { showToast(json.error || 'Falha ao limpar os backups', true); return }
+      showToast(`${json.count ?? 0} arquivo(s) de backup removido(s)`)
+    } catch {
+      showToast('Falha de rede ao limpar os backups', true)
+    } finally {
+      setPurgingBackups(false)
+    }
+  }
+
   // ── Adicionar / Substituir ──────────────────────────────────
   const [addOpen, setAddOpen] = useState(false)
   const [addPath, setAddPath] = useState('')
@@ -495,7 +522,7 @@ export default function GruposImagensPage() {
   // resultados de busca, que mostram várias pastas ao mesmo tempo).
   const [deleting, setDeleting] = useState<string | null>(null)
   const removeImage = async (img: { fileName: string }, folderPath: string = currentPath) => {
-    const ok = window.confirm(`Remover "${img.fileName}" de ${folderPath || '(raiz)'}? Uma cópia de segurança é guardada no bucket, mas a imagem some do ar imediatamente.`)
+    const ok = window.confirm(`Remover "${img.fileName}" de ${folderPath || '(raiz)'}? A remoção é definitiva, sem cópia de segurança — a imagem some do ar imediatamente.`)
     if (!ok) return
     const key = `${folderPath}/${img.fileName}`
     setDeleting(key)
@@ -541,7 +568,7 @@ export default function GruposImagensPage() {
   const submitBulkDelete = async () => {
     const targets = Array.from(selectedFiles)
     if (targets.length === 0) return
-    const ok = window.confirm(`Remover ${targets.length} imagem(ns) de ${currentPath || '(raiz)'}? Uma cópia de segurança é guardada no bucket pra cada uma, mas elas somem do ar imediatamente.`)
+    const ok = window.confirm(`Remover ${targets.length} imagem(ns) de ${currentPath || '(raiz)'}? A remoção é definitiva, sem cópia de segurança — elas somem do ar imediatamente.`)
     if (!ok) return
     setBulkDeleting(true)
     // Sequencial de propósito (não Promise.all) — erro isolado por imagem e
@@ -677,15 +704,14 @@ export default function GruposImagensPage() {
 
   // ── Remover uma pasta inteira ──────────────────────────────────
   // Pedido explícito do usuário: "Quero poder deletar uma pasta por
-  // completo." Mesmo espírito de deletar uma imagem avulsa (backup
-  // automático antes de apagar), só que pra subárvore inteira — ver
-  // deleteFolder em r2Images.ts. Depois de remover, volta pra raiz
-  // (loadRoot), mesmo motivo do rename de pasta: o caminho atual pode não
-  // existir mais como estava.
+  // completo." Sem cópia de segurança (ver "Backup automático removido"
+  // em specs/imagens-r2.md) — ver deleteFolder em r2Images.ts. Depois de
+  // remover, volta pra raiz (loadRoot), mesmo motivo do rename de pasta: o
+  // caminho atual pode não existir mais como estava.
   const [deletingFolder, setDeletingFolder] = useState<string | null>(null)
   const removeFolder = async (colIdx: number, name: string) => {
     const path = [...pathSegments.slice(0, colIdx), name].join('/')
-    const ok = window.confirm(`Remover a pasta "${path}" e TODO o conteúdo dela (qualquer profundidade)? Uma cópia de segurança é guardada no bucket pra cada imagem, mas a pasta some do ar imediatamente.`)
+    const ok = window.confirm(`Remover a pasta "${path}" e TODO o conteúdo dela (qualquer profundidade)? A remoção é definitiva, sem cópia de segurança — a pasta some do ar imediatamente.`)
     if (!ok) return
     setDeletingFolder(path)
     try {
@@ -973,6 +999,14 @@ export default function GruposImagensPage() {
               className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
             >
               {changesOpen ? 'Ocultar' : 'Ver'} histórico de alterações
+            </button>
+            <button
+              onClick={purgeBackups}
+              disabled={purgingBackups}
+              title="Apaga permanentemente qualquer cópia de segurança antiga guardada no bucket — o app não cria mais backups automáticos"
+              className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-error hover:text-error disabled:opacity-50 transition-colors"
+            >
+              {purgingBackups ? 'Limpando…' : '🗑 Limpar backups antigos'}
             </button>
             <button
               onClick={openNewFolder}

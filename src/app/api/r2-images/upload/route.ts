@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidFileName, isValidFolderPath, imageExists, uploadImage, backupImage } from '@/lib/r2Images'
+import { isValidFileName, isValidFolderPath, imageExists, uploadImage } from '@/lib/r2Images'
 import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
@@ -50,15 +50,11 @@ export async function POST(request: NextRequest) {
       }, { status: 409 })
     }
 
-    // Guarda uma cópia da versão atual antes de sobrescrever — passo manual
-    // no guia da TI ("guarde uma cópia da versão atual"), automático aqui.
-    const backupKey = mode === 'replace' ? await backupImage(path, fileName) : null
-
     const buffer = Buffer.from(await file.arrayBuffer())
     await uploadImage(path, fileName, buffer, 'image/png')
 
     try {
-      await recordImageChange({ action: mode === 'replace' ? 'replace' : 'upload', folderPath: path, fileName, backupKey, profile })
+      await recordImageChange({ action: mode === 'replace' ? 'replace' : 'upload', folderPath: path, fileName, profile })
     } catch { /* log é best-effort — nunca derruba o upload, que já teve sucesso */ }
 
     return NextResponse.json({ ok: true })

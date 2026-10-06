@@ -143,19 +143,24 @@ só).
 - `uploadImage` / `copyImage` / `deleteImage` / `imageExists` — operações
   básicas (`PutObjectCommand`/`CopyObjectCommand`/`DeleteObjectCommand`/
   `HeadObjectCommand`), todas parametrizadas por `(folderPath, fileName)`.
-- `backupImage(folderPath, fileName)` — copia o objeto atual pra
-  `_backup/<folderPath>/<timestamp>-<fileName>`, **dentro do mesmo
-  bucket**, antes de qualquer substituição ou remoção. Automatiza o passo
-  manual que o guia da TI pede ("guarde uma cópia da versão atual... para
-  poder voltar atrás") — nunca depende de alguém lembrar de fazer isso. O
-  prefixo `_backup/` fica fora da árvore navegável normal (não aparece em
-  `browseFolder`, que só olha o prefixo-base de produção), então uma cópia
-  de segurança nunca aparece como se fosse uma imagem "em uso" pela
-  aplicação.
+- `purgeBackups()` — apaga tudo sob `_backup/` no bucket. Ver "Backup
+  automático removido" abaixo — não cria cópia nenhuma, só limpa o que o
+  mecanismo antigo (`backupImage`, removido) já tinha criado.
 - `isValidFileName` / `isValidFolderPath` — validação antes de qualquer
-  operação: arquivo precisa terminar em `.png` minúsculo (mesma regra do
-  manual da TI); caminho de pasta — cada segmento não pode ficar vazio nem
-  ser `.`/`..`, profundidade livre.
+  operação: arquivo precisa terminar em `.png` (case-sensitive, minúsculo —
+  mesma regra do manual da TI) e não pode ter barra no nome (pra nunca
+  criar um "subcaminho" por engano), mas **aceita qualquer outro
+  caractere** — espaço, acento, parênteses etc. Caminho de pasta — cada
+  segmento não pode ficar vazio nem ser `.`/`..`, profundidade livre.
+  **Bug real já corrigido**: a 1ª versão de `isValidFileName` só aceitava
+  `[A-Za-z0-9._-]` — "Remover"/"Renomear"/"Substituir" recusavam com
+  "Pasta/arquivo inválido" qualquer arquivo já existente no bucket cujo
+  nome tivesse espaço (ex. `"13 - BRANCO_CINZA.png"`, cadastrado fora do
+  app via rclone), mesmo sendo um nome perfeitamente válido — a tela
+  listava a imagem normalmente (`browseFolder` não valida nome nenhum), só
+  as ações recusavam agir nela. Relatado pelo usuário como "não estou
+  conseguindo deletar imagens"; a regex foi trocada pra `/^[^/]+\.png$/`
+  (qualquer caractere, menos barra, terminando em `.png`).
 - `buildKey` / `buildPublicUrl` — monta a chave completa e a URL pública
   (`R2_PUBLIC_BASE_URL` + chave, cada segmento passado por
   `encodeURIComponent` — necessário porque os nomes de pasta têm espaço e
@@ -235,18 +240,68 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
   passo manual "confirme que ainda não existe imagem com esse código" do
   guia — aqui é checado pelo servidor, não só lembrado na checklist);
   `mode=replace` recusa se **não** existir (evita criar uma substituição
-  "no vazio" sem querer). Só aceita `file.type === 'image/png'`. Faz
-  `backupImage` antes de sobrescrever quando `mode=replace`.
+  "no vazio" sem querer). Só aceita `file.type === 'image/png'`. Sem cópia
+  de segurança antes de sobrescrever (ver "Backup automático removido"
+  abaixo) — sobrescreve direto.
 - `POST /rename` — copy + delete (S3/R2 não tem rename nativo, mesmo
   motivo do `rclone` usar `moveto`) — equivalente à seção 7.4 do manual
   ("corrigir o nome de um arquivo enviado errado"), `path`/`toPath`
   (profundidade livre) + `fileName`/`toFileName`. Recusa se o destino já
   existir.
-- `POST /delete` — `backupImage` + `deleteImage`. Confirmação (`window.confirm`)
-  é só no cliente — a rota em si não teria como "desfazer" sozinha além da
-  cópia de segurança automática.
+- `POST /delete` — `deleteImage`, sem cópia de segurança (ver "Backup
+  automático removido" abaixo). Confirmação (`window.confirm`) é só no
+  cliente — a rota em si não teria como "desfazer" a remoção.
+- `POST /purge-backups` — apaga tudo sob `_backup/` (ver "Backup automático
+  removido" abaixo). Não grava linha em `image_change_log` — é limpeza de
+  infraestrutura, não uma alteração de imagem do catálogo.
 - `GET /changes` — últimas 200 linhas de `image_change_log`, mais recente
   primeiro.
+
+## Backup automático removido
+
+Até esta sessão, toda substituição/remoção (de uma imagem avulsa ou de uma
+pasta inteira) guardava automaticamente uma cópia do conteúdo anterior sob
+o prefixo `_backup/` do mesmo bucket, antes de sobrescrever/apagar —
+automatizando o passo manual que o guia da TI pede ("guarde uma cópia da
+versão atual... para poder voltar atrás"). **Removido por completo, pedido
+explícito do usuário**: "Eu não quero ter backup de nada... todo e
+qualquer backup que esteja sendo criado, delete-o."
+
+- `backupImage` (`r2Images.ts`) foi deletada — `uploadImage`
+  (`mode=replace`) e `deleteImage` não fazem mais cópia nenhuma antes de
+  agir. `deleteFolder` também parou de copiar cada objeto pra `_backup/`
+  antes de apagar — `DeleteFolderResult` perdeu o campo `backupPrefix`
+  (só `{ count }` agora).
+- `recordImageChange`/`image_change_log` continuam existindo normalmente
+  (histórico de "o que mudou", não é a mesma coisa que cópia de segurança
+  do conteúdo em si) — só o campo `backup_key` fica sempre `null` em
+  qualquer linha gravada a partir de agora. Linhas antigas, gravadas antes
+  dessa mudança, mantêm o `backup_key` que já tinham — histórico não é
+  reescrito.
+- **`purgeBackups()`** (`r2Images.ts`) — limpeza única das cópias que o
+  mecanismo antigo já tinha criado antes de ser removido: lista tudo sob
+  `_backup/` (fora do prefixo-base, nunca aparece em `browseFolder`) e
+  apaga, sem nenhuma confirmação adicional além da da própria tela. `POST
+  /api/r2-images/purge-backups` (admin-only, mesmo padrão
+  `getProfileById`/`isAdmin` de toda rota desta tela) expõe isso; botão
+  "🗑 Limpar backups antigos" na tela, ao lado de "Ver histórico de
+  alterações", com confirmação (`window.confirm`) e toast mostrando quantos
+  arquivos foram removidos.
+- Todo texto de confirmação (`window.confirm`) que mencionava "uma cópia
+  de segurança é guardada" (remover uma imagem, remover em lote, remover
+  uma pasta inteira) foi atualizado pra deixar claro que a remoção agora é
+  definitiva, sem cópia nenhuma.
+- **Achado durante a investigação deste pedido**: o usuário relatou "não
+  estou conseguindo deletar imagens" momentos antes — a hipótese inicial
+  (permissão do token R2 restrita ao prefixo-base, bloqueando a escrita em
+  `_backup/` fora dele) foi descartada depois que o erro real apareceu:
+  "Pasta/arquivo inválido", vindo da validação de nome de arquivo, não do
+  S3. Causa raiz de verdade foi o bug de `isValidFileName` documentado
+  acima (regex não aceitava espaço no nome) — **duas correções
+  independentes, não a mesma**: o bug de validação (que bloqueava
+  qualquer ação nesses dois arquivos específicos) e a remoção do backup
+  automático (pedido à parte, decidido depois, não uma consequência do
+  bug).
 
 ## `image_change_log` (`msm_image_change_log.sql` +
 `msm_image_change_log_folder_path.sql`)
@@ -254,8 +309,11 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
 Equivalente automático da seção 13 do manual da TI ("Registre a alteração")
 — cada upload/substituição/renomeação/remoção grava uma linha (`action`,
 `folder_path`/`file_name`, `to_folder_path`/`to_file_name` quando é um
-`rename`, `backup_key` quando houve cópia de segurança, `profile_id`/
-`profile_name` — snapshot do nome, sobrevive à exclusão do perfil). Gravado
+`rename`, `profile_id`/`profile_name` — snapshot do nome, sobrevive à
+exclusão do perfil). `backup_key` existe na tabela só por histórico —
+linhas gravadas antes do backup automático ser removido (ver "Backup
+automático removido" acima) podem ter um valor ali; nenhuma linha nova
+grava esse campo. Gravado
 via `recordImageChange` (`src/lib/imageChangeLog.ts`), sempre dentro de um
 `try/catch` best-effort (mesmo espírito de `record*Audit`, `sqlAudit.ts`)
 — uma falha ao gravar o log nunca desfaz a operação real no bucket, que já
@@ -333,13 +391,21 @@ menos uma selecionada, "Excluir selecionadas (N)".
   `Promise.all`) — mesmo padrão de toda escrita em massa deste projeto
   (ver `specs/custeio-financeiro.md`, "Escritas financeiras em massa são
   sequenciais"): erro isolado por imagem, ordem previsível. Cada chamada é
-  um `POST /delete` normal — herda de graça o `backupImage` automático e o
-  registro em `image_change_log` que o delete individual já tinha, sem
-  nenhum caminho de escrita paralelo.
+  um `POST /delete` normal — herda de graça o registro em
+  `image_change_log` que o delete individual já tinha, sem nenhum caminho
+  de escrita paralelo.
 - Confirmação única (`window.confirm`) antes de começar o lote, mostrando
   a contagem. Ao final, toast resume quantas foram removidas e quantas
   falharam (se alguma falhar, o toast fica no estilo de erro) — uma falha
-  isolada numa imagem nunca interrompe as demais do lote.
+  isolada numa imagem nunca interrompe as demais do lote. **Bug real já
+  corrigido**: até esta correção, o toast de falha só dizia "N falharam",
+  sem motivo nenhum — cada `/api/r2-images/delete` já devolvia um
+  `json.error` específico (igual ao delete individual mostra), mas o loop
+  do lote descartava essa mensagem. Corrigido guardando a 1ª mensagem de
+  erro encontrada e anexando ao toast (`"N falharam — <mensagem>"`) — foi
+  o que permitiu diagnosticar o bug de `isValidFileName` acima (sem isso,
+  o sintoma reportado era só "0 removidas, N falharam", sem pista
+  nenhuma).
 
 ### Mover (uma imagem ou várias selecionadas)
 
@@ -408,7 +474,7 @@ dispara a criação do marcador.
 
 **Rodada seguinte, pedido explícito do usuário**: "Faz o mesmo quando
 excluir a última imagem também" — a mesma proteção foi replicada em
-`POST /api/r2-images/delete`, depois do `backupImage`+`deleteImage`: se a
+`POST /api/r2-images/delete`, depois do `deleteImage`: se a
 pasta ficou sem nenhum conteúdo depois da remoção, cria o mesmo marcador
 vazio ali. Como "Excluir selecionadas (N)" (exclusão em lote) já chama
 essa mesma rota uma vez por imagem, sequencial, esta correção também cobre
@@ -464,25 +530,18 @@ subárvore inteira em vez de um objeto só.
 ### Remover uma pasta inteira
 
 Pedido explícito do usuário: "Quero poder deletar uma pasta por completo."
-Mesmo espírito do delete de uma imagem avulsa (backup automático antes de
-apagar), só que pra subárvore inteira, e mesma ordem segura de
-`renameFolder` (backup de TUDO primeiro, só apaga depois que todas as
-cópias de segurança deram certo).
+Sem cópia de segurança (ver "Backup automático removido" acima — pedido
+explícito do usuário, numa rodada posterior).
 
 - **`deleteFolder(folderPath)`** (`r2Images.ts`) — lista todos os objetos
   sob o prefixo (`listAllObjectsUnderPrefix`, mesma função de
-  `renameFolder`/`searchAll`), copia cada um pra `_backup/<timestamp>-
-  <caminho relativo>` (um timestamp só pro lote inteiro, não um por
-  arquivo como `backupImage` faz numa substituição avulsa — mantém a cópia
-  de segurança da pasta inteira agrupada sob o mesmo prefixo, preservando
-  a subestrutura original dentro de `_backup/`), e só apaga os originais
-  depois que **todas** as cópias de segurança tiverem dado certo. Devolve
-  `{ count, backupPrefix }`.
+  `renameFolder`/`searchAll`) e apaga os originais direto. Devolve
+  `{ count }`.
 - **`POST /api/r2-images/delete-folder`** — `{ profileId, path }`. Recusa
   `path` vazio (não dá pra apagar a raiz) e recusa se a pasta não tiver
   conteúdo (404). Uma única linha em `image_change_log` por operação
   (`action: 'delete'`, mesmo rótulo `(pasta — N imagens)` de
-  `rename-folder`, `backup_key` = o prefixo do lote de backup).
+  `rename-folder`).
 - **Tela** — botão "🗑" (aparece ao passar o mouse, ao lado do "✎" já
   existente) em cada pasta das caixas em cascata. Confirmação
   (`window.confirm`) avisa que é o conteúdo inteiro, qualquer profundidade
