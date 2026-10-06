@@ -280,12 +280,29 @@ consultado pra responder sim/não por código.
 - **`GET /api/r2-images/reverse-search`** — admin-only (mesmo padrão
   `getProfileById` + `isAdmin`, nunca um `isAdmin` do corpo/query). Busca
   `standard_equipment_items.protheus_code` e
-  `relationship_equip_accessory.protheus_code` (`.limit(25000)` nas duas —
+  `relationship_equip_accessory.protheus_code` (`.limit(25000)` nas três —
   sem isso o PostgREST capa em 1000 linhas, ver
   `specs/dados-e-schema.md`), normaliza e une num único `Set` (DISTINCT),
   cruza contra `listAllImageCodes()`, e devolve `{ items: [{ code,
   hasImage }], total, withImage, withoutImage }`, ordenado alfabeticamente
-  (`localeCompare` pt-BR, numérico).
+  (`localeCompare` pt-BR, numérico). **Rodada seguinte, pedido explícito
+  do usuário**: "faça um JOIN com accessories e busque somente os
+  componentes que estão com status = active e
+  standard_equipment_items.status = active" —
+  `standard_equipment_items` é filtrado direto na query
+  (`.eq('status', 'active')`, valor de enum fixo, seguro filtrar assim —
+  diferente de `protheus_code`, que é texto livre e cai na armadilha do
+  `.in()`). `relationship_equip_accessory` **não tem** o status do
+  componente em si — `protheus_code` ali é só a referência pro acessório
+  (ver `specs/contexto-negocio-inteligencia-produto.md`, "o que entra
+  sozinho..."/o cardápio); o status de verdade mora em `accessories`. Por
+  isso a rota também busca `accessories.select('protheus_code,
+  status').limit(25000)` por inteiro e monta um `Map` normalizado
+  (`.trim().toUpperCase()`, nunca `.in()` — mesma armadilha de sempre) —
+  um código de `relationship_equip_accessory` só entra na lista final se
+  o `accessories.status` correspondente for `active` (código sem
+  correspondência em `accessories`, ou com `status = deactive`, é
+  descartado).
 - **Tela (`grupos-imagens/page.tsx`)** — botão "🔄 Busca Reversa de
   Imagens" sempre visível no cabeçalho (independente de pasta navegada ou
   busca global ativa — é uma consulta de bucket inteiro × banco inteiro,

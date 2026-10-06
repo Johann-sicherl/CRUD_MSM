@@ -1570,9 +1570,10 @@ export default function GruposImagensPage() {
             </div>
             <div className="px-5 py-3 border-b border-outline-variant flex flex-col gap-2">
               <p className="text-xs text-outline">
-                Códigos distintos de Cadastro de Equipamentos (standard_equipment_items) e Equipamento x Acessórios
-                (relationship_equip_accessory), cruzados contra o bucket — &quot;Com imagem&quot; significa existir
-                um arquivo &lt;código&gt;.png em qualquer pasta, mesmo padrão de nomenclatura do resto da tela.
+                Códigos distintos de Cadastro de Equipamentos (standard_equipment_items, só status Ativo) e
+                Equipamento x Acessórios (relationship_equip_accessory, só os componentes com status Ativo em
+                Cadastro de Componentes), cruzados contra o bucket — &quot;Com imagem&quot; significa existir um
+                arquivo &lt;código&gt;.png em qualquer pasta, mesmo padrão de nomenclatura do resto da tela.
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1 bg-surface-container-low border border-outline-variant rounded-lg p-1 shrink-0">
