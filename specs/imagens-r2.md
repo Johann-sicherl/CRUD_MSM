@@ -488,6 +488,69 @@ pastas."
   de um grupo colapsado (uma imagem selecionada antes de colapsar o
   grupo continua selecionada, só não visível até expandir de novo).
 
+**"Selecionar grupo" — rodada seguinte, pedido explícito do usuário**:
+"quero conseguir selecionar todas as imagens de um único grupo isolado,
+hoje tenho a opção somente de selecionar todas" — o botão "Selecionar
+todas"/"Limpar seleção" do topo sempre operou sobre `files` inteiro (a
+pasta toda, cruzando grupos); não havia como marcar só um grupo de uma
+vez.
+
+- **`toggleSelectGroup(groupImages)`** (`grupos-imagens/page.tsx`) —
+  alterna com base no estado do **próprio grupo**: se todas as imagens
+  dele já estão em `selectedFiles`, remove só elas; senão, adiciona só
+  elas — nunca mexe na seleção de outros grupos (uma pessoa pode marcar
+  "Grupo A" inteiro, abrir "Grupo B" e marcar algumas imagens avulsas
+  dele, sem perder a seleção de A).
+- **Cabeçalho do grupo deixou de ser um `<button>` só** — virou um
+  `<div>` com **dois** `<button>` lado a lado (não dá pra aninhar
+  `<button>` dentro de `<button>`): o da esquerda (`flex-1`) continua
+  expandindo/colapsando o grupo; o novo, à direita, alterna "Selecionar
+  grupo"/"Limpar grupo" (rótulo muda conforme `groupAllSelected =
+  groupImages.every(img => selectedFiles.has(img.fileName))`) — os dois
+  cliques são independentes, clicar em "Selecionar grupo" não
+  expande/colapsa o grupo e vice-versa.
+- **Disponível com o grupo colapsado ou expandido** — de propósito, pra
+  marcar um grupo inteiro sem precisar abri-lo primeiro (útil pra, por
+  exemplo, selecionar vários grupos inteiros de uma vez antes de mover ou
+  excluir em lote).
+
+**Clique no filtro de grupos isola por padrão, não alterna — rodada
+seguinte, pedido explícito do usuário**: "Hoje a função de filtro está
+invertida, quando eu seleciono uma caixa, em vez de isolar a seleção, ele
+a desmarca e não consigo visualizar aquele grupo em específico, se eu
+quiser selecionar mais de um grupo, que eu habilite a função de marcar
+mais itens dentro do filtro." A 1ª versão do dropdown tratava cada
+checkbox como alternância independente (marcar/desmarcar só aquele grupo,
+sem afetar os outros) — com todos marcados por padrão, clicar num grupo
+**desmarcava** ele junto de continuar mostrando todos os outros, o
+oposto de "me mostra só esse".
+
+- **`groupFilterMultiMode: boolean`** (`grupos-imagens/page.tsx`, nasce
+  `false`, reseta ao trocar de pasta junto dos outros três) — controla
+  qual das duas semânticas de clique vale:
+  - **Modo padrão (`false`)** — `isolateGroupInFilter(label)`: clicar num
+    grupo esconde **todos os outros** (`hiddenGroups = availableGroups -
+    {label}`), deixando só aquele visível — "isolar", exatamente como
+    pedido. Clicar de novo no mesmo grupo **já isolado** desfaz a
+    isolação (`hiddenGroups` volta a `new Set()`, mostra todos) — dá pra
+    isolar/desisolar sem precisar do botão "Mostrar todos".
+  - **Modo múltiplo (`true`)** — volta ao comportamento original
+    (`toggleGroupHidden`, marcar/desmarcar só aquele grupo,
+    independente dos outros) — é o jeito de "selecionar mais de um
+    grupo" pedido explicitamente.
+  - Um checkbox "Selecionar múltiplos grupos", dentro do próprio
+    dropdown (acima da lista de grupos, abaixo do cabeçalho "Grupos
+    nesta pasta"), liga/desliga o modo — sem precisar fechar/reabrir o
+    dropdown pra trocar de comportamento.
+- **`handleGroupFilterClick(label)`** — único ponto de decisão (`if
+  (groupFilterMultiMode) toggleGroupHidden(label); else
+  isolateGroupInFilter(label)`), chamado pelo `onChange` de cada
+  checkbox — a UI (checkbox marcado = grupo visível) não mudou, só a
+  semântica de "o que acontece quando eu clico" mudou conforme o modo.
+- **"Mostrar todos" continua existindo** nos dois modos — útil mesmo no
+  modo isolado (limpa a isolação de uma vez, sem precisar clicar de novo
+  no grupo isolado).
+
 ### Chave "Por grupo" / "Lista única"
 
 Pedido explícito do usuário: "Quero uma chave na parte superior da tela

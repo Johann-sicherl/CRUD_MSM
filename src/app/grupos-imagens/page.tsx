@@ -546,7 +546,22 @@ export default function GruposImagensPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set())
   const [groupFilterOpen, setGroupFilterOpen] = useState(false)
-  useEffect(() => { setExpandedGroups(new Set()); setHiddenGroups(new Set()); setGroupFilterOpen(false) }, [currentPath])
+  // Pedido explícito do usuário, rodada seguinte: "quando eu seleciono uma
+  // caixa, em vez de isolar a seleção, ele a desmarca... se eu quiser
+  // selecionar mais de um grupo, que eu habilite a função de marcar mais
+  // itens dentro do filtro." Por padrão (`groupFilterMultiMode = false`),
+  // clicar num grupo do filtro **isola** ele (mostra só aquele, esconde
+  // todos os outros) — clicar de novo no mesmo grupo já isolado desfaz,
+  // volta a mostrar todos. Só com o modo múltiplo ligado o clique volta a
+  // alternar aquele grupo sozinho (marca/desmarca independente dos
+  // outros), igual era o comportamento único de antes.
+  const [groupFilterMultiMode, setGroupFilterMultiMode] = useState(false)
+  useEffect(() => {
+    setExpandedGroups(new Set())
+    setHiddenGroups(new Set())
+    setGroupFilterOpen(false)
+    setGroupFilterMultiMode(false)
+  }, [currentPath])
 
   const toggleGroupExpanded = (label: string) => {
     setExpandedGroups(prev => {
@@ -563,6 +578,19 @@ export default function GruposImagensPage() {
       else next.add(label)
       return next
     })
+  }
+  // Isola um grupo só (modo padrão do filtro) — ver comentário acima.
+  const isolateGroupInFilter = (label: string) => {
+    const isAlreadyIsolated = hiddenGroups.size === availableGroups.length - 1 && !hiddenGroups.has(label)
+    if (isAlreadyIsolated) {
+      setHiddenGroups(new Set())
+    } else {
+      setHiddenGroups(new Set(availableGroups.filter(g => g !== label)))
+    }
+  }
+  const handleGroupFilterClick = (label: string) => {
+    if (groupFilterMultiMode) toggleGroupHidden(label)
+    else isolateGroupInFilter(label)
   }
 
   // Fecha o dropdown de filtro de grupos ao clicar fora dele.
@@ -588,6 +616,25 @@ export default function GruposImagensPage() {
   }
   const selectAllVisible = () => setSelectedFiles(new Set(files.map(f => f.fileName)))
   const clearSelection = () => setSelectedFiles(new Set())
+
+  // Seleciona/limpa só as imagens de UM grupo isolado — pedido explícito
+  // do usuário: "quero conseguir selecionar todas as imagens de um único
+  // grupo isolado, hoje tenho a opção somente de selecionar todas" (que
+  // seleciona a pasta inteira, cruzando grupos). Alterna com base no
+  // estado atual do próprio grupo (todas já selecionadas -> limpa só
+  // elas; senão -> seleciona todas) — nunca mexe na seleção de outros
+  // grupos, que o usuário pode ter deixado marcada antes de abrir este.
+  const toggleSelectGroup = (groupImages: ImageObject[]) => {
+    const allSelected = groupImages.length > 0 && groupImages.every(img => selectedFiles.has(img.fileName))
+    setSelectedFiles(prev => {
+      const next = new Set(prev)
+      for (const img of groupImages) {
+        if (allSelected) next.delete(img.fileName)
+        else next.add(img.fileName)
+      }
+      return next
+    })
+  }
 
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const submitBulkDelete = async () => {
@@ -920,13 +967,24 @@ export default function GruposImagensPage() {
             </button>
             {groupFilterOpen && (
               <div className="absolute right-0 mt-1 z-20 w-64 max-h-80 overflow-y-auto bg-surface-container border border-outline-variant rounded-lg shadow-2xl">
-                <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between sticky top-0 bg-surface-container">
-                  <span className="text-xs font-semibold text-on-surface-variant">Grupos nesta pasta</span>
-                  {hiddenGroups.size > 0 && (
-                    <button type="button" onClick={() => setHiddenGroups(new Set())} className="text-xs text-primary hover:underline">
-                      Mostrar todos
-                    </button>
-                  )}
+                <div className="px-3 py-2 border-b border-outline-variant sticky top-0 bg-surface-container flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-on-surface-variant">Grupos nesta pasta</span>
+                    {hiddenGroups.size > 0 && (
+                      <button type="button" onClick={() => setHiddenGroups(new Set())} className="text-xs text-primary hover:underline">
+                        Mostrar todos
+                      </button>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 text-[11px] text-on-surface-variant cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={groupFilterMultiMode}
+                      onChange={e => setGroupFilterMultiMode(e.target.checked)}
+                      className="shrink-0"
+                    />
+                    Selecionar múltiplos grupos
+                  </label>
                 </div>
                 {availableGroups.length === 0 ? (
                   <div className="px-3 py-3 text-xs text-outline italic">Nenhuma imagem nesta pasta ainda.</div>
@@ -936,7 +994,7 @@ export default function GruposImagensPage() {
                       <input
                         type="checkbox"
                         checked={!hiddenGroups.has(label)}
-                        onChange={() => toggleGroupHidden(label)}
+                        onChange={() => handleGroupFilterClick(label)}
                         className="shrink-0"
                       />
                       <span className="truncate">{label}</span>
@@ -1170,18 +1228,30 @@ export default function GruposImagensPage() {
               </div>
             ) : visibleGroups.map(({ label, files: groupImages }) => {
               const isExpanded = expandedGroups.has(label)
+              const groupAllSelected = groupImages.length > 0 && groupImages.every(img => selectedFiles.has(img.fileName))
               return (
                 <div key={label} className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => toggleGroupExpanded(label)}
-                    className={`w-full flex items-center justify-between px-4 py-2 bg-surface-container-high text-xs font-bold text-on-surface-variant uppercase tracking-[0.1em] hover:text-on-surface transition-colors ${
+                  <div
+                    className={`w-full flex items-center gap-3 px-4 py-2 bg-surface-container-high text-xs font-bold text-on-surface-variant uppercase tracking-[0.1em] ${
                       isExpanded ? 'border-b border-outline-variant' : ''
                     }`}
                   >
-                    <span className="text-left">{label} ({groupImages.length})</span>
-                    <GroupChevron collapsed={!isExpanded} />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroupExpanded(label)}
+                      className="flex-1 flex items-center justify-between min-w-0 hover:text-on-surface transition-colors"
+                    >
+                      <span className="text-left truncate">{label} ({groupImages.length})</span>
+                      <GroupChevron collapsed={!isExpanded} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleSelectGroup(groupImages)}
+                      className="shrink-0 normal-case font-semibold text-on-surface-variant hover:text-primary transition-colors"
+                    >
+                      {groupAllSelected ? 'Limpar grupo' : 'Selecionar grupo'}
+                    </button>
+                  </div>
                   {isExpanded && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-px bg-outline-variant/40">
                       {groupImages.map(renderImageCard)}
