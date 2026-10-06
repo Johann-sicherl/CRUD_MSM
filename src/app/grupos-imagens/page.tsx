@@ -548,6 +548,7 @@ export default function GruposImagensPage() {
     // ordem previsível, mesmo padrão de toda escrita em lote deste projeto.
     let okCount = 0
     let failCount = 0
+    let firstError = ''
     for (const fileName of targets) {
       try {
         const res = await fetch('/api/r2-images/delete', {
@@ -555,8 +556,19 @@ export default function GruposImagensPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ profileId: user.id, path: currentPath, fileName }),
         })
-        if (res.ok) okCount++
-        else failCount++
+        if (res.ok) {
+          okCount++
+        } else {
+          failCount++
+          // Guarda só a 1ª mensagem de erro (`json.error`, a mesma que o
+          // delete individual já mostra) — achado real: até esta correção o
+          // lote descartava o motivo de cada falha e mostrava sempre "N
+          // falharam" sem explicar por quê, mesmo quando todas falhavam pelo
+          // mesmo erro de verdade (ex.: credencial/permissão do bucket).
+          if (!firstError) {
+            try { const json = await res.json(); firstError = json.error || '' } catch { /* resposta sem corpo JSON */ }
+          }
+        }
       } catch {
         failCount++
       }
@@ -565,7 +577,7 @@ export default function GruposImagensPage() {
     clearSelection()
     refreshAll()
     if (failCount === 0) showToast(`${okCount} imagem(ns) removida(s)`)
-    else showToast(`${okCount} removida(s), ${failCount} falharam`, true)
+    else showToast(`${okCount} removida(s), ${failCount} falharam${firstError ? ` — ${firstError}` : ''}`, true)
   }
 
   // ── Mover em lote (uma imagem ou várias selecionadas) ─────────
