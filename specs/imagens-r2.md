@@ -256,6 +256,49 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
 - `POST /delete` — `deleteImage`, sem cópia de segurança (ver "Backup
   automático removido" abaixo). Confirmação (`window.confirm`) é só no
   cliente — a rota em si não teria como "desfazer" a remoção.
+- `GET /reverse-search` — ver "Busca Reversa de Imagens" abaixo.
+
+## Busca Reversa de Imagens
+
+Pedido explícito do usuário: "Crie um botão com uma função de busca
+reversa, liste (Distinct) todos os standard_equipment_items.protheus_code
+e relationship_equip_accessory.protheus_code, dessa lista, faça um visual
+de qual cadastro está com imagem imputada, e qual não está, mesmo padrão
+de protheus_code.png... dentro de uma janela pop-up." Diferente da busca
+global (`searchAll`/`GET /search`, acima) — ali a fonte é o bucket (achar
+pasta/imagem por substring); aqui a fonte da **lista de códigos** é o
+banco de dados MSM (duas tabelas, DISTINCT, união), e o bucket só é
+consultado pra responder sim/não por código.
+
+- **`listAllImageCodes()`** (`r2Images.ts`) — varre o bucket inteiro
+  (`listAllObjectsUnderPrefix`, mesma função privada já usada por
+  `renameFolder`/`searchAll`) e devolve um `Set<string>` com o nome de
+  cada arquivo (sem a extensão `.png`, normalizado
+  `.trim().toUpperCase()`), **de qualquer pasta** — "tem imagem" não
+  depende de em qual pasta ela está, mesmo critério "casa só pelo nome do
+  arquivo" já usado em `resolveFileGroups` (`imageAccessoryGroups.ts`).
+- **`GET /api/r2-images/reverse-search`** — admin-only (mesmo padrão
+  `getProfileById` + `isAdmin`, nunca um `isAdmin` do corpo/query). Busca
+  `standard_equipment_items.protheus_code` e
+  `relationship_equip_accessory.protheus_code` (`.limit(25000)` nas duas —
+  sem isso o PostgREST capa em 1000 linhas, ver
+  `specs/dados-e-schema.md`), normaliza e une num único `Set` (DISTINCT),
+  cruza contra `listAllImageCodes()`, e devolve `{ items: [{ code,
+  hasImage }], total, withImage, withoutImage }`, ordenado alfabeticamente
+  (`localeCompare` pt-BR, numérico).
+- **Tela (`grupos-imagens/page.tsx`)** — botão "🔄 Busca Reversa de
+  Imagens" sempre visível no cabeçalho (independente de pasta navegada ou
+  busca global ativa — é uma consulta de bucket inteiro × banco inteiro,
+  não escopada a uma pasta), abre um pop-up (`reverseSearchOpen`) com:
+  toggle "Todos" / "Sem imagem" (default, é a lista que importa pra ação —
+  o que falta imputar) / "Com imagem" (cada um com a contagem), um campo
+  de filtro por texto de código, e a lista em si — uma linha por código,
+  fundo/selo vermelho "✗ Sem imagem" ou neutro/primário "✓ Com imagem".
+  Botão "⟳" recarrega (`runReverseSearch`) sem precisar fechar/reabrir o
+  pop-up. Nenhuma ação de escrita aqui — é só visual/diagnóstico, igual ao
+  resto das telas de consulta deste projeto; pra cadastrar a imagem que
+  falta, o Admin ainda usa "+ Adicionar imagem" normalmente, navegando até
+  a pasta certa.
 
 ## Backup automático removido
 

@@ -379,6 +379,28 @@ export async function deleteFolder(folderPath: string): Promise<DeleteFolderResu
   return { count: objects.length }
 }
 
+// Conjunto de códigos (nome do arquivo sem ".png", normalizado
+// .trim().toUpperCase()) de TODA imagem já enviada ao bucket, em qualquer
+// pasta/profundidade — usado pela Busca Reversa de Imagens
+// (/api/r2-images/reverse-search) pra responder, por protheus_code, "já
+// existe uma imagem <protheus_code>.png em algum lugar do bucket?", sem
+// importar em qual pasta ela está. Mesmo critério "casa só pelo nome do
+// arquivo" já usado em imageAccessoryGroups.ts (resolveFileGroups).
+export async function listAllImageCodes(): Promise<Set<string>> {
+  const base = getBasePrefix()
+  const objects = await listAllObjectsUnderPrefix(base)
+  const codes = new Set<string>()
+  for (const obj of objects) {
+    const relative = obj.key.slice(base.length)
+    if (!relative) continue
+    const fileName = relative.split('/').pop()
+    if (!fileName) continue
+    const code = fileName.replace(/\.png$/i, '').trim().toUpperCase()
+    if (code) codes.add(code)
+  }
+  return codes
+}
+
 export interface SearchFileResult {
   folderPath: string
   fileName: string

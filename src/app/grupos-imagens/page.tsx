@@ -842,6 +842,61 @@ export default function GruposImagensPage() {
     }
   }
 
+  // ── Busca Reversa de Imagens ───────────────────────────────────
+  // Pedido explícito do usuário: "Crie um botão com uma função de busca
+  // reversa, liste (Distinct) todos os standard_equipment_items.protheus_code
+  // e relationship_equip_accessory.protheus_code, dessa lista, faça um
+  // visual de qual cadastro está com imagem imputada, e qual não está,
+  // mesmo padrão de protheus_code.png... dentro de uma janela pop-up."
+  // Diferente da busca global (searchAll, acima) — a fonte da lista de
+  // códigos é o banco de dados MSM (duas tabelas, DISTINCT, união), não o
+  // bucket; o bucket só é consultado pra responder sim/não por código (ver
+  // GET /api/r2-images/reverse-search). Independente da pasta navegada no
+  // momento — por isso o botão fica sempre visível no cabeçalho, não
+  // dentro da navegação de pastas.
+  interface ReverseSearchItem { code: string; hasImage: boolean }
+  const [reverseSearchOpen, setReverseSearchOpen] = useState(false)
+  const [reverseSearchLoading, setReverseSearchLoading] = useState(false)
+  const [reverseSearchError, setReverseSearchError] = useState('')
+  const [reverseSearchItems, setReverseSearchItems] = useState<ReverseSearchItem[] | null>(null)
+  const [reverseSearchCounts, setReverseSearchCounts] = useState<{ total: number; withImage: number; withoutImage: number } | null>(null)
+  // Default "Sem imagem" — é a lista que importa pra ação (o que falta
+  // imputar), mesmo espírito de "Só o que falta no meu banco" já usado em
+  // outras telas de busca deste projeto (ver specs/telas-auxiliares.md).
+  const [reverseSearchFilter, setReverseSearchFilter] = useState<'all' | 'with' | 'without'>('without')
+  const [reverseSearchQuery, setReverseSearchQuery] = useState('')
+
+  const runReverseSearch = useCallback(async () => {
+    setReverseSearchLoading(true)
+    setReverseSearchError('')
+    try {
+      const res = await fetch(`/api/r2-images/reverse-search?profileId=${user.id}`)
+      const json = await res.json()
+      if (!res.ok) { setReverseSearchError(json.error || 'Falha na busca reversa'); return }
+      setReverseSearchItems(json.items || [])
+      setReverseSearchCounts({ total: json.total ?? 0, withImage: json.withImage ?? 0, withoutImage: json.withoutImage ?? 0 })
+    } catch {
+      setReverseSearchError('Falha de rede na busca reversa')
+    } finally {
+      setReverseSearchLoading(false)
+    }
+  }, [user.id])
+
+  const openReverseSearch = () => {
+    setReverseSearchOpen(true)
+    setReverseSearchFilter('without')
+    setReverseSearchQuery('')
+    runReverseSearch()
+  }
+
+  const reverseSearchFiltered = (reverseSearchItems ?? []).filter(item => {
+    if (reverseSearchFilter === 'with' && !item.hasImage) return false
+    if (reverseSearchFilter === 'without' && item.hasImage) return false
+    const q = reverseSearchQuery.trim().toUpperCase()
+    if (q && !item.code.includes(q)) return false
+    return true
+  })
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Cartão de uma imagem — extraído pra ser reusado tanto no modo "Por
@@ -899,34 +954,47 @@ export default function GruposImagensPage() {
           <h1 className="text-3xl font-bold text-on-surface tracking-tight">Grupos de Imagens</h1>
         </div>
 
-        {/* Agrupado × Lista única — pedido explícito do usuário: "uma
-            chave na parte superior da tela para o usuário escolher se vai
-            obter a visualização separada por grupos... ou... todas as
-            imagens juntas em ordem crescente". Só faz sentido na
-            navegação normal de pasta (busca global tem a própria
-            exibição, nunca foi agrupada). */}
-        {!searchActive && (
-          <div className="flex items-center gap-1 bg-surface-container border border-outline-variant rounded-lg p-1">
-            <button
-              type="button"
-              onClick={() => setGroupingEnabled(true)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${
-                groupingEnabled ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              Por grupo
-            </button>
-            <button
-              type="button"
-              onClick={() => setGroupingEnabled(false)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${
-                !groupingEnabled ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              Lista única
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Busca Reversa de Imagens — pedido explícito do usuário: botão
+              sempre visível (independente de pasta/busca), ver estado e
+              rota acima. */}
+          <button
+            type="button"
+            onClick={openReverseSearch}
+            className="px-3 py-2 text-sm border border-outline-variant rounded-lg text-on-surface-variant hover:border-primary hover:text-primary transition-colors whitespace-nowrap"
+          >
+            🔄 Busca Reversa de Imagens
+          </button>
+
+          {/* Agrupado × Lista única — pedido explícito do usuário: "uma
+              chave na parte superior da tela para o usuário escolher se vai
+              obter a visualização separada por grupos... ou... todas as
+              imagens juntas em ordem crescente". Só faz sentido na
+              navegação normal de pasta (busca global tem a própria
+              exibição, nunca foi agrupada). */}
+          {!searchActive && (
+            <div className="flex items-center gap-1 bg-surface-container border border-outline-variant rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setGroupingEnabled(true)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${
+                  groupingEnabled ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                Por grupo
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupingEnabled(false)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${
+                  !groupingEnabled ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                Lista única
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Busca global (pastas e imagens em todo o bucket) + filtro de
@@ -1474,6 +1542,89 @@ export default function GruposImagensPage() {
               >
                 {newFolderSaving ? 'Criando…' : 'Criar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up Busca Reversa de Imagens */}
+      {reverseSearchOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setReverseSearchOpen(false)}>
+          <div className="bg-surface-container border border-outline-variant rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-outline-variant flex items-center justify-between">
+              <span className="text-base font-semibold text-on-surface">Busca Reversa de Imagens</span>
+              <button type="button" onClick={() => setReverseSearchOpen(false)} className="text-on-surface-variant hover:text-on-surface text-xl leading-none">✕</button>
+            </div>
+            <div className="px-5 py-3 border-b border-outline-variant flex flex-col gap-2">
+              <p className="text-xs text-outline">
+                Códigos distintos de Cadastro de Equipamentos (standard_equipment_items) e Equipamento x Acessórios
+                (relationship_equip_accessory), cruzados contra o bucket — &quot;Com imagem&quot; significa existir
+                um arquivo &lt;código&gt;.png em qualquer pasta, mesmo padrão de nomenclatura do resto da tela.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1 bg-surface-container-low border border-outline-variant rounded-lg p-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setReverseSearchFilter('all')}
+                    className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${reverseSearchFilter === 'all' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                  >
+                    Todos{reverseSearchCounts ? ` (${reverseSearchCounts.total})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReverseSearchFilter('without')}
+                    className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${reverseSearchFilter === 'without' ? 'bg-error text-on-error' : 'text-on-surface-variant hover:text-on-surface'}`}
+                  >
+                    Sem imagem{reverseSearchCounts ? ` (${reverseSearchCounts.withoutImage})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReverseSearchFilter('with')}
+                    className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${reverseSearchFilter === 'with' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                  >
+                    Com imagem{reverseSearchCounts ? ` (${reverseSearchCounts.withImage})` : ''}
+                  </button>
+                </div>
+                <input
+                  value={reverseSearchQuery}
+                  onChange={e => setReverseSearchQuery(e.target.value)}
+                  placeholder="Filtrar por código…"
+                  className="flex-1 min-w-[10rem] bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-xs text-on-surface font-mono focus:outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={runReverseSearch}
+                  disabled={reverseSearchLoading}
+                  title="Recarregar"
+                  className="shrink-0 text-outline hover:text-primary disabled:opacity-50"
+                >
+                  ⟳
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {reverseSearchError && (
+                <div className="text-error text-xs bg-error-container/20 border border-error/30 rounded px-3 py-2 mb-3">⚠ {reverseSearchError}</div>
+              )}
+              {reverseSearchLoading ? (
+                <p className="text-sm text-outline">Consultando banco de dados MSM e bucket…</p>
+              ) : reverseSearchFiltered.length === 0 ? (
+                <p className="text-sm text-outline italic">Nenhum código encontrado para este filtro.</p>
+              ) : (
+                <div className="flex flex-col gap-px bg-outline-variant/40 border border-outline-variant rounded-lg overflow-hidden">
+                  {reverseSearchFiltered.map(item => (
+                    <div
+                      key={item.code}
+                      className={`flex items-center justify-between gap-3 px-3 py-2 text-sm ${item.hasImage ? 'bg-surface-container' : 'bg-error-container/10'}`}
+                    >
+                      <span className="font-mono text-on-surface truncate">{item.code}</span>
+                      <span className={`text-xs font-semibold shrink-0 ${item.hasImage ? 'text-primary' : 'text-error'}`}>
+                        {item.hasImage ? '✓ Com imagem' : '✗ Sem imagem'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
