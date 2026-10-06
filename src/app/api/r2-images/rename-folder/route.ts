@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidFolderPath, folderHasContent, renameFolder } from '@/lib/r2Images'
-import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Renomeia/move uma pasta inteira (todo o conteúdo, qualquer profundidade)
@@ -44,11 +43,6 @@ export async function POST(request: NextRequest) {
     }
 
     const moved = await renameFolder(path, toPath)
-
-    try {
-      const label = `(pasta — ${moved} imagem${moved !== 1 ? 'ns' : ''})`
-      await recordImageChange({ action: 'rename', folderPath: path, fileName: label, toFolderPath: toPath, toFileName: label, profile })
-    } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true, moved })
   } catch (err) {

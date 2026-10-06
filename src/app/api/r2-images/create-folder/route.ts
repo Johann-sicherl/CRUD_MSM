@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidFolderPath, folderHasContent, createFolder } from '@/lib/r2Images'
-import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Cria uma pasta vazia (antes só "nascia" implicitamente ao enviar a
@@ -30,10 +29,6 @@ export async function POST(request: NextRequest) {
     }
 
     await createFolder(path)
-
-    try {
-      await recordImageChange({ action: 'upload', folderPath: path, fileName: '(pasta vazia criada)', profile })
-    } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidFileName, isValidFolderPath, imageExists, copyImage, deleteImage, folderHasContent, createFolder } from '@/lib/r2Images'
-import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Corrige nome/pasta de um arquivo já enviado (seção 7.4 do manual da TI:
@@ -61,10 +60,6 @@ export async function POST(request: NextRequest) {
         if (!stillHasContent) await createFolder(path)
       } catch { /* preservar a pasta vazia é best-effort */ }
     }
-
-    try {
-      await recordImageChange({ action: 'rename', folderPath: path, fileName, toFolderPath: toPath, toFileName, profile })
-    } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

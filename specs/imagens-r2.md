@@ -113,12 +113,14 @@ certo.
   `toGroup`/`toSubgroup`) por `path`/`toPath`.
 - **`image_change_log`** — `group_name`/`subgroup_name`/`to_group_name`/
   `to_subgroup_name` foram substituídos por `folder_path`/`to_folder_path`
-  (`msm_image_change_log_folder_path.sql`, migração manual — ver seção
-  abaixo). As colunas antigas ficaram destravadas (`DROP NOT NULL`) e
-  paradas de receber valor novo — mantidas só como histórico das linhas já
-  gravadas antes desta mudança; a UI lê `folder_path` com fallback pra
-  `group_name + '/' + subgroup_name` quando `folder_path` for `null`
-  (linha antiga).
+  (`msm_image_change_log_folder_path.sql`, migração manual). As colunas
+  antigas ficaram destravadas (`DROP NOT NULL`) e paradas de receber valor
+  novo — mantidas só como histórico das linhas já gravadas antes desta
+  mudança. **Nota histórica**: na época, a UI lia `folder_path` com
+  fallback pra `group_name + '/' + subgroup_name` quando `folder_path` era
+  `null` — essa leitura não existe mais, o painel "Ver histórico de
+  alterações" (e toda a gravação em `image_change_log`) foi removido numa
+  sessão posterior, ver "Histórico de alterações removido" abaixo.
 
 ## `src/lib/r2Images.ts` — server-only
 
@@ -252,10 +254,7 @@ só `GET`, `upload`/`rename`/`delete` são só `POST`) — não corre o risco de
   automático removido" abaixo). Confirmação (`window.confirm`) é só no
   cliente — a rota em si não teria como "desfazer" a remoção.
 - `POST /purge-backups` — apaga tudo sob `_backup/` (ver "Backup automático
-  removido" abaixo). Não grava linha em `image_change_log` — é limpeza de
-  infraestrutura, não uma alteração de imagem do catálogo.
-- `GET /changes` — últimas 200 linhas de `image_change_log`, mais recente
-  primeiro.
+  removido" abaixo).
 
 ## Backup automático removido
 
@@ -272,21 +271,19 @@ qualquer backup que esteja sendo criado, delete-o."
   agir. `deleteFolder` também parou de copiar cada objeto pra `_backup/`
   antes de apagar — `DeleteFolderResult` perdeu o campo `backupPrefix`
   (só `{ count }` agora).
-- `recordImageChange`/`image_change_log` continuam existindo normalmente
-  (histórico de "o que mudou", não é a mesma coisa que cópia de segurança
-  do conteúdo em si) — só o campo `backup_key` fica sempre `null` em
-  qualquer linha gravada a partir de agora. Linhas antigas, gravadas antes
-  dessa mudança, mantêm o `backup_key` que já tinham — histórico não é
-  reescrito.
+- **`recordImageChange`/`image_change_log` (histórico de alterações) foi
+  removido por completo numa rodada seguinte** — ver "Histórico de
+  alterações removido" abaixo. Na época desta mudança o mecanismo ainda
+  existia (só o campo `backup_key` passou a ficar sempre `null`); isso não
+  é mais verdade — nenhuma linha nova é gravada em `image_change_log` hoje.
 - **`purgeBackups()`** (`r2Images.ts`) — limpeza única das cópias que o
   mecanismo antigo já tinha criado antes de ser removido: lista tudo sob
   `_backup/` (fora do prefixo-base, nunca aparece em `browseFolder`) e
   apaga, sem nenhuma confirmação adicional além da da própria tela. `POST
   /api/r2-images/purge-backups` (admin-only, mesmo padrão
   `getProfileById`/`isAdmin` de toda rota desta tela) expõe isso; botão
-  "🗑 Limpar backups antigos" na tela, ao lado de "Ver histórico de
-  alterações", com confirmação (`window.confirm`) e toast mostrando quantos
-  arquivos foram removidos.
+  "🗑 Limpar backups antigos" na tela, com confirmação (`window.confirm`) e
+  toast mostrando quantos arquivos foram removidos.
 - Todo texto de confirmação (`window.confirm`) que mencionava "uma cópia
   de segurança é guardada" (remover uma imagem, remover em lote, remover
   uma pasta inteira) foi atualizado pra deixar claro que a remoção agora é
@@ -303,37 +300,42 @@ qualquer backup que esteja sendo criado, delete-o."
   automático (pedido à parte, decidido depois, não uma consequência do
   bug).
 
-## `image_change_log` (`msm_image_change_log.sql` +
-`msm_image_change_log_folder_path.sql`)
+## Histórico de alterações removido
 
-Equivalente automático da seção 13 do manual da TI ("Registre a alteração")
-— cada upload/substituição/renomeação/remoção grava uma linha (`action`,
-`folder_path`/`file_name`, `to_folder_path`/`to_file_name` quando é um
-`rename`, `profile_id`/`profile_name` — snapshot do nome, sobrevive à
-exclusão do perfil). `backup_key` existe na tabela só por histórico —
-linhas gravadas antes do backup automático ser removido (ver "Backup
-automático removido" acima) podem ter um valor ali; nenhuma linha nova
-grava esse campo. Gravado
-via `recordImageChange` (`src/lib/imageChangeLog.ts`), sempre dentro de um
-`try/catch` best-effort (mesmo espírito de `record*Audit`, `sqlAudit.ts`)
-— uma falha ao gravar o log nunca desfaz a operação real no bucket, que já
-tinha terminado com sucesso.
+Até esta sessão, cada upload/substituição/renomeação/remoção gravava uma
+linha em `image_change_log` (`action`, `folder_path`/`file_name`,
+`to_folder_path`/`to_file_name` quando era um `rename`, `profile_id`/
+`profile_name`) — equivalente automático da seção 13 do manual da TI
+("Registre a alteração") — e a tela tinha um painel colapsável "Ver
+histórico de alterações" (últimas 200 linhas, `GET /api/r2-images/changes`)
+pra consultar isso. **Removido por completo, pedido explícito do
+usuário**: "Remova a função de Ver histórico de alterações... não quero
+isso" — confirmado via `AskUserQuestion` que o pedido cobria tanto a tela
+quanto parar de gravar (não só esconder o botão).
 
-`folder_path`/`to_folder_path` (`msm_image_change_log_folder_path.sql`,
-migração manual — precisa rodar no SQL Editor, mesma convenção de todo
-`msm_*.sql`, ver `specs/sql-migrations.md`) substituíram `group_name`/
-`subgroup_name`/`to_group_name`/`to_subgroup_name` quando a navegação virou
-profundidade livre (ver "Navegação tipo Windows Explorer" acima). As
-colunas antigas foram destravadas (`DROP NOT NULL`) e **não recebem mais
-valor** do app — ficaram só como histórico das linhas gravadas antes dessa
-mudança, com backfill feito pela própria migração
-(`folder_path = group_name || '/' || subgroup_name`).
-
-**Isto não é a mesma coisa que `audit_log`** (`specs/auditoria.md`) — não
-reusado de propósito. `audit_log` existe pra gerar SQL que alguém roda
-manualmente no banco oficial; uma operação no bucket R2 não é uma query
-SQL nenhuma, então misturar os dois conceitos na mesma tabela confundiria
-o que cada linha significa.
+- `recordImageChange` (`src/lib/imageChangeLog.ts`) foi deletado, e com
+  ele toda chamada a partir das rotas de `/api/r2-images/*` (upload,
+  rename, delete, rename-folder, delete-folder, create-folder) — nenhuma
+  delas grava linha nenhuma em `image_change_log` a partir de agora.
+- `GET /api/r2-images/changes` (a rota que a tela usava pra listar o
+  histórico) foi deletada — não tem mais consumidor.
+- Na tela, removidos: o botão "Ver histórico de alterações", o painel
+  "Últimas alterações" (tabela com data/ação/pasta/arquivo/perfil), e todo
+  o estado/tipos que só existiam pra isso (`changes`, `changesOpen`,
+  `changesLoading`, `fetchChanges`, a interface `ImageChangeRow`,
+  `ACTION_LABEL`, `rowFolderPath`/`rowToFolderPath`).
+- **A tabela `image_change_log` em si não foi apagada do banco** —
+  `msm_image_change_log.sql`/`msm_image_change_log_folder_path.sql`
+  continuam valendo como histórico de migração (ver
+  `specs/sql-migrations.md`); as linhas já gravadas antes desta mudança
+  continuam lá, só não há mais nenhum jeito de consultá-las pelo app, e
+  nenhuma linha nova é gravada. Derrubar a tabela não foi pedido — fora de
+  escopo desta mudança.
+- **Isto nunca foi a mesma coisa que `audit_log`** (`specs/auditoria.md`),
+  que continua existindo normalmente e não foi tocado por esta remoção —
+  `audit_log` gera SQL pra alguém rodar manualmente no banco oficial, um
+  conceito completamente diferente do histórico de operações no bucket R2
+  que foi removido aqui.
 
 ## Tela (`src/app/grupos-imagens/page.tsx`)
 
@@ -369,8 +371,6 @@ o que cada linha significa.
 - "Remover" (por linha) pede confirmação (`window.confirm`) antes de
   chamar a rota, mesmo padrão já usado em telas auxiliares deste projeto
   (ver `specs/telas-auxiliares.md`).
-- "Ver histórico de alterações" — painel colapsável com as últimas 200
-  linhas de `image_change_log`.
 
 ### Seleção múltipla + exclusão em lote
 
@@ -391,9 +391,7 @@ menos uma selecionada, "Excluir selecionadas (N)".
   `Promise.all`) — mesmo padrão de toda escrita em massa deste projeto
   (ver `specs/custeio-financeiro.md`, "Escritas financeiras em massa são
   sequenciais"): erro isolado por imagem, ordem previsível. Cada chamada é
-  um `POST /delete` normal — herda de graça o registro em
-  `image_change_log` que o delete individual já tinha, sem nenhum caminho
-  de escrita paralelo.
+  um `POST /delete` normal, sem nenhum caminho de escrita paralelo.
 - Confirmação única (`window.confirm`) antes de começar o lote, mostrando
   a contagem. Ao final, toast resume quantas foram removidas e quantas
   falharam (se alguma falhar, o toast fica no estilo de erro) — uma falha
@@ -510,12 +508,7 @@ subárvore inteira em vez de um objeto só.
 - **`POST /api/r2-images/rename-folder`** — `{ profileId, path, toPath }`
   (pastas de origem/destino, sem `fileName` — move tudo que está dentro).
   Recusa `path` vazio (não dá pra renomear a raiz), recusa se `path` não
-  tiver conteúdo (404) ou se `toPath` já tiver (409). Uma única linha em
-  `image_change_log` por operação (não uma por arquivo movido, pra não
-  inundar o histórico numa pasta com muitos arquivos) — `file_name`/
-  `to_file_name` levam um rótulo tipo `(pasta — N imagens)` em vez de um
-  nome de arquivo de verdade, só pra deixar claro no histórico que foi uma
-  pasta inteira, não um arquivo.
+  tiver conteúdo (404) ou se `toPath` já tiver (409).
 - **Tela** — botão "✎" (aparece ao passar o mouse, `group-hover`) ao lado
   de cada pasta nas caixas em cascata, abre um pop-up "Renomear / mover
   pasta" com um único campo "Novo caminho" (prefenchido com o caminho
@@ -539,9 +532,7 @@ explícito do usuário, numa rodada posterior).
   `{ count }`.
 - **`POST /api/r2-images/delete-folder`** — `{ profileId, path }`. Recusa
   `path` vazio (não dá pra apagar a raiz) e recusa se a pasta não tiver
-  conteúdo (404). Uma única linha em `image_change_log` por operação
-  (`action: 'delete'`, mesmo rótulo `(pasta — N imagens)` de
-  `rename-folder`).
+  conteúdo (404).
 - **Tela** — botão "🗑" (aparece ao passar o mouse, ao lado do "✎" já
   existente) em cada pasta das caixas em cascata. Confirmação
   (`window.confirm`) avisa que é o conteúdo inteiro, qualquer profundidade
@@ -577,11 +568,7 @@ pra criar uma pasta vazia explicitamente, sem precisar enviar nada ainda.
   comportamento que já valia pra pastas "nascidas" via upload).
 - **`POST /api/r2-images/create-folder`** — `{ profileId, path }`. Recusa
   `path` vazio e recusa se já existir conteúdo nesse caminho (409 — nunca
-  sobrescreve uma pasta já existente). Uma linha em `image_change_log`
-  (`action: 'upload'`, `fileName: '(pasta vazia criada)'`) — não existe um
-  tipo de ação dedicado pra "criar pasta" no enum (`upload`/`replace`/
-  `rename`/`delete`), e isto é estruturalmente mais parecido com um
-  "adicionar" do que com os outros três.
+  sobrescreve uma pasta já existente).
 - **Tela** — botão "+ Nova pasta" ao lado de "+ Adicionar imagem" (só
   aparece na navegação normal, não durante uma busca — criar pasta não faz
   sentido em cima de um resultado de busca). Pop-up com um único campo

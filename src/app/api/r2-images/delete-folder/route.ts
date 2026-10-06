@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidFolderPath, folderHasContent, deleteFolder } from '@/lib/r2Images'
-import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Remove uma pasta inteira (todo o conteúdo, qualquer profundidade) — pedido
@@ -30,11 +29,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { count } = await deleteFolder(path)
-
-    try {
-      const label = `(pasta — ${count} imagem${count !== 1 ? 'ns' : ''})`
-      await recordImageChange({ action: 'delete', folderPath: path, fileName: label, profile })
-    } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true, count })
   } catch (err) {

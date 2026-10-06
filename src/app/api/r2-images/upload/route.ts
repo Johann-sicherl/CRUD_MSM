@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidFileName, isValidFolderPath, imageExists, uploadImage } from '@/lib/r2Images'
-import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Envia uma imagem nova (mode=add, seção 7.2 do manual da TI) ou substitui
@@ -52,10 +51,6 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
     await uploadImage(path, fileName, buffer, 'image/png')
-
-    try {
-      await recordImageChange({ action: mode === 'replace' ? 'replace' : 'upload', folderPath: path, fileName, profile })
-    } catch { /* log é best-effort — nunca derruba o upload, que já teve sucesso */ }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

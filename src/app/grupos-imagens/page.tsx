@@ -21,43 +21,11 @@ interface SearchFileResult {
   lastModified: string | null
   url: string
 }
-interface ImageChangeRow {
-  id: string
-  action: 'upload' | 'replace' | 'rename' | 'delete'
-  folder_path: string | null
-  group_name: string | null
-  subgroup_name: string | null
-  file_name: string
-  to_folder_path: string | null
-  to_group_name: string | null
-  to_subgroup_name: string | null
-  to_file_name: string | null
-  profile_name: string | null
-  created_at: string
-}
-
-const ACTION_LABEL: Record<ImageChangeRow['action'], string> = {
-  upload: 'Adicionada',
-  replace: 'Substituída',
-  rename: 'Renomeada/Movida',
-  delete: 'Removida',
-}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
-}
-
-// folder_path é a coluna atual; group_name/subgroup_name são o formato
-// antigo (linhas gravadas antes da navegação virar profundidade livre —
-// ver msm_image_change_log_folder_path.sql), mantido só como fallback de
-// leitura pra histórico antigo nunca sumir da tela.
-function rowFolderPath(c: ImageChangeRow): string {
-  return c.folder_path ?? [c.group_name, c.subgroup_name].filter(Boolean).join('/')
-}
-function rowToFolderPath(c: ImageChangeRow): string {
-  return c.to_folder_path ?? [c.to_group_name, c.to_subgroup_name].filter(Boolean).join('/')
 }
 
 async function fetchBrowseColumn(profileId: string, path: string): Promise<BrowseColumn> {
@@ -369,22 +337,6 @@ export default function GruposImagensPage() {
     if (q.length >= 2) runSearch(q)
     else refreshAll()
   }
-
-  // ── Changes log ──────────────────────────────────────────────
-  const [changes, setChanges] = useState<ImageChangeRow[]>([])
-  const [changesOpen, setChangesOpen] = useState(false)
-  const [changesLoading, setChangesLoading] = useState(false)
-  const fetchChanges = useCallback(async () => {
-    setChangesLoading(true)
-    try {
-      const res = await fetch(`/api/r2-images/changes?profileId=${user.id}`)
-      const json = await res.json()
-      if (res.ok) setChanges(json.changes || [])
-    } finally {
-      setChangesLoading(false)
-    }
-  }, [user.id])
-  useEffect(() => { if (changesOpen) fetchChanges() }, [changesOpen, fetchChanges])
 
   // ── Limpar backups antigos ──────────────────────────────────
   // Pedido explícito do usuário: "Eu não quero ter backup de nada...
@@ -995,12 +947,6 @@ export default function GruposImagensPage() {
               </button>
             )}
             <button
-              onClick={() => setChangesOpen(v => !v)}
-              className="px-3 py-2 text-sm border border-outline-variant rounded text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
-            >
-              {changesOpen ? 'Ocultar' : 'Ver'} histórico de alterações
-            </button>
-            <button
               onClick={purgeBackups}
               disabled={purgingBackups}
               title="Apaga permanentemente qualquer cópia de segurança antiga guardada no bucket — o app não cria mais backups automáticos"
@@ -1023,38 +969,6 @@ export default function GruposImagensPage() {
           </div>
         </div>
 
-        {changesOpen && (
-          <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
-            <div className="px-4 py-2 border-b border-outline-variant text-sm font-semibold text-on-surface">
-              Últimas alterações
-            </div>
-            <div className="max-h-64 overflow-y-auto">
-              {changesLoading ? (
-                <div className="p-4 text-sm text-outline">Carregando…</div>
-              ) : changes.length === 0 ? (
-                <div className="p-4 text-sm text-outline italic">Nenhuma alteração registrada ainda.</div>
-              ) : (
-                <table className="text-xs w-full">
-                  <tbody>
-                    {changes.map(c => (
-                      <tr key={c.id} className="border-t border-outline-variant/40">
-                        <td className="px-3 py-2 whitespace-nowrap text-outline">{new Date(c.created_at).toLocaleString('pt-BR')}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-semibold text-on-surface">{ACTION_LABEL[c.action]}</td>
-                        <td className="px-3 py-2 font-mono text-on-surface-variant">
-                          {rowFolderPath(c)}/{c.file_name}
-                          {c.action === 'rename' && c.to_file_name && (
-                            <> → {rowToFolderPath(c)}/{c.to_file_name}</>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-outline">{c.profile_name || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
 
         <div className="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
           {browseLoading ? (

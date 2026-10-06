@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidFileName, isValidFolderPath, imageExists, deleteImage, folderHasContent, createFolder } from '@/lib/r2Images'
-import { recordImageChange } from '@/lib/imageChangeLog'
 import { getProfileById } from '@/lib/userProfileStore'
 
 // Remove uma imagem (seção 7.5 do manual da TI) — "a remoção é imediata e
@@ -39,10 +38,6 @@ export async function POST(request: NextRequest) {
         if (!stillHasContent) await createFolder(path)
       } catch { /* preservar a pasta vazia é best-effort */ }
     }
-
-    try {
-      await recordImageChange({ action: 'delete', folderPath: path, fileName, profile })
-    } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true })
   } catch (err) {
