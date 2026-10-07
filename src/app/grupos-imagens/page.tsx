@@ -1243,7 +1243,7 @@ export default function GruposImagensPage() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="text-sm text-on-surface-variant">
             <span className="font-mono text-on-surface">{currentPath || '(raiz)'}</span>
-            {' '}— {files.length} imagem{files.length !== 1 ? 'ns' : ''}
+            {' '}— {files.length} image{files.length !== 1 ? 'ns' : 'm'}
             {selectedFiles.size > 0 && <> · {selectedFiles.size} selecionada{selectedFiles.size !== 1 ? 's' : ''}</>}
           </div>
           <div className="flex items-center gap-2">
