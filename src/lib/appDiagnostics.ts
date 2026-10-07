@@ -296,7 +296,11 @@ async function checkImagesMissing(): Promise<DiagnosticIssue[]> {
     .filter(item => !item.hasImage)
     .map(item => ({
       rowLabel: item.code,
-      message: 'Sem imagem no bucket (R2) — nenhum arquivo <código>.png cadastrado.',
+      // Pedido explícito do usuário: "não quero estas labels" (a mensagem
+      // longa por linha) — a lista já é só o código, sem imagem; o
+      // cabeçalho do dropdown já diz "N problema(s)", não precisa repetir
+      // a mesma frase em cada linha.
+      message: '',
     }))
 }
 

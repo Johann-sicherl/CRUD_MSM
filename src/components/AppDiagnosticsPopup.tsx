@@ -59,7 +59,10 @@ function IssueRow({ issue, messageTone }: { issue: DiagnosticIssue; messageTone:
   return (
     <li className="flex flex-col">
       <span className="font-mono text-base text-on-surface">{issue.rowLabel}</span>
-      <span className={`text-base ${messageTone}`}>{issue.message}</span>
+      {/* `message` vazia (ex.: "Cadastros sem Imagem" — pedido explícito do
+          usuário "não quero estas labels") não renderiza nada, em vez de
+          uma linha em branco embaixo do código. */}
+      {issue.message && <span className={`text-base ${messageTone}`}>{issue.message}</span>}
     </li>
   )
 }

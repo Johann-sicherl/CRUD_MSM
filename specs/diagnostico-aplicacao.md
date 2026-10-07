@@ -497,6 +497,17 @@ já que o pop-up só dispara depois que os dois já conectaram mesmo assim
 (ver "Quando aparece" acima); não haveria ganho em tratá-la separado só
 por essa diferença.
 
+**Sem mensagem por linha — pedido explícito do usuário, rodada seguinte**:
+"não quero estas labels" (a 1ª versão tinha `message: 'Sem imagem no
+bucket (R2) — nenhum arquivo <código>.png cadastrado.'` repetida em toda
+linha). `checkImagesMissing` passou a gravar `message: ''` — o código
+(`rowLabel`) já é auto-explicativo dentro de um dropdown chamado
+"Cadastros sem Imagem", a frase repetida não acrescentava nada.
+`IssueRow` (`AppDiagnosticsPopup.tsx`, usada por toda seção sem blocos —
+Checagens #1/#2 e esta) só renderiza a linha de mensagem quando
+`issue.message` não é vazio, pra uma `message` em branco não deixar uma
+linha vazia embaixo do código.
+
 ## O que NÃO faz parte disto
 
 - Não é a mesma coisa que o "Comparar" removido do Atualizador Global (ver
